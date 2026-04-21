@@ -9,10 +9,10 @@ import { generateRoundCode } from '@/lib/utils/round-code';
 import { useRoundStore } from '@/stores/round-store';
 
 const defaultPlayers = [
-  { id: 'p1', name: '', handicap: 8 },
-  { id: 'p2', name: '', handicap: 10 },
-  { id: 'p3', name: '', handicap: 12 },
-  { id: 'p4', name: '', handicap: 9 },
+  { id: 'p1', name: '', handicap: 0 },
+  { id: 'p2', name: '', handicap: 0 },
+  { id: 'p3', name: '', handicap: 0 },
+  { id: 'p4', name: '', handicap: 0 },
 ];
 
 export default function NewRoundPage() {
@@ -100,8 +100,11 @@ export default function NewRoundPage() {
                 type="number"
                 inputMode="numeric"
                 className="w-full rounded-xl border border-slate-300 px-3 py-3"
-                value={defaultBet}
-                onChange={(event) => setDefaultBet(Number(event.target.value) || 0)}
+                value={defaultBet === 0 ? "" : defaultBet}
+                placeholder="Bet"
+                onFocus={(event) => event.currentTarget.select()}
+                onMouseUp={(event) => event.preventDefault()}
+                onChange={(event) => setDefaultBet(event.target.value === "" ? 0 : Number(event.target.value) || 0)}
               />
             </div>
             <div>
@@ -154,7 +157,10 @@ export default function NewRoundPage() {
                     type="number"
                     inputMode="numeric"
                     className="w-full rounded-xl border border-slate-300 px-3 py-2"
-                    value={player.handicap}
+                    value={player.handicap === 0 ? "" : player.handicap}
+                    placeholder="Hcp"
+                    onFocus={(event) => event.currentTarget.select()}
+                    onMouseUp={(event) => event.preventDefault()}
                     onChange={(event) => updatePlayer(player.id, 'handicap', event.target.value)}
                   />
                 </div>

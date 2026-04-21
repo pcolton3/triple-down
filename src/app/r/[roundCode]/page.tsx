@@ -18,20 +18,25 @@ function NumberField({
   onChange,
   placeholder,
   readOnly = false,
+  blankWhenZero = false,
 }: {
   value: number | null;
   onChange?: (value: number | null) => void;
   placeholder?: string;
   readOnly?: boolean;
+  blankWhenZero?: boolean;
 }) {
+  const displayValue = value == null ? '' : blankWhenZero && value === 0 ? '' : value;
+
   return (
     <input
       type="number"
       inputMode="numeric"
-      value={value ?? ''}
+      value={displayValue}
       readOnly={readOnly}
       placeholder={placeholder}
       onFocus={(event) => event.currentTarget.select()}
+      onMouseUp={(event) => event.preventDefault()}
       onChange={(event) => {
         if (!onChange) return;
         const next = event.target.value;
@@ -174,7 +179,7 @@ export default function LiveRoundPage() {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Gross</label>
-            <NumberField value={hole.bankerGrossScore} onChange={setBankerGrossScore} placeholder="Gross" />
+            <NumberField value={hole.bankerGrossScore} onChange={setBankerGrossScore} placeholder="Gross" blankWhenZero />
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{pressAction}</label>
@@ -208,11 +213,11 @@ export default function LiveRoundPage() {
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Bet</label>
-                  <NumberField value={matchup.baseWager} onChange={(value) => setWager(player.id, value ?? 0)} placeholder="0" />
+                  <NumberField value={matchup.baseWager} onChange={(value) => setWager(player.id, value ?? 0)} placeholder="Bet" blankWhenZero />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Gross</label>
-                  <NumberField value={matchup.grossScore} onChange={(value) => setPlayerGrossScore(player.id, value)} placeholder="Gross" />
+                  <NumberField value={matchup.grossScore} onChange={(value) => setPlayerGrossScore(player.id, value)} placeholder="Gross" blankWhenZero />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{pressAction}</label>
