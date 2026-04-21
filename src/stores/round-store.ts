@@ -163,8 +163,6 @@ function getMatchupNetScores(
   playerHandicap: number,
   bankerGrossScore: number | null,
   playerGrossScore: number | null,
-  bankerPlayerId: string,
-  playerId: string
 ) {
   // 🚫 No strokes on par 3s
   if (hole.par === 3) {
@@ -232,8 +230,6 @@ function getHoleResults(round: RoundState, hole: HoleState): BankerMatchupResult
       player?.handicap ?? 0,
       hole.bankerGrossScore,
       m.grossScore,
-      hole.bankerPlayerId,
-      m.playerId
     );
 
     return {
@@ -328,8 +324,6 @@ function buildCurrentHoleSummary(round: RoundState, hole: HoleState): CurrentHol
           player?.handicap ?? 0,
           hole.bankerGrossScore,
           matchup.grossScore,
-          hole.bankerPlayerId,
-          matchup.playerId
         );
         return netScores.bankerGetsStroke ? player?.name ?? 'Player' : null;
       })
@@ -343,8 +337,6 @@ function buildCurrentHoleSummary(round: RoundState, hole: HoleState): CurrentHol
         player?.handicap ?? 0,
         hole.bankerGrossScore,
         matchup.grossScore,
-        hole.bankerPlayerId,
-        matchup.playerId
       );
       const result = results.find((item) => item.playerId === matchup.playerId);
       const amount =
