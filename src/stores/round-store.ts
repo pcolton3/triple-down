@@ -135,7 +135,8 @@ function activeHole(round: RoundState) {
   return round.holes.find((hole) => hole.holeNumber === round.currentHole) ?? round.holes[0];
 }
 
-function getsStroke(playerHandicap: number, bankerHandicap: number, holeHandicapIndex: number) {
+function getsStroke(playerHandicap: number, bankerHandicap: number, holeHandicapIndex: number, par: 3 | 4 | 5) {
+  if (par === 3) return false;
   const diff = Math.abs(Math.floor(playerHandicap) - Math.floor(bankerHandicap));
   const safeIndex = Math.min(18, Math.max(1, Math.floor(holeHandicapIndex || 1)));
   return diff >= safeIndex;
@@ -146,10 +147,11 @@ function getMatchupNetScores(
   playerGrossScore: number | null,
   bankerHandicap: number,
   playerHandicap: number,
-  holeHandicapIndex: number
+  holeHandicapIndex: number,
+  par: 3 | 4 | 5
 ) {
-  const playerGets = playerHandicap > bankerHandicap && getsStroke(playerHandicap, bankerHandicap, holeHandicapIndex);
-  const bankerGets = bankerHandicap > playerHandicap && getsStroke(playerHandicap, bankerHandicap, holeHandicapIndex);
+  const playerGets = playerHandicap > bankerHandicap && getsStroke(playerHandicap, bankerHandicap, holeHandicapIndex, par);
+  const bankerGets = bankerHandicap > playerHandicap && getsStroke(playerHandicap, bankerHandicap, holeHandicapIndex, par);
 
   return {
     bankerNetScore: bankerGrossScore == null ? null : bankerGrossScore - (bankerGets ? 1 : 0),
@@ -170,7 +172,8 @@ function getHoleResults(round: RoundState, hole: HoleState): BankerMatchupResult
       m.grossScore,
       banker.handicap,
       player?.handicap ?? 0,
-      hole.handicapIndex
+      hole.handicapIndex,
+      hole.par
     );
 
     return {
