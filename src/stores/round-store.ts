@@ -261,7 +261,8 @@ function buildCurrentHoleSummary(round: RoundState, hole: HoleState): CurrentHol
         matchup.grossScore,
         banker.handicap,
         player?.handicap ?? 0,
-        hole.handicapIndex
+        hole.handicapIndex,
+        hole.par
       );
       const result = results.find((item) => item.playerId === matchup.playerId);
 
