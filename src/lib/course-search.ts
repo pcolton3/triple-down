@@ -1,27 +1,8 @@
-
 import { courseCatalog } from '@/lib/course-data';
 import type { CourseRecord } from '@/types/course';
 
 function normalize(text: string) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-}
-
-function degreesToRadians(value: number) {
-  return (value * Math.PI) / 180;
-}
-
-function distanceMiles(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const earthRadiusMiles = 3958.8;
-  const dLat = degreesToRadians(lat2 - lat1);
-  const dLon = degreesToRadians(lon2 - lon1);
-
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(degreesToRadians(lat1)) *
-      Math.cos(degreesToRadians(lat2)) *
-      Math.sin(dLon / 2) ** 2;
-
-  return 2 * earthRadiusMiles * Math.asin(Math.sqrt(a));
 }
 
 type SearchOptions = {
@@ -30,60 +11,96 @@ type SearchOptions = {
   limit?: number;
 };
 
-export async function searchCourses(query: string, options: SearchOptions = {}): Promise<CourseRecord[]> {
+type RemoteCourseResult = {
+  id: string;
+  name: string;
+  city: string;
+  state: string;
+  latitude?: number;
+  longitude?: number;
+  holes: CourseRecord['holes'];
+};
+
+function dedupeCourses(courses: CourseRecord[]) {
+  const seen = new Set<string>();
+  return courses.filter((course) => {
+    const key = normalize(`${course.name}|${course.city}|${course.state}`);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function scoreLocalCourse(course: CourseRecord, query: string, options: SearchOptions) {
   const normalized = normalize(query);
-  const hasLocation = options.latitude != null && options.longitude != null;
-  const limit = options.limit ?? 12;
+  const exactName = normalize(course.name);
+  const haystack = normalize(`${course.name} ${course.city} ${course.state}`);
+  let score = normalized ? (haystack.includes(normalized) ? 100 : 0) : 10;
+  if (normalized && exactName.startsWith(normalized)) score += 30;
+  if (normalized && exactName === normalized) score += 60;
+  if (options.latitude != null && options.longitude != null && course.latitude != null && course.longitude != null) {
+    const latDelta = Math.abs(course.latitude - options.latitude);
+    const lonDelta = Math.abs(course.longitude - options.longitude);
+    score += Math.max(0, 25 - (latDelta + lonDelta) * 50);
+  }
+  return score;
+}
 
-  const results = courseCatalog
-    .map((course) => {
-      const haystack = normalize(`${course.name} ${course.city} ${course.state}`);
-      const exactName = normalize(course.name);
-      const includes = normalized ? haystack.includes(normalized) : true;
-      const startsWith = normalized ? exactName.startsWith(normalized) : false;
-      const distance =
-        hasLocation && course.latitude != null && course.longitude != null
-          ? distanceMiles(options.latitude as number, options.longitude as number, course.latitude, course.longitude)
-          : null;
+async function fetchRemoteCourses(query: string, options: SearchOptions): Promise<RemoteCourseResult[]> {
+  const params = new URLSearchParams();
+  params.set('limit', String(options.limit ?? 12));
+  if (query.trim()) params.set('q', query.trim());
+  if (options.latitude != null) params.set('lat', String(options.latitude));
+  if (options.longitude != null) params.set('lon', String(options.longitude));
 
-      let score = includes ? 100 : 0;
-      if (startsWith) score += 40;
-      if (normalized && exactName === normalized) score += 80;
-      if (hasLocation && distance != null) {
-        score += Math.max(0, 50 - distance);
-      }
+  const response = await fetch(`/api/courses/search?${params.toString()}`, {
+    method: 'GET',
+    cache: 'no-store',
+  });
 
-      return { course, score, distance };
-    })
-    .filter((item) => item.score > 0 || (!normalized && item.distance != null))
-    .sort((a, b) => b.score - a.score || (a.distance ?? 9999) - (b.distance ?? 9999) || a.course.name.localeCompare(b.course.name))
-    .slice(0, limit)
-    .map((item) => item.course);
+  if (!response.ok) {
+    return [];
+  }
 
-  return results;
+  const data = (await response.json()) as { courses?: RemoteCourseResult[] };
+  return data.courses ?? [];
+}
+
+export async function searchCourses(query: string, options: SearchOptions = {}): Promise<CourseRecord[]> {
+  const [remoteCourses, localCourses] = await Promise.all([
+    fetchRemoteCourses(query, options),
+    Promise.resolve(
+      [...courseCatalog]
+        .map((course) => ({ course, score: scoreLocalCourse(course, query, options) }))
+        .filter((item) => item.score > 0)
+        .sort((a, b) => b.score - a.score || a.course.name.localeCompare(b.course.name))
+        .slice(0, options.limit ?? 12)
+        .map((item) => item.course)
+    ),
+  ]);
+
+  return dedupeCourses([...remoteCourses, ...localCourses]).slice(0, options.limit ?? 12);
 }
 
 export async function getNearbyCourses(options: SearchOptions = {}): Promise<CourseRecord[]> {
-  const hasLocation = options.latitude != null && options.longitude != null;
-  const limit = options.limit ?? 12;
+  const remoteCourses = await fetchRemoteCourses('', options);
+  const localCourses = [...courseCatalog]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(0, options.limit ?? 12);
 
-  if (!hasLocation) {
-    return courseCatalog.slice(0, limit);
-  }
-
-  return [...courseCatalog]
-    .map((course) => ({
-      course,
-      distance:
-        course.latitude != null && course.longitude != null
-          ? distanceMiles(options.latitude as number, options.longitude as number, course.latitude, course.longitude)
-          : 9999,
-    }))
-    .sort((a, b) => a.distance - b.distance)
-    .slice(0, limit)
-    .map((item) => item.course);
+  return dedupeCourses([...remoteCourses, ...localCourses]).slice(0, options.limit ?? 12);
 }
 
 export async function getCourseDetails(courseId: string): Promise<CourseRecord | null> {
-  return courseCatalog.find((course) => course.id === courseId) ?? null;
+  const local = courseCatalog.find((course) => course.id === courseId);
+  if (local) return local;
+
+  const response = await fetch(`/api/courses/details?id=${encodeURIComponent(courseId)}`, {
+    method: 'GET',
+    cache: 'no-store',
+  });
+
+  if (!response.ok) return null;
+  const data = (await response.json()) as { course?: CourseRecord | null };
+  return data.course ?? null;
 }
