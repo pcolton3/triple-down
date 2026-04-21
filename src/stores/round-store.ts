@@ -155,20 +155,6 @@ function activeHole(round: RoundState) {
   return round.holes.find((hole) => hole.holeNumber === round.currentHole) ?? round.holes[0];
 }
 
-function getStrokeHoleNumbers(round: RoundState, playerId: string) {
-  const player = round.players.find((item) => item.id === playerId);
-  if (!player) return new Set<number>();
-
-  const lowestHandicap = Math.min(...round.players.map((item) => Math.floor(item.handicap)));
-  const strokesToAllocate = Math.max(0, Math.floor(player.handicap) - lowestHandicap);
-  if (strokesToAllocate <= 0) return new Set<number>();
-
-  const eligibleHoles = [...round.holes]
-    .filter((hole) => hole.par !== 3)
-    .sort((a, b) => a.handicapIndex - b.handicapIndex || a.holeNumber - b.holeNumber);
-
-  return new Set(eligibleHoles.slice(0, strokesToAllocate).map((hole) => hole.holeNumber));
-}
 
 function getMatchupNetScores(
   round: RoundState,
@@ -180,12 +166,34 @@ function getMatchupNetScores(
   bankerPlayerId: string,
   playerId: string
 ) {
-  const playerGets = getStrokeHoleNumbers(round, playerId).has(hole.holeNumber) && playerHandicap > bankerHandicap;
-  const bankerGets = getStrokeHoleNumbers(round, bankerPlayerId).has(hole.holeNumber) && bankerHandicap > playerHandicap;
+  // 🚫 No strokes on par 3s
+  if (hole.par === 3) {
+    return {
+      bankerNetScore: bankerGrossScore,
+      playerNetScore: playerGrossScore,
+      playerGetsStroke: false,
+      bankerGetsStroke: false,
+    };
+  }
+
+  const diff = Math.abs(playerHandicap - bankerHandicap);
+
+  let playerGets = false;
+  let bankerGets = false;
+
+  if (diff >= hole.handicapIndex) {
+    if (playerHandicap > bankerHandicap) {
+      playerGets = true;
+    } else if (bankerHandicap > playerHandicap) {
+      bankerGets = true;
+    }
+  }
 
   return {
-    bankerNetScore: bankerGrossScore == null ? null : bankerGrossScore - (bankerGets ? 1 : 0),
-    playerNetScore: playerGrossScore == null ? null : playerGrossScore - (playerGets ? 1 : 0),
+    bankerNetScore:
+      bankerGrossScore == null ? null : bankerGrossScore - (bankerGets ? 1 : 0),
+    playerNetScore:
+      playerGrossScore == null ? null : playerGrossScore - (playerGets ? 1 : 0),
     playerGetsStroke: playerGets,
     bankerGetsStroke: bankerGets,
   };
