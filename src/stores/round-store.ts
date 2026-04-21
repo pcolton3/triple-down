@@ -5,7 +5,7 @@ import { persist } from 'zustand/middleware';
 import { settleBankerHole } from '@/domain/banker/settle-banker-hole';
 import { buildLedgerEntries, type LedgerEntry } from '@/domain/banker/ledger';
 import type { BankerMatchupResult } from '@/domain/banker/types';
-import type { CreateRoundInput, HoleState, RoundState } from '@/types/round';
+import type { CreateRoundInput, HoleConfig, HoleState, RoundState } from '@/types/round';
 
 type MatchupSummary = {
   playerId: string;
@@ -45,6 +45,7 @@ type CurrentHoleSummary = {
   bankerHandicap: number;
   bankerPressed: boolean;
   pressLabel: string;
+  bankerGetsStrokeFromNames: string[];
   matchups: MatchupSummary[];
 };
 
@@ -111,6 +112,20 @@ function createHole(
   };
 }
 
+function createDefaultHoles(totalHoles: number, bankerPlayerId: string, playerIds: string[], defaultBet: number, holesConfig?: HoleConfig[]) {
+  const fallback = holesConfig && holesConfig.length === totalHoles
+    ? holesConfig
+    : Array.from({ length: totalHoles }, (_, index) => ({
+        holeNumber: index + 1,
+        par: 4 as const,
+        handicapIndex: index + 1,
+      }));
+
+  return fallback.map((hole) =>
+    createHole(hole.holeNumber, hole.par, hole.handicapIndex, bankerPlayerId, playerIds, defaultBet)
+  );
+}
+
 function createDefaultRound(): RoundState {
   const roundCode = 'BANK01';
   const defaultBet = 5;
@@ -121,13 +136,12 @@ function createDefaultRound(): RoundState {
     roundCode,
     title: 'Saturday Group',
     courseName: 'Papago Golf Club',
+    selectedCourseId: 'papago-golf-club',
     currentHole: 1,
     totalHoles,
     defaultBet,
     players: defaultPlayers,
-    holes: Array.from({ length: totalHoles }, (_, index) =>
-      createHole(index + 1, 4, index + 1, firstBankerPlayerId, defaultPlayers.map((p) => p.id), defaultBet)
-    ),
+    holes: createDefaultHoles(totalHoles, firstBankerPlayerId, defaultPlayers.map((p) => p.id), defaultBet),
   };
 }
 
@@ -135,23 +149,33 @@ function activeHole(round: RoundState) {
   return round.holes.find((hole) => hole.holeNumber === round.currentHole) ?? round.holes[0];
 }
 
-function getsStroke(playerHandicap: number, bankerHandicap: number, holeHandicapIndex: number, par: 3 | 4 | 5) {
-  if (par === 3) return false;
-  const diff = Math.abs(Math.floor(playerHandicap) - Math.floor(bankerHandicap));
-  const safeIndex = Math.min(18, Math.max(1, Math.floor(holeHandicapIndex || 1)));
-  return diff >= safeIndex;
+function getStrokeHoleNumbers(round: RoundState, playerId: string) {
+  const player = round.players.find((item) => item.id === playerId);
+  if (!player) return new Set<number>();
+
+  const lowestHandicap = Math.min(...round.players.map((item) => Math.floor(item.handicap)));
+  const strokesToAllocate = Math.max(0, Math.floor(player.handicap) - lowestHandicap);
+  if (strokesToAllocate <= 0) return new Set<number>();
+
+  const eligibleHoles = [...round.holes]
+    .filter((hole) => hole.par !== 3)
+    .sort((a, b) => a.handicapIndex - b.handicapIndex || a.holeNumber - b.holeNumber);
+
+  return new Set(eligibleHoles.slice(0, strokesToAllocate).map((hole) => hole.holeNumber));
 }
 
 function getMatchupNetScores(
-  bankerGrossScore: number | null,
-  playerGrossScore: number | null,
+  round: RoundState,
+  hole: HoleState,
   bankerHandicap: number,
   playerHandicap: number,
-  holeHandicapIndex: number,
-  par: 3 | 4 | 5
+  bankerGrossScore: number | null,
+  playerGrossScore: number | null,
+  bankerPlayerId: string,
+  playerId: string
 ) {
-  const playerGets = playerHandicap > bankerHandicap && getsStroke(playerHandicap, bankerHandicap, holeHandicapIndex, par);
-  const bankerGets = bankerHandicap > playerHandicap && getsStroke(playerHandicap, bankerHandicap, holeHandicapIndex, par);
+  const playerGets = getStrokeHoleNumbers(round, playerId).has(hole.holeNumber) && playerHandicap > bankerHandicap;
+  const bankerGets = getStrokeHoleNumbers(round, bankerPlayerId).has(hole.holeNumber) && bankerHandicap > playerHandicap;
 
   return {
     bankerNetScore: bankerGrossScore == null ? null : bankerGrossScore - (bankerGets ? 1 : 0),
@@ -168,12 +192,14 @@ function getHoleResults(round: RoundState, hole: HoleState): BankerMatchupResult
   const matchupInputs = hole.matchups.map((m) => {
     const player = round.players.find((p) => p.id === m.playerId);
     const netScores = getMatchupNetScores(
-      hole.bankerGrossScore,
-      m.grossScore,
+      round,
+      hole,
       banker.handicap,
       player?.handicap ?? 0,
-      hole.handicapIndex,
-      hole.par
+      hole.bankerGrossScore,
+      m.grossScore,
+      hole.bankerPlayerId,
+      m.playerId
     );
 
     return {
@@ -258,15 +284,33 @@ function buildCurrentHoleSummary(round: RoundState, hole: HoleState): CurrentHol
     bankerHandicap: banker.handicap,
     bankerPressed: hole.bankerPressed,
     pressLabel: hole.par === 3 ? 'Triple' : 'Double',
+    bankerGetsStrokeFromNames: hole.matchups
+      .map((matchup) => {
+        const player = round.players.find((p) => p.id === matchup.playerId);
+        const netScores = getMatchupNetScores(
+          round,
+          hole,
+          banker.handicap,
+          player?.handicap ?? 0,
+          hole.bankerGrossScore,
+          matchup.grossScore,
+          hole.bankerPlayerId,
+          matchup.playerId
+        );
+        return netScores.bankerGetsStroke ? player?.name ?? 'Player' : null;
+      })
+      .filter((name): name is string => Boolean(name)),
     matchups: hole.matchups.map((matchup) => {
       const player = round.players.find((p) => p.id === matchup.playerId);
       const netScores = getMatchupNetScores(
-        hole.bankerGrossScore,
-        matchup.grossScore,
+        round,
+        hole,
         banker.handicap,
         player?.handicap ?? 0,
-        hole.handicapIndex,
-        hole.par
+        hole.bankerGrossScore,
+        matchup.grossScore,
+        hole.bankerPlayerId,
+        matchup.playerId
       );
       const result = results.find((item) => item.playerId === matchup.playerId);
 
@@ -350,13 +394,12 @@ export const useRoundStore = create<RoundStore>()(
               roundCode: input.roundCode,
               title: input.title,
               courseName: input.courseName,
+              selectedCourseId: input.selectedCourseId ?? null,
               currentHole: 1,
               totalHoles,
               defaultBet: input.defaultBet,
               players: input.players,
-              holes: Array.from({ length: totalHoles }, (_, index) =>
-                createHole(index + 1, 4, index + 1, input.firstBankerPlayerId, input.players.map((p) => p.id), input.defaultBet)
-              ),
+              holes: createDefaultHoles(totalHoles, input.firstBankerPlayerId, input.players.map((p) => p.id), input.defaultBet, input.holesConfig),
             },
           };
         }),

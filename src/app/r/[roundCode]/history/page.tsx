@@ -51,6 +51,7 @@ export default function HistoryPage() {
                   <div>Banker gross: {hole.bankerGrossScore ?? '-'}</div>
                   <div>Banker hcp: {hole.bankerHandicap}</div>
                   <div>{hole.bankerPressed ? `Banker ${hole.pressLabel}` : `No Banker ${hole.pressLabel.toLowerCase()}`}</div>
+                  <div>{hole.matchups.some((matchup) => matchup.bankerGetsStroke) ? `Banker * from ${hole.matchups.filter((matchup) => matchup.bankerGetsStroke).map((matchup) => matchup.playerName).join(', ')}` : 'Banker no stroke'}</div>
                 </div>
               </div>
 
@@ -59,7 +60,7 @@ export default function HistoryPage() {
                   <div key={matchup.playerId} className="rounded-xl bg-slate-50 px-3 py-3">
                     <div className="flex items-center justify-between gap-4">
                       <div>
-                        <p className="font-semibold">{matchup.playerName}</p>
+                        <p className="font-semibold">{matchup.playerName}{matchup.playerGetsStroke ? ' *' : ''}</p>
                         <p className="text-sm text-slate-500">
                           Bet {formatCurrency(matchup.baseWager)} • Gross {matchup.playerGrossScore ?? '-'} vs Banker {matchup.bankerGrossScore ?? '-'}
                         </p>

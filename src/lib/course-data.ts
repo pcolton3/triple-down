@@ -1,0 +1,70 @@
+import type { CourseRecord } from '@/types/course';
+
+const papagoHoles: CourseRecord['holes'] = [
+  { holeNumber: 1, par: 4, handicapIndex: 11 },
+  { holeNumber: 2, par: 4, handicapIndex: 7 },
+  { holeNumber: 3, par: 3, handicapIndex: 17 },
+  { holeNumber: 4, par: 4, handicapIndex: 1 },
+  { holeNumber: 5, par: 4, handicapIndex: 13 },
+  { holeNumber: 6, par: 5, handicapIndex: 5 },
+  { holeNumber: 7, par: 3, handicapIndex: 15 },
+  { holeNumber: 8, par: 4, handicapIndex: 9 },
+  { holeNumber: 9, par: 4, handicapIndex: 3 },
+  { holeNumber: 10, par: 4, handicapIndex: 10 },
+  { holeNumber: 11, par: 3, handicapIndex: 18 },
+  { holeNumber: 12, par: 5, handicapIndex: 2 },
+  { holeNumber: 13, par: 4, handicapIndex: 14 },
+  { holeNumber: 14, par: 4, handicapIndex: 6 },
+  { holeNumber: 15, par: 3, handicapIndex: 16 },
+  { holeNumber: 16, par: 4, handicapIndex: 8 },
+  { holeNumber: 17, par: 4, handicapIndex: 4 },
+  { holeNumber: 18, par: 5, handicapIndex: 12 },
+];
+
+const quinteroHoles: CourseRecord['holes'] = [
+  { holeNumber: 1, par: 4, handicapIndex: 9 },
+  { holeNumber: 2, par: 4, handicapIndex: 3 },
+  { holeNumber: 3, par: 3, handicapIndex: 17 },
+  { holeNumber: 4, par: 5, handicapIndex: 5 },
+  { holeNumber: 5, par: 4, handicapIndex: 1 },
+  { holeNumber: 6, par: 4, handicapIndex: 13 },
+  { holeNumber: 7, par: 3, handicapIndex: 15 },
+  { holeNumber: 8, par: 4, handicapIndex: 7 },
+  { holeNumber: 9, par: 5, handicapIndex: 11 },
+  { holeNumber: 10, par: 4, handicapIndex: 10 },
+  { holeNumber: 11, par: 3, handicapIndex: 18 },
+  { holeNumber: 12, par: 4, handicapIndex: 2 },
+  { holeNumber: 13, par: 5, handicapIndex: 6 },
+  { holeNumber: 14, par: 4, handicapIndex: 12 },
+  { holeNumber: 15, par: 3, handicapIndex: 16 },
+  { holeNumber: 16, par: 4, handicapIndex: 4 },
+  { holeNumber: 17, par: 4, handicapIndex: 8 },
+  { holeNumber: 18, par: 5, handicapIndex: 14 },
+];
+
+const troonHoles: CourseRecord['holes'] = [
+  { holeNumber: 1, par: 4, handicapIndex: 13 },
+  { holeNumber: 2, par: 5, handicapIndex: 7 },
+  { holeNumber: 3, par: 3, handicapIndex: 17 },
+  { holeNumber: 4, par: 4, handicapIndex: 3 },
+  { holeNumber: 5, par: 4, handicapIndex: 1 },
+  { holeNumber: 6, par: 5, handicapIndex: 9 },
+  { holeNumber: 7, par: 3, handicapIndex: 15 },
+  { holeNumber: 8, par: 4, handicapIndex: 11 },
+  { holeNumber: 9, par: 4, handicapIndex: 5 },
+  { holeNumber: 10, par: 4, handicapIndex: 12 },
+  { holeNumber: 11, par: 3, handicapIndex: 18 },
+  { holeNumber: 12, par: 5, handicapIndex: 2 },
+  { holeNumber: 13, par: 4, handicapIndex: 6 },
+  { holeNumber: 14, par: 4, handicapIndex: 10 },
+  { holeNumber: 15, par: 3, handicapIndex: 16 },
+  { holeNumber: 16, par: 4, handicapIndex: 4 },
+  { holeNumber: 17, par: 4, handicapIndex: 8 },
+  { holeNumber: 18, par: 5, handicapIndex: 14 },
+];
+
+export const courseCatalog: CourseRecord[] = [
+  { id: 'papago-golf-club', name: 'Papago Golf Club', city: 'Phoenix', state: 'AZ', holes: papagoHoles },
+  { id: 'quintero-golf-club', name: 'Quintero Golf Club', city: 'Peoria', state: 'AZ', holes: quinteroHoles },
+  { id: 'troon-north-pinnacle', name: 'Troon North Golf Club - Pinnacle', city: 'Scottsdale', state: 'AZ', holes: troonHoles },
+];

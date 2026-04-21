@@ -70,6 +70,7 @@ export default function LiveRoundPage() {
   const banker = round.players.find((player) => player.id === hole.bankerPlayerId) ?? round.players[0];
   const totals = getRunningTotals();
   const summary = getCurrentHoleSummary();
+  const matchupSummaryByPlayerId = Object.fromEntries(summary.matchups.map((item) => [item.playerId, item]));
   const isFinalHole = round.currentHole === round.totalHoles;
   const holesSaved = useMemo(() => round.holes.filter((item) => item.isSaved).length, [round.holes]);
   const pressAction = hole.par === 3 ? 'Triple' : 'Double';
@@ -116,7 +117,15 @@ export default function LiveRoundPage() {
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
             <p className="text-sm text-slate-500">Current Banker</p>
-            <h2 className="text-2xl font-bold">{banker.name}</h2>
+            <h2 className="text-2xl font-bold">
+              {banker.name}
+              {summary.bankerGetsStrokeFromNames.length > 0 ? <span className="ml-2 text-[#2f8df3]">*</span> : null}
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              {summary.bankerGetsStrokeFromNames.length > 0
+                ? `Gets stroke from: ${summary.bankerGetsStrokeFromNames.join(', ')}`
+                : 'No stroke this hole'}
+            </p>
           </div>
           <select
             value={hole.bankerPlayerId}
@@ -193,13 +202,20 @@ export default function LiveRoundPage() {
       <section className="space-y-3">
         {hole.matchups.map((matchup) => {
           const player = round.players.find((item) => item.id === matchup.playerId)!;
+          const matchupSummary = matchupSummaryByPlayerId[player.id];
 
           return (
             <article key={player.id} className="rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-lg font-bold">{player.name}</h3>
-                  <p className="text-sm text-slate-500">vs {banker.name} • Hcp {player.handicap}</p>
+                  <h3 className="text-lg font-bold">
+                    {player.name}
+                    {matchupSummary?.playerGetsStroke ? <span className="ml-2 text-[#2f8df3]">*</span> : null}
+                  </h3>
+                  <p className="text-sm text-slate-500">
+                    vs {banker.name} • Hcp {player.handicap}
+                    {matchupSummary?.playerGetsStroke ? ' • Gets stroke this hole' : ''}
+                  </p>
                 </div>
                 <Button
                   type="button"
@@ -244,7 +260,7 @@ export default function LiveRoundPage() {
         </div>
 
         <div className="mb-3 rounded-xl bg-slate-50 px-3 py-3 text-sm text-slate-600">
-          Banker: <span className="font-semibold text-slate-900">{summary.bankerName}</span> • Handicap {summary.bankerHandicap} • Gross {summary.bankerGrossScore ?? '-'}
+          Banker: <span className="font-semibold text-slate-900">{summary.bankerName}</span>{summary.bankerGetsStrokeFromNames.length > 0 ? <span className="ml-1 text-[#2f8df3]">*</span> : null} • Handicap {summary.bankerHandicap} • Gross {summary.bankerGrossScore ?? '-'}{summary.bankerGetsStrokeFromNames.length > 0 ? ` • Gets stroke from: ${summary.bankerGetsStrokeFromNames.join(', ')}` : ''}
         </div>
 
         <div className="space-y-2">

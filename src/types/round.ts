@@ -22,11 +22,18 @@ export type HoleState = {
   isSaved: boolean;
 };
 
+export type HoleConfig = {
+  holeNumber: number;
+  par: 3 | 4 | 5;
+  handicapIndex: number;
+};
+
 export type RoundState = {
   id: string;
   roundCode: string;
   title: string;
   courseName: string;
+  selectedCourseId?: string | null;
   currentHole: number;
   totalHoles: number;
   defaultBet: number;
@@ -38,8 +45,10 @@ export type CreateRoundInput = {
   roundCode: string;
   title: string;
   courseName: string;
+  selectedCourseId?: string | null;
   defaultBet: number;
   players: Player[];
   firstBankerPlayerId: string;
   totalHoles?: number;
+  holesConfig?: HoleConfig[];
 };
