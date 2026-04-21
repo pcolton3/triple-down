@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { createClient } from '@supabase/supabase-js';
 import { Card } from '@/components/shared/card';
 import { Button } from '@/components/shared/button';
 import { generateRoundCode } from '@/lib/utils/round-code';
@@ -17,6 +18,20 @@ const defaultPlayers = [
   { id: 'p3', name: '', handicap: 0 },
   { id: 'p4', name: '', handicap: 0 },
 ];
+
+type SavedCourseRow = {
+  id: string;
+  source_provider: string | null;
+  source_course_id: string | null;
+  name: string;
+  city: string | null;
+  state: string | null;
+  saved_course_holes?: Array<{
+    hole_number: number;
+    par: number | null;
+    handicap_index: number | null;
+  }>;
+};
 
 function NumberField({
   value,
@@ -41,6 +56,17 @@ function NumberField({
   );
 }
 
+function normalizeName(name: string) {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function createSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key);
+}
+
 export default function NewRoundPage() {
   const router = useRouter();
   const createRound = useRoundStore((state) => state.createRound);
@@ -59,6 +85,10 @@ export default function NewRoundPage() {
   const [locationStatus, setLocationStatus] = useState('Getting nearby courses…');
   const [searchMode, setSearchMode] = useState<'nearby' | 'search'>('nearby');
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
+  const missingPars = useMemo(() => manualHoles.some((h) => !h.par), [manualHoles]);
+  const missingHandicaps = useMemo(() => manualHoles.some((h) => !h.handicapIndex), [manualHoles]);
 
   useEffect(() => {
     setRoundCode(generateRoundCode());
@@ -135,21 +165,61 @@ export default function NewRoundPage() {
     setCourseResults(results);
   }
 
+  async function findSavedCourse(course: CourseRecord) {
+    const supabase = createSupabase();
+    if (!supabase) return null;
+
+    const bySource = await supabase
+      .from('saved_courses')
+      .select('id,name,city,state,source_provider,source_course_id,saved_course_holes(hole_number,par,handicap_index)')
+      .eq('source_provider', 'nominatim')
+      .eq('source_course_id', course.id)
+      .maybeSingle<SavedCourseRow>();
+
+    if (bySource.data) return bySource.data;
+
+    const byName = await supabase
+      .from('saved_courses')
+      .select('id,name,city,state,source_provider,source_course_id,saved_course_holes(hole_number,par,handicap_index)')
+      .eq('normalized_name', normalizeName(course.name))
+      .maybeSingle<SavedCourseRow>();
+
+    return byName.data ?? null;
+  }
+
   async function handleSelectCourse(courseId: string) {
+    setSaveStatus('idle');
+
     const resultCourse = courseResults.find((course) => course.id === courseId) ?? null;
     if (!resultCourse) return;
 
-    // Immediately populate visible form fields from the selected search result.
     setSelectedCourse(resultCourse);
     setCourseName(resultCourse.name);
     setCourseQuery(resultCourse.name);
     setCourseResults([]);
 
-    if (resultCourse.holes.length > 0) {
-      setManualHoles(resultCourse.holes.map((hole) => ({ ...hole })));
+    const saved = await findSavedCourse(resultCourse);
+    if (saved?.saved_course_holes?.length === 18) {
+      setManualHoles(
+        saved.saved_course_holes
+          .sort((a, b) => a.hole_number - b.hole_number)
+          .map((hole) => ({
+            holeNumber: hole.hole_number,
+            par: ((hole.par ?? 4) as 3 | 4 | 5),
+            handicapIndex: hole.handicap_index ?? hole.hole_number,
+          }))
+      );
+      return;
     }
 
-    // Then try to upgrade to richer hole data if a detailed source exists.
+    if (resultCourse.holes.length > 0) {
+      setManualHoles(resultCourse.holes.map((hole) => ({ ...hole })));
+    } else {
+      setManualHoles(
+        Array.from({ length: 18 }, (_, index) => ({ holeNumber: index + 1, par: 4, handicapIndex: index + 1 }))
+      );
+    }
+
     const detailedCourse = await getCourseDetails(courseId);
     if (detailedCourse) {
       const mergedCourse = {
@@ -172,6 +242,7 @@ export default function NewRoundPage() {
   }
 
   function updateHoleConfig(holeNumber: number, field: 'par' | 'handicapIndex', value: number) {
+    setSaveStatus('idle');
     setManualHoles((current) =>
       current.map((hole) =>
         hole.holeNumber === holeNumber
@@ -189,8 +260,101 @@ export default function NewRoundPage() {
 
   function clearSelectedCourse() {
     setSelectedCourse(null);
+    setCourseName('');
     setCourseQuery('');
+    setSaveStatus('idle');
+    setManualHoles(
+      Array.from({ length: 18 }, (_, index) => ({ holeNumber: index + 1, par: 4, handicapIndex: index + 1 }))
+    );
     void getNearbyCourses(userLocation ?? undefined).then((results) => setCourseResults(results));
+  }
+
+  async function handleSaveCourse() {
+    const supabase = createSupabase();
+    if (!supabase || !courseName.trim()) {
+      setSaveStatus('error');
+      return;
+    }
+
+    try {
+      setSaveStatus('saving');
+      const normalizedName = normalizeName(courseName);
+
+      let courseId: string | null = null;
+
+      if (selectedCourse?.id) {
+        const existingBySource = await supabase
+          .from('saved_courses')
+          .select('id')
+          .eq('source_provider', 'nominatim')
+          .eq('source_course_id', selectedCourse.id)
+          .maybeSingle<{ id: string }>();
+
+        courseId = existingBySource.data?.id ?? null;
+      }
+
+      if (!courseId) {
+        const existingByName = await supabase
+          .from('saved_courses')
+          .select('id')
+          .eq('normalized_name', normalizedName)
+          .maybeSingle<{ id: string }>();
+
+        courseId = existingByName.data?.id ?? null;
+      }
+
+      if (courseId) {
+        const updateCourse = await supabase
+          .from('saved_courses')
+          .update({
+            name: courseName.trim(),
+            city: selectedCourse?.city ?? null,
+            state: selectedCourse?.state ?? null,
+            normalized_name: normalizedName,
+            source_provider: selectedCourse?.id ? 'nominatim' : null,
+            source_course_id: selectedCourse?.id ?? null,
+          })
+          .eq('id', courseId);
+
+        if (updateCourse.error) throw updateCourse.error;
+      } else {
+        const insertCourse = await supabase
+          .from('saved_courses')
+          .insert({
+            name: courseName.trim(),
+            city: selectedCourse?.city ?? null,
+            state: selectedCourse?.state ?? null,
+            normalized_name: normalizedName,
+            source_provider: selectedCourse?.id ? 'nominatim' : null,
+            source_course_id: selectedCourse?.id ?? null,
+          })
+          .select('id')
+          .single<{ id: string }>();
+
+        if (insertCourse.error) throw insertCourse.error;
+        courseId = insertCourse.data.id;
+      }
+
+      const holeRows = manualHoles.map((hole) => ({
+        saved_course_id: courseId,
+        hole_number: hole.holeNumber,
+        par: hole.par,
+        handicap_index: hole.handicapIndex,
+      }));
+
+      const saveHoles = await supabase
+        .from('saved_course_holes')
+        .upsert(holeRows, {
+          onConflict: 'saved_course_id,hole_number',
+          ignoreDuplicates: false,
+        });
+
+      if (saveHoles.error) throw saveHoles.error;
+      setSaveStatus('saved');
+    } catch (error) {
+      console.error(error);
+      setSaveStatus('error');
+    }
   }
 
   function handleCreateRound() {
@@ -250,7 +414,9 @@ export default function NewRoundPage() {
               onChange={(event) => void handleCourseSearch(event.target.value)}
             />
             <p className="mt-2 text-xs text-slate-500">
-              {searchMode === 'nearby' ? locationStatus : 'Search results are ranked with nearby courses first when location is available.'}
+              {searchMode === 'nearby'
+                ? locationStatus
+                : 'Search results are ranked with nearby courses first when location is available.'}
             </p>
           </div>
 
@@ -319,7 +485,15 @@ export default function NewRoundPage() {
 
           {selectedCourse ? (
             <div className="mb-4 rounded-xl bg-slate-50 px-3 py-3 text-sm text-slate-600">
-              Selected course: <span className="font-semibold text-slate-900">{selectedCourse.name}</span>{selectedCourse.city || selectedCourse.state ? <> • {selectedCourse.city}{selectedCourse.city && selectedCourse.state ? ', ' : ''}{selectedCourse.state}</> : null}
+              Selected course: <span className="font-semibold text-slate-900">{selectedCourse.name}</span>
+              {selectedCourse.city || selectedCourse.state ? (
+                <>
+                  {' '}
+                  • {selectedCourse.city}
+                  {selectedCourse.city && selectedCourse.state ? ', ' : ''}
+                  {selectedCourse.state}
+                </>
+              ) : null}
             </div>
           ) : (
             <div className="mb-4 rounded-xl bg-slate-50 px-3 py-3 text-sm text-slate-600">
@@ -350,6 +524,35 @@ export default function NewRoundPage() {
               </div>
             ))}
           </div>
+
+          <div className="mt-4 space-y-3">
+            {(missingPars || missingHandicaps) && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                {missingPars && missingHandicaps
+                  ? 'Par and hole handicap data are not available for this course yet. Please enter them manually. Once saved, this course can be reused in future rounds.'
+                  : missingHandicaps
+                    ? 'Hole handicap data is not available for this course yet. Please enter it manually. Once saved, this course can be reused in future rounds.'
+                    : 'Par data is not available for this course yet. Please enter it manually. Once saved, this course can be reused in future rounds.'}
+              </div>
+            )}
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => void handleSaveCourse()}
+                disabled={!courseName || manualHoles.length !== 18 || saveStatus === 'saving'}
+                className="rounded-xl bg-[#2f8df3] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {saveStatus === 'saving' ? 'Saving...' : 'Save Course'}
+              </button>
+              {saveStatus === 'saved' && <span className="text-sm text-green-700">Saved for future rounds</span>}
+              {saveStatus === 'error' && (
+                <span className="text-sm text-red-700">
+                  Save failed. Check your Supabase env keys and database tables.
+                </span>
+              )}
+            </div>
+          </div>
         </Card>
 
         <Card>
@@ -365,7 +568,7 @@ export default function NewRoundPage() {
             >
               {players.map((player, index) => (
                 <option key={player.id} value={player.id}>
-                  {(player.name.trim() || `Player ${index + 1}`)} as Banker
+                  {player.name.trim() || `Player ${index + 1}`} as Banker
                 </option>
               ))}
             </select>
