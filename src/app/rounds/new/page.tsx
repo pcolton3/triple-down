@@ -137,16 +137,38 @@ export default function NewRoundPage() {
 
   async function handleSelectCourse(courseId: string) {
     const resultCourse = courseResults.find((course) => course.id === courseId) ?? null;
-    const detailedCourse = await getCourseDetails(courseId);
-    const course = detailedCourse ?? resultCourse;
-    if (!course) return;
-    setSelectedCourse(course);
-    setCourseName(course.name);
-    if (course.holes.length > 0) {
-      setManualHoles(course.holes.map((hole) => ({ ...hole })));
-    }
-    setCourseQuery(course.name);
+    if (!resultCourse) return;
+
+    // Immediately populate visible form fields from the selected search result.
+    setSelectedCourse(resultCourse);
+    setCourseName(resultCourse.name);
+    setCourseQuery(resultCourse.name);
     setCourseResults([]);
+
+    if (resultCourse.holes.length > 0) {
+      setManualHoles(resultCourse.holes.map((hole) => ({ ...hole })));
+    }
+
+    // Then try to upgrade to richer hole data if a detailed source exists.
+    const detailedCourse = await getCourseDetails(courseId);
+    if (detailedCourse) {
+      const mergedCourse = {
+        ...resultCourse,
+        ...detailedCourse,
+        name: detailedCourse.name || resultCourse.name,
+        city: detailedCourse.city || resultCourse.city,
+        state: detailedCourse.state || resultCourse.state,
+        latitude: detailedCourse.latitude ?? resultCourse.latitude,
+        longitude: detailedCourse.longitude ?? resultCourse.longitude,
+        holes: detailedCourse.holes.length > 0 ? detailedCourse.holes : resultCourse.holes,
+      };
+
+      setSelectedCourse(mergedCourse);
+      setCourseName(mergedCourse.name);
+      if (mergedCourse.holes.length > 0) {
+        setManualHoles(mergedCourse.holes.map((hole) => ({ ...hole })));
+      }
+    }
   }
 
   function updateHoleConfig(holeNumber: number, field: 'par' | 'handicapIndex', value: number) {
