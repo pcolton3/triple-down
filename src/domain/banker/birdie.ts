@@ -1,3 +1,3 @@
-export function isNetBirdieOrBetter(netScore: number, par: number) {
-  return netScore <= par - 1;
+export function isGrossBirdieOrBetter(grossScore: number, par: number) {
+  return grossScore <= par - 1;
 }

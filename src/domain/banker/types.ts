@@ -2,12 +2,14 @@ export type BankerMatchupInput = {
   playerId: string;
   baseWager: number;
   pressCount: number;
+  playerGrossScore: number;
   playerNetScore: number;
 };
 
 export type BankerHoleInput = {
   par: 3 | 4 | 5;
   bankerPlayerId: string;
+  bankerGrossScore: number;
   bankerNetScore: number;
   matchups: BankerMatchupInput[];
 };

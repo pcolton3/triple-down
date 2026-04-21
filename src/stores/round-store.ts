@@ -180,7 +180,9 @@ function getHoleResults(round: RoundState, hole: HoleState): BankerMatchupResult
       playerId: m.playerId,
       baseWager: m.baseWager,
       pressCount: Number(m.pressed) + Number(hole.bankerPressed),
+      playerGrossScore: m.grossScore,
       playerNetScore: netScores.playerNetScore,
+      bankerGrossScore: hole.bankerGrossScore,
       bankerNetScore: netScores.bankerNetScore,
     };
   });
@@ -191,12 +193,14 @@ function getHoleResults(round: RoundState, hole: HoleState): BankerMatchupResult
     settleBankerHole({
       par: hole.par,
       bankerPlayerId: hole.bankerPlayerId,
+      bankerGrossScore: m.bankerGrossScore as number,
       bankerNetScore: m.bankerNetScore as number,
       matchups: [
         {
           playerId: m.playerId,
           baseWager: m.baseWager,
           pressCount: m.pressCount,
+          playerGrossScore: m.playerGrossScore as number,
           playerNetScore: m.playerNetScore as number,
         },
       ],

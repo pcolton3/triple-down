@@ -1,15 +1,15 @@
-import { isNetBirdieOrBetter } from './birdie';
+import { isGrossBirdieOrBetter } from './birdie';
 import { getPressMultiplier } from './multipliers';
 import type { BankerHoleInput, BankerMatchupResult } from './types';
 
 export function settleBankerHole(
   input: BankerHoleInput
 ): BankerMatchupResult[] {
-  const bankerBirdie = isNetBirdieOrBetter(input.bankerNetScore, input.par);
+  const bankerBirdie = isGrossBirdieOrBetter(input.bankerGrossScore, input.par);
 
   return input.matchups.map((matchup) => {
     const pressMultiplier = getPressMultiplier(input.par, matchup.pressCount);
-    const playerBirdie = isNetBirdieOrBetter(matchup.playerNetScore, input.par);
+    const playerBirdie = isGrossBirdieOrBetter(matchup.playerGrossScore, input.par);
 
     if (matchup.playerNetScore === input.bankerNetScore) {
       return {
@@ -29,7 +29,7 @@ export function settleBankerHole(
         pressMultiplier,
         birdieMultiplier: 1,
         finalAmount: 0,
-        reason: 'Both banker and player made net birdie or better',
+        reason: 'Both banker and player made gross birdie or better',
       };
     }
 
@@ -48,9 +48,9 @@ export function settleBankerHole(
       birdieMultiplier,
       finalAmount: matchup.baseWager * pressMultiplier * birdieMultiplier,
       reason: bankerBirdie
-        ? 'Banker net birdie or better doubled bet'
+        ? 'Banker gross birdie or better doubled bet'
         : playerBirdie
-          ? 'Player net birdie or better doubled bet'
+          ? 'Player gross birdie or better doubled bet'
           : 'Standard settlement',
     };
   });
