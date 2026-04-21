@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card } from '@/components/shared/card';
 import { Button } from '@/components/shared/button';
@@ -44,7 +44,7 @@ function NumberField({
 export default function NewRoundPage() {
   const router = useRouter();
   const createRound = useRoundStore((state) => state.createRound);
-  const roundCode = useMemo(() => generateRoundCode(), []);
+  const [roundCode, setRoundCode] = useState('');
   const [title, setTitle] = useState('Saturday Group');
   const [courseName, setCourseName] = useState('');
   const [defaultBet, setDefaultBet] = useState(5);
@@ -59,6 +59,10 @@ export default function NewRoundPage() {
   const [locationStatus, setLocationStatus] = useState('Getting nearby courses…');
   const [searchMode, setSearchMode] = useState<'nearby' | 'search'>('nearby');
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+
+  useEffect(() => {
+    setRoundCode(generateRoundCode());
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -132,11 +136,15 @@ export default function NewRoundPage() {
   }
 
   async function handleSelectCourse(courseId: string) {
-    const course = await getCourseDetails(courseId);
+    const resultCourse = courseResults.find((course) => course.id === courseId) ?? null;
+    const detailedCourse = await getCourseDetails(courseId);
+    const course = detailedCourse ?? resultCourse;
     if (!course) return;
     setSelectedCourse(course);
     setCourseName(course.name);
-    setManualHoles(course.holes.map((hole) => ({ ...hole })));
+    if (course.holes.length > 0) {
+      setManualHoles(course.holes.map((hole) => ({ ...hole })));
+    }
     setCourseQuery(course.name);
     setCourseResults([]);
   }
@@ -169,8 +177,10 @@ export default function NewRoundPage() {
       name: player.name.trim() || `Player ${index + 1}`,
     }));
 
+    const finalRoundCode = generateRoundCode();
+
     createRound({
-      roundCode,
+      roundCode: finalRoundCode,
       title: title.trim() || 'Saturday Group',
       courseName: courseName.trim() || selectedCourse?.name || 'Golf Course',
       selectedCourseId: selectedCourse?.id ?? null,
@@ -181,7 +191,7 @@ export default function NewRoundPage() {
       holesConfig: manualHoles,
     });
 
-    router.push(`/r/${roundCode}`);
+    router.push(`/r/${finalRoundCode}`);
   }
 
   return (
@@ -275,7 +285,7 @@ export default function NewRoundPage() {
             <div>
               <h2 className="text-xl font-bold">Course Setup</h2>
               <p className="text-sm text-slate-500">
-                Pars and hole handicaps auto-fill from the selected course when available.
+                Pars and hole handicaps auto-fill when full data is available. Otherwise you can edit them manually below.
               </p>
             </div>
             {selectedCourse ? (
@@ -287,7 +297,7 @@ export default function NewRoundPage() {
 
           {selectedCourse ? (
             <div className="mb-4 rounded-xl bg-slate-50 px-3 py-3 text-sm text-slate-600">
-              Selected course: <span className="font-semibold text-slate-900">{selectedCourse.name}</span> • {selectedCourse.city}, {selectedCourse.state}
+              Selected course: <span className="font-semibold text-slate-900">{selectedCourse.name}</span>{selectedCourse.city || selectedCourse.state ? <> • {selectedCourse.city}{selectedCourse.city && selectedCourse.state ? ', ' : ''}{selectedCourse.state}</> : null}
             </div>
           ) : (
             <div className="mb-4 rounded-xl bg-slate-50 px-3 py-3 text-sm text-slate-600">
