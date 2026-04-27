@@ -147,7 +147,30 @@ export async function searchCourses(query: string, options: SearchOptions = {}):
     fetchRemoteCourses(query, options),
   ]);
 
-  return dedupeCourses([...savedCourses, ...localCourses, ...remoteCourses]).slice(0, limit);
+const normalizedQuery = normalize(query);
+
+const combined = dedupeCourses([...savedCourses, ...localCourses, ...remoteCourses]);
+
+return combined
+  .sort((a, b) => {
+    const aName = normalize(a.name);
+    const bName = normalize(b.name);
+
+    const aExact = aName === normalizedQuery ? 1 : 0;
+    const bExact = bName === normalizedQuery ? 1 : 0;
+    if (aExact !== bExact) return bExact - aExact;
+
+    const aStarts = aName.startsWith(normalizedQuery) ? 1 : 0;
+    const bStarts = bName.startsWith(normalizedQuery) ? 1 : 0;
+    if (aStarts !== bStarts) return bStarts - aStarts;
+
+    const aIncludes = aName.includes(normalizedQuery) ? 1 : 0;
+    const bIncludes = bName.includes(normalizedQuery) ? 1 : 0;
+    if (aIncludes !== bIncludes) return bIncludes - aIncludes;
+
+    return a.name.localeCompare(b.name);
+  })
+  .slice(0, limit);
 }
 
 export async function getNearbyCourses(options: SearchOptions = {}): Promise<CourseRecord[]> {
