@@ -82,7 +82,7 @@ async function fetchSavedCourses(query: string, options: SearchOptions): Promise
 function dedupeCourses(courses: CourseRecord[]) {
   const seen = new Set<string>();
   return courses.filter((course) => {
-    const key = normalize(`${course.name}|${course.city}|${course.state}`);
+    const key = normalize(course.name);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
