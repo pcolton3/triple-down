@@ -8,10 +8,10 @@ export function Hero() {
         Mobile Golf Betting PWA
       </p>
       <h1 className="text-4xl font-bold tracking-tight text-slate-900 md:text-6xl">
-        Triple Down keeps your Banker round moving.
+        Triple Track keeps your Banker round moving.
       </h1>
       <p className="mx-auto mt-5 max-w-2xl text-base text-slate-600 md:text-lg">
-        Set up your foursome, track each hole, see who is up or down live, and review hole history without settling everything until the end.
+        Set up your foursome, track each hole, see who is up or down live, review hole history, sette everything at the end.
       </p>
       <div className="mt-8 flex items-center justify-center">
         <Link href="/rounds/new">
