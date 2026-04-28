@@ -14,8 +14,41 @@ export default function SettlePage() {
   const { round, getRunningTotals, getSettleUp } = useRoundStore();
   const totals = getRunningTotals().sort((a, b) => b.amount - a.amount);
   const settlements = getSettleUp();
+
   const holesSaved = round.holes.filter((hole) => hole.isSaved).length;
   const roundComplete = holesSaved >= round.totalHoles;
+
+  // ✅ NEW: Calculate gross scores
+  const grossScores = round.players.map((player) => {
+    let total = 0;
+    let holesCounted = 0;
+
+    round.holes.forEach((hole) => {
+      if (!hole.isSaved) return;
+
+      // Banker score
+      if (hole.bankerPlayerId === player.id) {
+        if (hole.bankerGrossScore != null) {
+          total += hole.bankerGrossScore;
+          holesCounted++;
+        }
+      }
+
+      // Non-banker score
+      const matchup = hole.matchups.find((m) => m.playerId === player.id);
+      if (matchup && matchup.grossScore != null) {
+        total += matchup.grossScore;
+        holesCounted++;
+      }
+    });
+
+    return {
+      playerId: player.id,
+      name: player.name,
+      total,
+      holesCounted,
+    };
+  });
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
@@ -33,6 +66,23 @@ export default function SettlePage() {
           <Link href={`/r/${round.roundCode}`}>Back to Round</Link>
         </div>
       </div>
+
+      {/* ✅ NEW SECTION */}
+      <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
+        <h2 className="mb-3 text-lg font-bold">Gross Scores</h2>
+        <div className="space-y-2">
+          {grossScores.map((player) => (
+            <div key={player.playerId} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
+              <span className="font-medium">{player.name}</span>
+              <span className="font-bold">
+                {roundComplete
+                  ? player.total
+                  : `${player.total} through ${player.holesCounted}`}
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
         <h2 className="mb-3 text-lg font-bold">Final Positions</h2>
