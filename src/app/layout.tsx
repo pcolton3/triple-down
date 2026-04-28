@@ -3,7 +3,7 @@ import '@/app/globals.css';
 import { SiteHeader } from '@/components/layout/site-header';
 
 export const metadata: Metadata = {
-  title: 'Triple Down',
+  title: 'Triple Track',
   description: 'Mobile-first golf betting PWA starter',
 };
 
