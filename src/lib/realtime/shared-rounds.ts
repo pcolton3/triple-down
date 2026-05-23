@@ -1,16 +1,137 @@
 import { supabase } from '@/lib/supabase/client';
 import type { RoundState } from '@/types/round';
 
+type RoundRow = {
+  id: string;
+  round_code: string;
+  title: string;
+  course_name: string;
+  selected_course_id: string | null;
+  current_hole: number;
+  total_holes: number;
+  default_bet: number;
+  status: 'active' | 'complete' | 'archived';
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type RoundPlayerRow = {
+  id: string;
+  round_id: string;
+  player_key: string;
+  name: string;
+  handicap: number;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type RoundHoleRow = {
+  id: string;
+  round_id: string;
+  hole_number: number;
+  par: 3 | 4 | 5;
+  handicap_index: number;
+  banker_player_key: string;
+  banker_gross_score: number | null;
+  banker_pressed: boolean;
+  is_saved: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+type RoundMatchupRow = {
+  id: string;
+  round_id: string;
+  round_hole_id: string;
+  hole_number: number;
+  player_key: string;
+  base_wager: number;
+  pressed: boolean;
+  gross_score: number | null;
+  player_net_score: number | null;
+  banker_net_score: number | null;
+  player_gets_stroke: boolean;
+  banker_gets_stroke: boolean;
+  result: 'player_wins' | 'banker_wins' | 'push' | null;
+  final_amount: number;
+  reason: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type RoundGameRow = {
+  id: string;
+  round_id: string;
+  game_type: 'banker' | 'skins' | 'low_net' | 'ctp';
+  pot_amount: number;
+  enabled: boolean;
+  settings: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+type RoundCtpResultRow = {
+  id: string;
+  round_id: string;
+  hole_number: number;
+  winner_player_key: string | null;
+  note: string | null;
+  payout_amount: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type RoundSkinsResultRow = {
+  id: string;
+  round_id: string;
+  hole_number: number;
+  winner_player_key: string | null;
+  winning_net_score: number | null;
+  is_tie: boolean;
+  payout_amount: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type RoundLowNetResultRow = {
+  id: string;
+  round_id: string;
+  player_key: string;
+  total_net_score: number | null;
+  holes_counted: number;
+  placement: 'first' | 'second' | 'other' | 'tied_first' | 'tied_second' | null;
+  payout_amount: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type RoundParticipantRow = {
+  id: string;
+  round_id: string;
+  participant_name: string | null;
+  role: 'scorekeeper' | 'viewer';
+  device_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type SharedRoundBundle = {
-  round: any;
-  players: any[];
-  holes: any[];
-  matchups: any[];
-  games: any[];
-  ctpResults: any[];
-  skinsResults: any[];
-  lowNetResults: any[];
-  participants: any[];
+  round: RoundRow;
+  players: RoundPlayerRow[];
+  holes: RoundHoleRow[];
+  matchups: RoundMatchupRow[];
+  games: RoundGameRow[];
+  ctpResults: RoundCtpResultRow[];
+  skinsResults: RoundSkinsResultRow[];
+  lowNetResults: RoundLowNetResultRow[];
+  participants: RoundParticipantRow[];
+};
+
+type SupabaseResult<T> = {
+  data: T | null;
+  error: { message: string } | null;
 };
 
 export async function createSharedRoundFromLocalRound(round: RoundState) {
@@ -33,8 +154,8 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
     .single();
 
   if (roundError) throw roundError;
-
-  const roundId = roundRow.id as string;
+  const typedRoundRow = roundRow as RoundRow;
+  const roundId = typedRoundRow.id;
 
   const playerRows = round.players.map((player, index) => ({
     round_id: roundId,
@@ -68,8 +189,9 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
 
   if (holesError) throw holesError;
 
+  const typedSavedHoles = (savedHoles ?? []) as RoundHoleRow[];
   const holeIdByNumber = new Map<number, string>(
-    (savedHoles ?? []).map((hole: any) => [hole.hole_number, hole.id])
+    typedSavedHoles.map((hole) => [hole.hole_number, hole.id])
   );
 
   const matchupRows = round.holes.flatMap((hole) => {
@@ -120,7 +242,7 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
 
   if (participantError) throw participantError;
 
-  return roundRow;
+  return typedRoundRow;
 }
 
 export async function loadSharedRoundByCode(roundCode: string): Promise<SharedRoundBundle | null> {
@@ -133,7 +255,7 @@ export async function loadSharedRoundByCode(roundCode: string): Promise<SharedRo
   if (roundError) throw roundError;
   if (!round) return null;
 
-  return loadSharedRoundById(round.id);
+  return loadSharedRoundById((round as RoundRow).id);
 }
 
 export async function loadSharedRoundById(roundId: string): Promise<SharedRoundBundle> {
@@ -170,15 +292,15 @@ export async function loadSharedRoundById(roundId: string): Promise<SharedRoundB
   if (roundError) throw roundError;
 
   return {
-    round,
-    players: players.data ?? [],
-    holes: holes.data ?? [],
-    matchups: matchups.data ?? [],
-    games: games.data ?? [],
-    ctpResults: ctpResults.data ?? [],
-    skinsResults: skinsResults.data ?? [],
-    lowNetResults: lowNetResults.data ?? [],
-    participants: participants.data ?? [],
+    round: round as RoundRow,
+    players: (players.data ?? []) as RoundPlayerRow[],
+    holes: (holes.data ?? []) as RoundHoleRow[],
+    matchups: (matchups.data ?? []) as RoundMatchupRow[],
+    games: (games.data ?? []) as RoundGameRow[],
+    ctpResults: (ctpResults.data ?? []) as RoundCtpResultRow[],
+    skinsResults: (skinsResults.data ?? []) as RoundSkinsResultRow[],
+    lowNetResults: (lowNetResults.data ?? []) as RoundLowNetResultRow[],
+    participants: (participants.data ?? []) as RoundParticipantRow[],
   };
 }
 
@@ -228,7 +350,7 @@ export function subscribeToSharedRound(roundId: string, onChange: () => void) {
     .subscribe();
 
   return () => {
-    supabase.removeChannel(channel);
+    void supabase.removeChannel(channel);
   };
 }
 
@@ -249,7 +371,7 @@ export async function updateSharedHole(params: {
   bankerPressed?: boolean;
   isSaved?: boolean;
 }) {
-  const payload: Record<string, unknown> = {};
+  const payload: Record<string, string | number | boolean | null> = {};
   if (params.bankerPlayerKey !== undefined) payload.banker_player_key = params.bankerPlayerKey;
   if (params.bankerGrossScore !== undefined) payload.banker_gross_score = params.bankerGrossScore;
   if (params.bankerPressed !== undefined) payload.banker_pressed = params.bankerPressed;
@@ -272,7 +394,7 @@ export async function updateSharedMatchup(params: {
   pressed?: boolean;
   grossScore?: number | null;
 }) {
-  const payload: Record<string, unknown> = {};
+  const payload: Record<string, number | boolean | null> = {};
   if (params.baseWager !== undefined) payload.base_wager = params.baseWager;
   if (params.pressed !== undefined) payload.pressed = params.pressed;
   if (params.grossScore !== undefined) payload.gross_score = params.grossScore;
