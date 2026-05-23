@@ -20,12 +20,19 @@ export type HoleState = {
   bankerPressed: boolean;
   matchups: MatchupDraft[];
   isSaved: boolean;
+  ctpWinnerPlayerId?: string | null;
 };
 
 export type HoleConfig = {
   holeNumber: number;
   par: 3 | 4 | 5;
   handicapIndex: number;
+};
+
+export type RoundGameSettings = {
+  skinsPot: number;
+  lowNetPot: number;
+  ctpPot: number;
 };
 
 export type RoundState = {
@@ -39,6 +46,7 @@ export type RoundState = {
   defaultBet: number;
   players: Player[];
   holes: HoleState[];
+  gameSettings: RoundGameSettings;
 };
 
 export type CreateRoundInput = {
@@ -51,4 +59,5 @@ export type CreateRoundInput = {
   firstBankerPlayerId: string;
   totalHoles?: number;
   holesConfig?: HoleConfig[];
+  gameSettings?: Partial<RoundGameSettings>;
 };

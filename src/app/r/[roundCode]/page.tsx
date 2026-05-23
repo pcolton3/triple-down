@@ -63,12 +63,15 @@ export default function LiveRoundPage() {
     nextHole,
     getRunningTotals,
     getCurrentHoleSummary,
+    getGrossTotals,
+    setCtpWinner,
   } = useRoundStore();
 
   const [message, setMessage] = useState('');
   const hole = round.holes.find((item) => item.holeNumber === round.currentHole) ?? round.holes[0];
   const banker = round.players.find((player) => player.id === hole.bankerPlayerId) ?? round.players[0];
   const totals = getRunningTotals();
+  const grossTotals = getGrossTotals();
   const summary = getCurrentHoleSummary();
   const matchupSummaryByPlayerId = Object.fromEntries(summary.matchups.map((item) => [item.playerId, item]));
   const isFinalHole = round.currentHole === round.totalHoles;
@@ -184,6 +187,25 @@ export default function LiveRoundPage() {
         />
       </section>
 
+      {hole.par === 3 ? (
+        <section className="rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
+          <h2 className="mb-2 text-lg font-bold">Closest to the Pin</h2>
+          <p className="mb-3 text-sm text-slate-500">Select the winner for this par 3, or leave as No Winner.</p>
+          <select
+            className="w-full rounded-xl border border-slate-300 px-3 py-3 font-semibold"
+            value={hole.ctpWinnerPlayerId ?? ''}
+            onChange={(event) => setCtpWinner(hole.holeNumber, event.target.value || null)}
+          >
+            <option value="">No Winner</option>
+            {round.players.map((player) => (
+              <option key={player.id} value={player.id}>
+                {player.name}
+              </option>
+            ))}
+          </select>
+        </section>
+      ) : null}
+
       <section className="space-y-3">
         {hole.matchups.map((matchup) => {
           const player = round.players.find((item) => item.id === matchup.playerId) ?? round.players[0];
@@ -271,6 +293,20 @@ export default function LiveRoundPage() {
                 {item.bankerGetsStroke ? ' • banker gets stroke' : ''}
               </p>
               <p className="text-sm text-slate-600">Total multiplier x{item.totalMultiplier}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
+        <h3 className="mb-3 text-lg font-bold">Running Gross</h3>
+        <div className="space-y-2">
+          {grossTotals.map((item) => (
+            <div key={item.playerId} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
+              <span className="font-medium">{item.playerName}</span>
+              <span className="font-bold">
+                Gross {item.grossTotal} through {item.holesCounted}
+              </span>
             </div>
           ))}
         </div>

@@ -17,8 +17,12 @@ function formatPosition(value: number) {
 }
 
 export default function HistoryPage() {
-  const { round, getHoleHistory } = useRoundStore();
+  const { round, getHoleHistory, getGrossTotals, getSkinsSummary, getLowNetSummary, getCtpSummary } = useRoundStore();
   const history = getHoleHistory();
+  const grossTotals = getGrossTotals();
+  const skinsSummary = getSkinsSummary();
+  const lowNetSummary = getLowNetSummary();
+  const ctpSummary = getCtpSummary();
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
@@ -31,6 +35,72 @@ export default function HistoryPage() {
           Back to Round
         </Link>
       </div>
+
+      <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
+        <h2 className="mb-3 text-lg font-bold">Running Gross</h2>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {grossTotals.map((item) => (
+            <div key={item.playerId} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
+              <span className="font-medium">{item.playerName}</span>
+              <span className="font-bold">Gross {item.grossTotal}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
+        <h2 className="mb-3 text-lg font-bold">Side Game History</h2>
+
+        <div className="mb-4">
+          <h3 className="mb-2 font-semibold">Skins by Hole</h3>
+          <div className="space-y-2">
+            {skinsSummary.holes.length === 0 ? (
+              <div className="rounded-xl bg-slate-50 px-3 py-3 text-slate-500">No saved holes yet.</div>
+            ) : (
+              skinsSummary.holes.map((skin) => (
+                <div key={skin.holeNumber} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
+                  <span>Hole {skin.holeNumber}</span>
+                  <span className="font-semibold">
+                    {skin.winnerName
+                      ? `${skin.winnerName} won skin${skin.winningNetScore != null ? `, net ${skin.winningNetScore}` : ''}`
+                      : skin.isTie
+                        ? 'No skin, tied low net'
+                        : 'No skin yet'}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="mb-4">
+          <h3 className="mb-2 font-semibold">Closest to the Pin</h3>
+          <div className="space-y-2">
+            {ctpSummary.par3Holes.length === 0 ? (
+              <div className="rounded-xl bg-slate-50 px-3 py-3 text-slate-500">No par 3 holes found.</div>
+            ) : (
+              ctpSummary.par3Holes.map((ctp) => (
+                <div key={ctp.holeNumber} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
+                  <span>Hole {ctp.holeNumber}</span>
+                  <span className="font-semibold">{ctp.winnerName ?? 'No winner'}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div>
+          <h3 className="mb-2 font-semibold">Low Net Leaderboard</h3>
+          <div className="space-y-2">
+            {lowNetSummary.totals.map((item) => (
+              <div key={item.playerId} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
+                <span>{item.playerName}</span>
+                <span className="font-semibold">Net {item.netTotal}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
 
       <div className="space-y-4">
         {history.length === 0 ? (

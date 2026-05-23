@@ -63,6 +63,42 @@ type SettleUpItem = {
   amount: number;
 };
 
+type GrossTotalItem = {
+  playerId: string;
+  playerName: string;
+  grossTotal: number;
+  netTotal: number;
+  holesCounted: number;
+};
+
+type SkinsHoleResult = {
+  holeNumber: number;
+  winnerPlayerId: string | null;
+  winnerName: string | null;
+  winningNetScore: number | null;
+  isTie: boolean;
+};
+
+type SkinsSummary = {
+  pot: number;
+  skinsWon: number;
+  valuePerSkin: number;
+  holes: SkinsHoleResult[];
+  payouts: Array<{ playerId: string; playerName: string; skins: number; amount: number }>;
+};
+
+type LowNetSummary = {
+  pot: number;
+  totals: GrossTotalItem[];
+  payouts: Array<{ playerId: string; playerName: string; placement: string; amount: number }>;
+};
+
+type CtpSummary = {
+  pot: number;
+  par3Holes: Array<{ holeNumber: number; winnerPlayerId: string | null; winnerName: string | null }>;
+  payouts: Array<{ playerId: string; playerName: string; wins: number; amount: number }>;
+};
+
 type RoundStore = {
   round: RoundState;
   ledger: LedgerEntry[];
@@ -82,6 +118,11 @@ type RoundStore = {
   getHoleHistory: () => HoleHistoryItem[];
   getCurrentHoleSummary: () => CurrentHoleSummary;
   getSettleUp: () => SettleUpItem[];
+  setCtpWinner: (holeNumber: number, playerId: string | null) => void;
+  getGrossTotals: () => GrossTotalItem[];
+  getSkinsSummary: () => SkinsSummary;
+  getLowNetSummary: () => LowNetSummary;
+  getCtpSummary: () => CtpSummary;
 };
 
 const defaultPlayers = [
@@ -107,6 +148,7 @@ function createHole(
     bankerGrossScore: null,
     bankerPressed: false,
     isSaved: false,
+    ctpWinnerPlayerId: null,
     matchups: playerIds
       .filter((id) => id !== bankerPlayerId)
       .map((playerId) => ({
@@ -146,6 +188,7 @@ function createDefaultRound(): RoundState {
     currentHole: 1,
     totalHoles,
     defaultBet,
+    gameSettings: { skinsPot: 0, lowNetPot: 0, ctpPot: 0 },
     players: defaultPlayers,
     holes: createDefaultHoles(totalHoles, firstBankerPlayerId, defaultPlayers.map((p) => p.id), defaultBet),
   };
@@ -155,7 +198,6 @@ function activeHole(round: RoundState) {
   return round.holes.find((hole) => hole.holeNumber === round.currentHole) ?? round.holes[0];
 }
 
-
 function getMatchupNetScores(
   round: RoundState,
   hole: HoleState,
@@ -163,8 +205,9 @@ function getMatchupNetScores(
   playerHandicap: number,
   bankerGrossScore: number | null,
   playerGrossScore: number | null,
+  bankerPlayerId: string,
+  playerId: string
 ) {
-  // 🚫 No strokes on par 3s
   if (hole.par === 3) {
     return {
       bankerNetScore: bankerGrossScore,
@@ -188,10 +231,8 @@ function getMatchupNetScores(
   }
 
   return {
-    bankerNetScore:
-      bankerGrossScore == null ? null : bankerGrossScore - (bankerGets ? 1 : 0),
-    playerNetScore:
-      playerGrossScore == null ? null : playerGrossScore - (playerGets ? 1 : 0),
+    bankerNetScore: bankerGrossScore == null ? null : bankerGrossScore - (bankerGets ? 1 : 0),
+    playerNetScore: playerGrossScore == null ? null : playerGrossScore - (playerGets ? 1 : 0),
     playerGetsStroke: playerGets,
     bankerGetsStroke: bankerGets,
   };
@@ -230,6 +271,8 @@ function getHoleResults(round: RoundState, hole: HoleState): BankerMatchupResult
       player?.handicap ?? 0,
       hole.bankerGrossScore,
       m.grossScore,
+      hole.bankerPlayerId,
+      m.playerId
     );
 
     return {
@@ -324,6 +367,8 @@ function buildCurrentHoleSummary(round: RoundState, hole: HoleState): CurrentHol
           player?.handicap ?? 0,
           hole.bankerGrossScore,
           matchup.grossScore,
+          hole.bankerPlayerId,
+          matchup.playerId
         );
         return netScores.bankerGetsStroke ? player?.name ?? 'Player' : null;
       })
@@ -337,6 +382,8 @@ function buildCurrentHoleSummary(round: RoundState, hole: HoleState): CurrentHol
         player?.handicap ?? 0,
         hole.bankerGrossScore,
         matchup.grossScore,
+        hole.bankerPlayerId,
+        matchup.playerId
       );
       const result = results.find((item) => item.playerId === matchup.playerId);
       const amount =
@@ -385,7 +432,6 @@ function buildCurrentHoleSummary(round: RoundState, hole: HoleState): CurrentHol
   };
 }
 
-
 function buildSettleUp(round: RoundState, ledger: LedgerEntry[]): SettleUpItem[] {
   const totals = buildRunningTotalsFromLedger(round, ledger);
   const debtors = totals
@@ -426,6 +472,186 @@ function buildSettleUp(round: RoundState, ledger: LedgerEntry[]): SettleUpItem[]
   return settlements;
 }
 
+
+function getPlayerGrossForHole(hole: HoleState, playerId: string) {
+  if (hole.bankerPlayerId === playerId) return hole.bankerGrossScore;
+  return hole.matchups.find((matchup) => matchup.playerId === playerId)?.grossScore ?? null;
+}
+
+function getPlayerNetForHole(round: RoundState, hole: HoleState, playerId: string) {
+  const gross = getPlayerGrossForHole(hole, playerId);
+  if (gross == null) return null;
+
+  const banker = round.players.find((player) => player.id === hole.bankerPlayerId);
+  const player = round.players.find((item) => item.id === playerId);
+  if (!banker || !player) return gross;
+
+  if (playerId === hole.bankerPlayerId) {
+    const bankerGetsAnyStroke = hole.matchups.some((matchup) => {
+      const opponent = round.players.find((item) => item.id === matchup.playerId);
+      if (!opponent || hole.par === 3) return false;
+      return banker.handicap > opponent.handicap && Math.abs(banker.handicap - opponent.handicap) >= hole.handicapIndex;
+    });
+    return gross - (bankerGetsAnyStroke ? 1 : 0);
+  }
+
+  if (hole.par === 3) return gross;
+  if (player.handicap > banker.handicap && Math.abs(player.handicap - banker.handicap) >= hole.handicapIndex) return gross - 1;
+  return gross;
+}
+
+function buildGrossTotals(round: RoundState): GrossTotalItem[] {
+  return round.players.map((player) => {
+    let grossTotal = 0;
+    let netTotal = 0;
+    let holesCounted = 0;
+
+    round.holes.forEach((hole) => {
+      if (!hole.isSaved) return;
+      const gross = getPlayerGrossForHole(hole, player.id);
+      const net = getPlayerNetForHole(round, hole, player.id);
+      if (gross == null || net == null) return;
+      grossTotal += gross;
+      netTotal += net;
+      holesCounted += 1;
+    });
+
+    return {
+      playerId: player.id,
+      playerName: player.name,
+      grossTotal,
+      netTotal,
+      holesCounted,
+    };
+  });
+}
+
+function buildSkinsSummary(round: RoundState): SkinsSummary {
+  const pot = round.gameSettings?.skinsPot ?? 0;
+  const holes = round.holes
+    .filter((hole) => hole.isSaved)
+    .map((hole) => {
+      const scores = round.players
+        .map((player) => ({
+          player,
+          net: getPlayerNetForHole(round, hole, player.id),
+        }))
+        .filter((item): item is { player: typeof round.players[number]; net: number } => item.net != null);
+
+      if (scores.length !== round.players.length) {
+        return { holeNumber: hole.holeNumber, winnerPlayerId: null, winnerName: null, winningNetScore: null, isTie: false };
+      }
+
+      const low = Math.min(...scores.map((item) => item.net));
+      const winners = scores.filter((item) => item.net === low);
+
+      if (winners.length !== 1) {
+        return { holeNumber: hole.holeNumber, winnerPlayerId: null, winnerName: null, winningNetScore: low, isTie: true };
+      }
+
+      return {
+        holeNumber: hole.holeNumber,
+        winnerPlayerId: winners[0].player.id,
+        winnerName: winners[0].player.name,
+        winningNetScore: low,
+        isTie: false,
+      };
+    });
+
+  const wonHoles = holes.filter((hole) => hole.winnerPlayerId);
+  const valuePerSkin = wonHoles.length > 0 ? pot / wonHoles.length : 0;
+
+  const payouts = round.players.map((player) => {
+    const skins = wonHoles.filter((hole) => hole.winnerPlayerId === player.id).length;
+    return {
+      playerId: player.id,
+      playerName: player.name,
+      skins,
+      amount: skins * valuePerSkin,
+    };
+  });
+
+  return { pot, skinsWon: wonHoles.length, valuePerSkin, holes, payouts };
+}
+
+function buildLowNetSummary(round: RoundState): LowNetSummary {
+  const pot = round.gameSettings?.lowNetPot ?? 0;
+  const totals = buildGrossTotals(round).sort((a, b) => a.netTotal - b.netTotal);
+  const payouts = round.players.map((player) => ({
+    playerId: player.id,
+    playerName: player.name,
+    placement: 'Other',
+    amount: 0,
+  }));
+
+  if (pot <= 0 || totals.length === 0) return { pot, totals, payouts };
+
+  const lowScore = totals[0]?.netTotal;
+  const firstPlace = totals.filter((item) => item.netTotal === lowScore);
+
+  if (firstPlace.length > 1) {
+    firstPlace.forEach((item) => {
+      const payout = payouts.find((p) => p.playerId === item.playerId);
+      if (payout) {
+        payout.placement = 'Tied 1st';
+        payout.amount = pot / firstPlace.length;
+      }
+    });
+    return { pot, totals, payouts };
+  }
+
+  const first = firstPlace[0];
+  const secondScore = totals.find((item) => item.netTotal > first.netTotal)?.netTotal;
+  const secondPlace = secondScore == null ? [] : totals.filter((item) => item.netTotal === secondScore);
+  const secondPot = secondPlace.length > 0 ? pot * 0.2 : 0;
+  const firstPot = pot - secondPot;
+
+  const firstPayout = payouts.find((p) => p.playerId === first.playerId);
+  if (firstPayout) {
+    firstPayout.placement = '1st';
+    firstPayout.amount = firstPot;
+  }
+
+  secondPlace.forEach((item) => {
+    const payout = payouts.find((p) => p.playerId === item.playerId);
+    if (payout) {
+      payout.placement = secondPlace.length > 1 ? 'Tied 2nd' : '2nd';
+      payout.amount = secondPot / secondPlace.length;
+    }
+  });
+
+  return { pot, totals, payouts };
+}
+
+function buildCtpSummary(round: RoundState): CtpSummary {
+  const pot = round.gameSettings?.ctpPot ?? 0;
+  const par3Holes = round.holes
+    .filter((hole) => hole.par === 3)
+    .map((hole) => {
+      const winner = round.players.find((player) => player.id === hole.ctpWinnerPlayerId);
+      return {
+        holeNumber: hole.holeNumber,
+        winnerPlayerId: hole.ctpWinnerPlayerId ?? null,
+        winnerName: winner?.name ?? null,
+      };
+    });
+
+  const won = par3Holes.filter((item) => item.winnerPlayerId);
+  const valuePerWin = won.length > 0 ? pot / won.length : 0;
+
+  const payouts = round.players.map((player) => {
+    const wins = won.filter((item) => item.winnerPlayerId === player.id).length;
+    return {
+      playerId: player.id,
+      playerName: player.name,
+      wins,
+      amount: wins * valuePerWin,
+    };
+  });
+
+  return { pot, par3Holes, payouts };
+}
+
 export const useRoundStore = create<RoundStore>()(
   persist(
     (set, get) => ({
@@ -446,6 +672,11 @@ export const useRoundStore = create<RoundStore>()(
               currentHole: 1,
               totalHoles,
               defaultBet: input.defaultBet,
+              gameSettings: {
+                skinsPot: input.gameSettings?.skinsPot ?? 0,
+                lowNetPot: input.gameSettings?.lowNetPot ?? 0,
+                ctpPot: input.gameSettings?.ctpPot ?? 0,
+              },
               players: input.players,
               holes: createDefaultHoles(totalHoles, input.firstBankerPlayerId, input.players.map((p) => p.id), input.defaultBet, input.holesConfig),
             },
@@ -602,6 +833,25 @@ export const useRoundStore = create<RoundStore>()(
         }
         return { ok: true, message: `Moved to Hole ${round.currentHole + 1}.` };
       },
+
+      setCtpWinner: (holeNumber, playerId) =>
+        set((state) => {
+          const round = {
+            ...state.round,
+            holes: state.round.holes.map((hole) =>
+              hole.holeNumber === holeNumber ? { ...hole, ctpWinnerPlayerId: playerId } : hole
+            ),
+          };
+          return { round, ledger: recalcLedger(round) };
+        }),
+
+      getGrossTotals: () => buildGrossTotals(get().round),
+
+      getSkinsSummary: () => buildSkinsSummary(get().round),
+
+      getLowNetSummary: () => buildLowNetSummary(get().round),
+
+      getCtpSummary: () => buildCtpSummary(get().round),
 
       getRunningTotals: () => {
         const { round } = get();
