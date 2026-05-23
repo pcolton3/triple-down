@@ -8,11 +8,13 @@ import { Button } from '@/components/shared/button';
 import { generateRoundCode } from '@/lib/utils/round-code';
 import { useRoundStore } from '@/stores/round-store';
 import { getCourseDetails, getNearbyCourses, searchCourses } from '@/lib/course-search';
+import { createSharedRoundFromLocalRound } from '@/lib/realtime/shared-rounds';
 import type { CourseRecord } from '@/types/course';
 import type { HoleConfig } from '@/types/round';
 
 const MAX_PLAYERS = 24;
 const MIN_PLAYERS = 4;
+const PLAYER_COUNTS = [4, 8, 12, 16, 20, 24];
 
 function buildDefaultPlayers(count = 4) {
   return Array.from({ length: count }, (_, index) => ({
@@ -125,7 +127,10 @@ export default function NewRoundPage() {
   }, []);
 
   function updatePlayerCount(nextCount: number) {
-    const normalized = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, Math.floor(nextCount || MIN_PLAYERS)));
+    const bounded = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, Math.floor(nextCount || MIN_PLAYERS)));
+    const normalized = PLAYER_COUNTS.reduce((best, count) =>
+      Math.abs(count - bounded) < Math.abs(best - bounded) ? count : best
+    );
     setPlayerCount(normalized);
     setPlayers((current) => {
       if (normalized === current.length) return current;
@@ -233,13 +238,13 @@ export default function NewRoundPage() {
     void getNearbyCourses(userLocation ?? undefined).then((results) => setCourseResults(results));
   }
 
-  function handleCreateRound() {
+  async function handleCreateRound() {
     const sanitizedPlayers = players.map((player, index) => ({
       ...player,
       name: player.name.trim() || `Player ${index + 1}`,
     }));
 
-    const finalRoundCode = generateRoundCode();
+    const finalRoundCode = roundCode || generateRoundCode();
 
     createRound({
       roundCode: finalRoundCode,
@@ -258,7 +263,14 @@ export default function NewRoundPage() {
       holesConfig: manualHoles,
     });
 
-    router.push(`/r/${finalRoundCode}`);
+    try {
+      await createSharedRoundFromLocalRound(useRoundStore.getState().round);
+    } catch (error) {
+      console.error('Unable to save shared round to Supabase.', error);
+    }
+
+    router.push(`/r/${finalRoundCode}/group/1`);
+    setRoundCode(generateRoundCode());
   }
 
   return (
@@ -383,7 +395,17 @@ export default function NewRoundPage() {
 
           <div className="mb-4 max-w-xs">
             <label className="mb-1 block text-sm font-medium">Number of Golfers</label>
-            <NumberField value={playerCount} onChange={updatePlayerCount} placeholder="4" />
+            <select
+              className="w-full rounded-xl border border-slate-300 px-3 py-3"
+              value={playerCount}
+              onChange={(event) => updatePlayerCount(Number(event.target.value))}
+            >
+              {PLAYER_COUNTS.map((count) => (
+                <option key={count} value={count}>
+                  {count}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="mb-4">
@@ -400,7 +422,7 @@ export default function NewRoundPage() {
               ))}
             </select>
             <p className="mt-2 text-xs text-slate-500">
-              This applies to the first group for now. Group-specific banker screens are the next build step.
+              Each group starts with the first listed golfer in that foursome unless this player belongs to the group.
             </p>
           </div>
 
@@ -506,7 +528,7 @@ export default function NewRoundPage() {
         </Card>
 
         <div className="flex justify-end">
-          <Button onClick={handleCreateRound}>Create and Open Round</Button>
+          <Button onClick={() => void handleCreateRound()}>Create and Open Group 1</Button>
         </div>
       </div>
     </main>

@@ -7,6 +7,7 @@ import { isGrossBirdieOrBetter } from '@/domain/banker/birdie';
 import { buildLedgerEntries, type LedgerEntry } from '@/domain/banker/ledger';
 import type { BankerMatchupResult } from '@/domain/banker/types';
 import type { CreateRoundInput, HoleConfig, HoleState, RoundState } from '@/types/round';
+import { buildGroupsForPlayers } from '@/lib/groups/group-utils';
 
 type MatchupSummary = {
   playerId: string;
@@ -103,22 +104,23 @@ type RoundStore = {
   round: RoundState;
   ledger: LedgerEntry[];
   createRound: (input: CreateRoundInput) => void;
+  hydrateRound: (round: RoundState) => void;
   resetRound: () => void;
-  setBanker: (playerId: string) => void;
-  setPar: (par: 3 | 4 | 5) => void;
-  setHoleHandicap: (handicapIndex: number) => void;
-  setWager: (playerId: string, amount: number) => void;
-  togglePlayerPress: (playerId: string) => void;
-  toggleBankerPress: () => void;
-  setPlayerGrossScore: (playerId: string, score: number | null) => void;
-  setBankerGrossScore: (score: number | null) => void;
-  updateHole: () => { ok: boolean; message?: string };
-  nextHole: () => { ok: boolean; message?: string };
+  setBanker: (playerId: string, groupNumber?: number) => void;
+  setPar: (par: 3 | 4 | 5, groupNumber?: number) => void;
+  setHoleHandicap: (handicapIndex: number, groupNumber?: number) => void;
+  setWager: (playerId: string, amount: number, groupNumber?: number) => void;
+  togglePlayerPress: (playerId: string, groupNumber?: number) => void;
+  toggleBankerPress: (groupNumber?: number) => void;
+  setPlayerGrossScore: (playerId: string, score: number | null, groupNumber?: number) => void;
+  setBankerGrossScore: (score: number | null, groupNumber?: number) => void;
+  updateHole: (groupNumber?: number) => { ok: boolean; message?: string };
+  nextHole: (groupNumber?: number) => { ok: boolean; message?: string };
   getRunningTotals: () => Array<{ playerId: string; name: string; amount: number }>;
   getHoleHistory: () => HoleHistoryItem[];
-  getCurrentHoleSummary: () => CurrentHoleSummary;
+  getCurrentHoleSummary: (groupNumber?: number) => CurrentHoleSummary;
   getSettleUp: () => SettleUpItem[];
-  setCtpWinner: (holeNumber: number, playerId: string | null) => void;
+  setCtpWinner: (holeNumber: number, playerId: string | null, groupNumber?: number) => void;
   getGrossTotals: () => GrossTotalItem[];
   getSkinsSummary: () => SkinsSummary;
   getLowNetSummary: () => LowNetSummary;
@@ -133,6 +135,7 @@ const defaultPlayers = [
 ];
 
 function createHole(
+  groupNumber: number,
   holeNumber: number,
   par: 3 | 4 | 5,
   handicapIndex: number,
@@ -141,6 +144,7 @@ function createHole(
   defaultBet: number
 ): HoleState {
   return {
+    groupNumber,
     holeNumber,
     par,
     handicapIndex,
@@ -160,7 +164,14 @@ function createHole(
   };
 }
 
-function createDefaultHoles(totalHoles: number, bankerPlayerId: string, playerIds: string[], defaultBet: number, holesConfig?: HoleConfig[]) {
+function createDefaultHoles(
+  totalHoles: number,
+  bankerPlayerId: string,
+  playerIds: string[],
+  defaultBet: number,
+  holesConfig?: HoleConfig[],
+  groupNumber = 1
+) {
   const fallback = holesConfig && holesConfig.length === totalHoles
     ? holesConfig
     : Array.from({ length: totalHoles }, (_, index) => ({
@@ -170,7 +181,7 @@ function createDefaultHoles(totalHoles: number, bankerPlayerId: string, playerId
       }));
 
   return fallback.map((hole) =>
-    createHole(hole.holeNumber, hole.par, hole.handicapIndex, bankerPlayerId, playerIds, defaultBet)
+    createHole(groupNumber, hole.holeNumber, hole.par, hole.handicapIndex, bankerPlayerId, playerIds, defaultBet)
   );
 }
 
@@ -179,6 +190,7 @@ function createDefaultRound(): RoundState {
   const defaultBet = 5;
   const totalHoles = 18;
   const firstBankerPlayerId = defaultPlayers[0].id;
+  const multiFoursome = buildGroupsForPlayers(defaultPlayers);
   return {
     id: 'demo-round',
     roundCode,
@@ -190,12 +202,56 @@ function createDefaultRound(): RoundState {
     defaultBet,
     gameSettings: { skinsPot: 0, lowNetPot: 0, ctpPot: 0 },
     players: defaultPlayers,
+    multiFoursome: { enabled: false, ...multiFoursome },
     holes: createDefaultHoles(totalHoles, firstBankerPlayerId, defaultPlayers.map((p) => p.id), defaultBet),
   };
 }
 
-function activeHole(round: RoundState) {
-  return round.holes.find((hole) => hole.holeNumber === round.currentHole) ?? round.holes[0];
+function getGroupCurrentHole(round: RoundState, groupNumber = 1) {
+  return round.multiFoursome?.groups.find((group) => group.groupNumber === groupNumber)?.currentHole ?? round.currentHole;
+}
+
+function activeHole(round: RoundState, groupNumber = 1) {
+  const currentHole = getGroupCurrentHole(round, groupNumber);
+  return (
+    round.holes.find((hole) => (hole.groupNumber ?? 1) === groupNumber && hole.holeNumber === currentHole) ??
+    round.holes.find((hole) => hole.holeNumber === currentHole) ??
+    round.holes[0]
+  );
+}
+
+function getGroupPlayerIds(round: RoundState, groupNumber: number) {
+  const assigned = round.multiFoursome?.groupPlayers
+    .filter((item) => item.groupNumber === groupNumber)
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((item) => item.playerId);
+
+  return assigned && assigned.length > 0 ? assigned : round.players.map((player) => player.id);
+}
+
+function updateGroupHole(round: RoundState, groupNumber: number, updater: (hole: HoleState) => HoleState) {
+  const currentHole = activeHole(round, groupNumber);
+  return {
+    ...round,
+    holes: round.holes.map((hole) =>
+      (hole.groupNumber ?? 1) === groupNumber && hole.holeNumber === currentHole.holeNumber ? updater(hole) : hole
+    ),
+  };
+}
+
+function updateGroupCurrentHole(round: RoundState, groupNumber: number, currentHole: number) {
+  return {
+    ...round,
+    currentHole: groupNumber === 1 ? currentHole : round.currentHole,
+    multiFoursome: round.multiFoursome
+      ? {
+          ...round.multiFoursome,
+          groups: round.multiFoursome.groups.map((group) =>
+            group.groupNumber === groupNumber ? { ...group, currentHole } : group
+          ),
+        }
+      : round.multiFoursome,
+  };
 }
 
 function getMatchupNetScores(
@@ -204,9 +260,7 @@ function getMatchupNetScores(
   bankerHandicap: number,
   playerHandicap: number,
   bankerGrossScore: number | null,
-  playerGrossScore: number | null,
-  bankerPlayerId: string,
-  playerId: string
+  playerGrossScore: number | null
 ) {
   if (hole.par === 3) {
     return {
@@ -271,8 +325,6 @@ function getHoleResults(round: RoundState, hole: HoleState): BankerMatchupResult
       player?.handicap ?? 0,
       hole.bankerGrossScore,
       m.grossScore,
-      hole.bankerPlayerId,
-      m.playerId
     );
 
     return {
@@ -314,21 +366,20 @@ function recalcLedger(round: RoundState): LedgerEntry[] {
   });
 }
 
-function buildNextHole(round: RoundState, nextHoleNumber: number): RoundState {
+function buildNextHole(round: RoundState, groupNumber: number, nextHoleNumber: number): RoundState {
   if (nextHoleNumber > round.totalHoles) return round;
-  return {
+  return updateGroupCurrentHole({
     ...round,
-    currentHole: nextHoleNumber,
     holes: round.holes.map((item) => {
-      if (item.holeNumber !== nextHoleNumber || item.isSaved) return item;
+      if ((item.groupNumber ?? 1) !== groupNumber || item.holeNumber !== nextHoleNumber || item.isSaved) return item;
       const bankerId = item.bankerPlayerId;
       return {
         ...item,
-        matchups: round.players
-          .filter((player) => player.id !== bankerId)
-          .map((player) => ({
-            playerId: player.id,
-            baseWager: item.matchups.find((m) => m.playerId === player.id)?.baseWager ?? round.defaultBet,
+        matchups: getGroupPlayerIds(round, groupNumber)
+          .filter((playerId) => playerId !== bankerId)
+          .map((playerId) => ({
+            playerId,
+            baseWager: item.matchups.find((m) => m.playerId === playerId)?.baseWager ?? round.defaultBet,
             pressed: false,
             grossScore: null,
           })),
@@ -336,7 +387,7 @@ function buildNextHole(round: RoundState, nextHoleNumber: number): RoundState {
         bankerGrossScore: null,
       };
     }),
-  };
+  }, groupNumber, nextHoleNumber);
 }
 
 function buildRunningTotalsFromLedger(round: RoundState, ledger: LedgerEntry[]) {
@@ -367,8 +418,6 @@ function buildCurrentHoleSummary(round: RoundState, hole: HoleState): CurrentHol
           player?.handicap ?? 0,
           hole.bankerGrossScore,
           matchup.grossScore,
-          hole.bankerPlayerId,
-          matchup.playerId
         );
         return netScores.bankerGetsStroke ? player?.name ?? 'Player' : null;
       })
@@ -382,8 +431,6 @@ function buildCurrentHoleSummary(round: RoundState, hole: HoleState): CurrentHol
         player?.handicap ?? 0,
         hole.bankerGrossScore,
         matchup.grossScore,
-        hole.bankerPlayerId,
-        matchup.playerId
       );
       const result = results.find((item) => item.playerId === matchup.playerId);
       const amount =
@@ -528,29 +575,34 @@ function buildGrossTotals(round: RoundState): GrossTotalItem[] {
 
 function buildSkinsSummary(round: RoundState): SkinsSummary {
   const pot = round.gameSettings?.skinsPot ?? 0;
-  const holes = round.holes
-    .filter((hole) => hole.isSaved)
-    .map((hole) => {
-      const scores = round.players
-        .map((player) => ({
-          player,
-          net: getPlayerNetForHole(round, hole, player.id),
-        }))
-        .filter((item): item is { player: typeof round.players[number]; net: number } => item.net != null);
+  const holeNumbers = Array.from(new Set(round.holes.filter((hole) => hole.isSaved).map((hole) => hole.holeNumber))).sort(
+    (a, b) => a - b
+  );
 
-      if (scores.length !== round.players.length) {
-        return { holeNumber: hole.holeNumber, winnerPlayerId: null, winnerName: null, winningNetScore: null, isTie: false };
+  const holes = holeNumbers.map((holeNumber) => {
+      const groupHoles = round.holes.filter((hole) => hole.isSaved && hole.holeNumber === holeNumber);
+      const scores = groupHoles.flatMap((hole) =>
+        round.players
+          .map((player) => ({
+            player,
+            net: getPlayerNetForHole(round, hole, player.id),
+          }))
+          .filter((item): item is { player: typeof round.players[number]; net: number } => item.net != null)
+      );
+
+      if (scores.length === 0) {
+        return { holeNumber, winnerPlayerId: null, winnerName: null, winningNetScore: null, isTie: false };
       }
 
       const low = Math.min(...scores.map((item) => item.net));
       const winners = scores.filter((item) => item.net === low);
 
       if (winners.length !== 1) {
-        return { holeNumber: hole.holeNumber, winnerPlayerId: null, winnerName: null, winningNetScore: low, isTie: true };
+        return { holeNumber, winnerPlayerId: null, winnerName: null, winningNetScore: low, isTie: true };
       }
 
       return {
-        holeNumber: hole.holeNumber,
+        holeNumber,
         winnerPlayerId: winners[0].player.id,
         winnerName: winners[0].player.name,
         winningNetScore: low,
@@ -625,13 +677,17 @@ function buildLowNetSummary(round: RoundState): LowNetSummary {
 
 function buildCtpSummary(round: RoundState): CtpSummary {
   const pot = round.gameSettings?.ctpPot ?? 0;
-  const par3Holes = round.holes
-    .filter((hole) => hole.par === 3)
-    .map((hole) => {
-      const winner = round.players.find((player) => player.id === hole.ctpWinnerPlayerId);
+  const par3HoleNumbers = Array.from(new Set(round.holes.filter((hole) => hole.par === 3).map((hole) => hole.holeNumber))).sort(
+    (a, b) => a - b
+  );
+  const par3Holes = par3HoleNumbers
+    .map((holeNumber) => {
+      const groupHoles = round.holes.filter((hole) => hole.holeNumber === holeNumber && hole.ctpWinnerPlayerId);
+      const winningPlayerId = groupHoles[groupHoles.length - 1]?.ctpWinnerPlayerId ?? null;
+      const winner = round.players.find((player) => player.id === winningPlayerId);
       return {
-        holeNumber: hole.holeNumber,
-        winnerPlayerId: hole.ctpWinnerPlayerId ?? null,
+        holeNumber,
+        winnerPlayerId: winningPlayerId,
         winnerName: winner?.name ?? null,
       };
     });
@@ -661,6 +717,26 @@ export const useRoundStore = create<RoundStore>()(
       createRound: (input) =>
         set(() => {
           const totalHoles = input.totalHoles ?? 18;
+          const multiFoursome = buildGroupsForPlayers(input.players);
+          const groupedHoles = multiFoursome.groups.flatMap((group) => {
+            const groupPlayerIds = multiFoursome.groupPlayers
+              .filter((item) => item.groupNumber === group.groupNumber)
+              .sort((a, b) => a.sortOrder - b.sortOrder)
+              .map((item) => item.playerId);
+            const bankerId = groupPlayerIds.includes(input.firstBankerPlayerId)
+              ? input.firstBankerPlayerId
+              : groupPlayerIds[0] ?? input.firstBankerPlayerId;
+
+            return createDefaultHoles(
+              totalHoles,
+              bankerId,
+              groupPlayerIds,
+              input.defaultBet,
+              input.holesConfig,
+              group.groupNumber
+            );
+          });
+
           return {
             ledger: [],
             round: {
@@ -678,168 +754,136 @@ export const useRoundStore = create<RoundStore>()(
                 ctpPot: input.gameSettings?.ctpPot ?? 0,
               },
               players: input.players,
-              holes: createDefaultHoles(totalHoles, input.firstBankerPlayerId, input.players.map((p) => p.id), input.defaultBet, input.holesConfig),
+              multiFoursome: { enabled: input.players.length > 4, ...multiFoursome },
+              holes: groupedHoles,
             },
           };
         }),
 
+      hydrateRound: (round) => set({ round, ledger: recalcLedger(round) }),
+
       resetRound: () => set({ round: createDefaultRound(), ledger: [] }),
 
-      setBanker: (playerId) =>
+      setBanker: (playerId, groupNumber = 1) =>
         set((state) => {
-          const round = {
-            ...state.round,
-            holes: state.round.holes.map((hole) => {
-              if (hole.holeNumber !== state.round.currentHole) return hole;
-              return createHole(
+          const round = updateGroupHole(state.round, groupNumber, (hole) =>
+            createHole(
+                groupNumber,
                 hole.holeNumber,
                 hole.par,
                 hole.handicapIndex,
                 playerId,
-                state.round.players.map((p) => p.id),
+                getGroupPlayerIds(state.round, groupNumber),
                 state.round.defaultBet
-              );
-            }),
-          };
+              )
+          );
           return { round, ledger: recalcLedger(round) };
         }),
 
-      setPar: (par) =>
+      setPar: (par, groupNumber = 1) =>
         set((state) => {
+          const currentHole = activeHole(state.round, groupNumber).holeNumber;
           const round = {
             ...state.round,
             holes: state.round.holes.map((hole) =>
-              hole.holeNumber === state.round.currentHole ? { ...hole, par } : hole
+              hole.holeNumber === currentHole ? { ...hole, par } : hole
             ),
           };
           return { round, ledger: recalcLedger(round) };
         }),
 
-      setHoleHandicap: (handicapIndex) =>
+      setHoleHandicap: (handicapIndex, groupNumber = 1) =>
         set((state) => {
           const normalized = Math.min(18, Math.max(1, Math.floor(handicapIndex || 1)));
+          const currentHole = activeHole(state.round, groupNumber).holeNumber;
           const round = {
             ...state.round,
             holes: state.round.holes.map((hole) =>
-              hole.holeNumber === state.round.currentHole ? { ...hole, handicapIndex: normalized } : hole
+              hole.holeNumber === currentHole ? { ...hole, handicapIndex: normalized } : hole
             ),
           };
           return { round, ledger: recalcLedger(round) };
         }),
 
-      setWager: (playerId, amount) =>
+      setWager: (playerId, amount, groupNumber = 1) =>
         set((state) => {
-          const round = {
-            ...state.round,
-            holes: state.round.holes.map((hole) =>
-              hole.holeNumber === state.round.currentHole
-                ? {
+          const round = updateGroupHole(state.round, groupNumber, (hole) => ({
                     ...hole,
                     matchups: hole.matchups.map((m) =>
                       m.playerId === playerId ? { ...m, baseWager: Number.isFinite(amount) ? Math.max(0, amount) : 0 } : m
                     ),
-                  }
-                : hole
-            ),
-          };
+                  }));
           return { round, ledger: recalcLedger(round) };
         }),
 
-      togglePlayerPress: (playerId) =>
+      togglePlayerPress: (playerId, groupNumber = 1) =>
         set((state) => {
-          const round = {
-            ...state.round,
-            holes: state.round.holes.map((hole) =>
-              hole.holeNumber === state.round.currentHole
-                ? {
+          const round = updateGroupHole(state.round, groupNumber, (hole) => ({
                     ...hole,
                     matchups: hole.matchups.map((m) => (m.playerId === playerId ? { ...m, pressed: !m.pressed } : m)),
-                  }
-                : hole
-            ),
-          };
+                  }));
           return { round, ledger: recalcLedger(round) };
         }),
 
-      toggleBankerPress: () =>
+      toggleBankerPress: (groupNumber = 1) =>
         set((state) => {
-          const round = {
-            ...state.round,
-            holes: state.round.holes.map((hole) =>
-              hole.holeNumber === state.round.currentHole ? { ...hole, bankerPressed: !hole.bankerPressed } : hole
-            ),
-          };
+          const round = updateGroupHole(state.round, groupNumber, (hole) => ({ ...hole, bankerPressed: !hole.bankerPressed }));
           return { round, ledger: recalcLedger(round) };
         }),
 
-      setPlayerGrossScore: (playerId, score) =>
+      setPlayerGrossScore: (playerId, score, groupNumber = 1) =>
         set((state) => {
-          const round = {
-            ...state.round,
-            holes: state.round.holes.map((hole) =>
-              hole.holeNumber === state.round.currentHole
-                ? { ...hole, matchups: hole.matchups.map((m) => (m.playerId === playerId ? { ...m, grossScore: score } : m)) }
-                : hole
-            ),
-          };
+          const round = updateGroupHole(state.round, groupNumber, (hole) => ({
+            ...hole,
+            matchups: hole.matchups.map((m) => (m.playerId === playerId ? { ...m, grossScore: score } : m)),
+          }));
           return { round, ledger: recalcLedger(round) };
         }),
 
-      setBankerGrossScore: (score) =>
+      setBankerGrossScore: (score, groupNumber = 1) =>
         set((state) => {
-          const round = {
-            ...state.round,
-            holes: state.round.holes.map((hole) =>
-              hole.holeNumber === state.round.currentHole ? { ...hole, bankerGrossScore: score } : hole
-            ),
-          };
+          const round = updateGroupHole(state.round, groupNumber, (hole) => ({ ...hole, bankerGrossScore: score }));
           return { round, ledger: recalcLedger(round) };
         }),
 
-      updateHole: () => {
+      updateHole: (groupNumber = 1) => {
         const { round } = get();
-        const hole = activeHole(round);
+        const hole = activeHole(round, groupNumber);
         if (hole.bankerGrossScore == null || hole.matchups.some((matchup) => matchup.grossScore == null)) {
           return { ok: false, message: 'Enter all gross scores before updating the hole.' };
         }
 
-        const nextRound = {
-          ...round,
-          holes: round.holes.map((item) => (item.holeNumber === hole.holeNumber ? { ...item, isSaved: true } : item)),
-        };
+        const nextRound = updateGroupHole(round, groupNumber, (item) => ({ ...item, isSaved: true }));
         set({ round: nextRound, ledger: recalcLedger(nextRound) });
-        return { ok: true, message: `Hole ${hole.holeNumber} updated.` };
+        return { ok: true, message: `Group ${groupNumber} hole ${hole.holeNumber} updated.` };
       },
 
-      nextHole: () => {
+      nextHole: (groupNumber = 1) => {
         const { round } = get();
-        const hole = activeHole(round);
+        const hole = activeHole(round, groupNumber);
         if (hole.bankerGrossScore == null || hole.matchups.some((matchup) => matchup.grossScore == null)) {
           return { ok: false, message: 'Enter all gross scores before moving to the next hole.' };
         }
 
-        let nextRound = {
-          ...round,
-          holes: round.holes.map((item) => (item.holeNumber === hole.holeNumber ? { ...item, isSaved: true } : item)),
-        };
+        let nextRound = updateGroupHole(round, groupNumber, (item) => ({ ...item, isSaved: true }));
 
-        if (round.currentHole < round.totalHoles) {
-          nextRound = buildNextHole(nextRound, round.currentHole + 1);
+        if (hole.holeNumber < round.totalHoles) {
+          nextRound = buildNextHole(nextRound, groupNumber, hole.holeNumber + 1);
         }
         set({ round: nextRound, ledger: recalcLedger(nextRound) });
 
-        if (round.currentHole >= round.totalHoles) {
-          return { ok: true, message: 'Hole 18 updated. Round complete.' };
+        if (hole.holeNumber >= round.totalHoles) {
+          return { ok: true, message: `Group ${groupNumber} round complete.` };
         }
-        return { ok: true, message: `Moved to Hole ${round.currentHole + 1}.` };
+        return { ok: true, message: `Group ${groupNumber} moved to Hole ${hole.holeNumber + 1}.` };
       },
 
-      setCtpWinner: (holeNumber, playerId) =>
+      setCtpWinner: (holeNumber, playerId, groupNumber = 1) =>
         set((state) => {
           const round = {
             ...state.round,
             holes: state.round.holes.map((hole) =>
-              hole.holeNumber === holeNumber ? { ...hole, ctpWinnerPlayerId: playerId } : hole
+              hole.holeNumber === holeNumber && (hole.groupNumber ?? 1) === groupNumber ? { ...hole, ctpWinnerPlayerId: playerId } : hole
             ),
           };
           return { round, ledger: recalcLedger(round) };
@@ -862,9 +906,9 @@ export const useRoundStore = create<RoundStore>()(
         }));
       },
 
-      getCurrentHoleSummary: () => {
+      getCurrentHoleSummary: (groupNumber = 1) => {
         const { round } = get();
-        return buildCurrentHoleSummary(round, activeHole(round));
+        return buildCurrentHoleSummary(round, activeHole(round, groupNumber));
       },
 
       getSettleUp: () => {

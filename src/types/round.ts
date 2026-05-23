@@ -12,6 +12,7 @@ export type MatchupDraft = {
 };
 
 export type HoleState = {
+  groupNumber?: number;
   holeNumber: number;
   par: 3 | 4 | 5;
   handicapIndex: number;
@@ -47,6 +48,7 @@ export type RoundState = {
   players: Player[];
   holes: HoleState[];
   gameSettings: RoundGameSettings;
+  multiFoursome?: import('@/types/groups').MultiFoursomeSetup;
 };
 
 export type CreateRoundInput = {

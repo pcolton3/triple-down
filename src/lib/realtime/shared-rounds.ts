@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase/client';
-import type { RoundState } from '@/types/round';
+import type { HoleState, RoundState } from '@/types/round';
+import { createRoundGroups } from '@/lib/realtime/group-rounds';
 
 type RoundRow = {
   id: string;
@@ -30,6 +31,7 @@ type RoundPlayerRow = {
 type RoundHoleRow = {
   id: string;
   round_id: string;
+  group_number: number | null;
   hole_number: number;
   par: 3 | 4 | 5;
   handicap_index: number;
@@ -45,6 +47,7 @@ type RoundMatchupRow = {
   id: string;
   round_id: string;
   round_hole_id: string;
+  group_number: number | null;
   hole_number: number;
   player_key: string;
   base_wager: number;
@@ -117,6 +120,25 @@ type RoundParticipantRow = {
   updated_at: string;
 };
 
+type RoundGroupRow = {
+  id: string;
+  round_id: string;
+  group_number: number;
+  group_name: string | null;
+  tee_time: string | null;
+  scorekeeper_device_id: string | null;
+  scorekeeper_name: string | null;
+  current_hole: number;
+};
+
+type RoundGroupPlayerRow = {
+  id: string;
+  round_id: string;
+  round_group_id: string;
+  player_key: string;
+  sort_order: number;
+};
+
 export type SharedRoundBundle = {
   round: RoundRow;
   players: RoundPlayerRow[];
@@ -127,6 +149,8 @@ export type SharedRoundBundle = {
   skinsResults: RoundSkinsResultRow[];
   lowNetResults: RoundLowNetResultRow[];
   participants: RoundParticipantRow[];
+  groups: RoundGroupRow[];
+  groupPlayers: RoundGroupPlayerRow[];
 };
 
 export async function createSharedRoundFromLocalRound(round: RoundState) {
@@ -152,6 +176,14 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
   const typedRoundRow = roundRow as RoundRow;
   const roundId = typedRoundRow.id;
 
+  if (round.multiFoursome) {
+    await createRoundGroups({
+      roundId,
+      groups: round.multiFoursome.groups,
+      groupPlayers: round.multiFoursome.groupPlayers,
+    });
+  }
+
   const playerRows = round.players.map((player, index) => ({
     round_id: roundId,
     player_key: player.id,
@@ -168,6 +200,7 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
 
   const holeRows = round.holes.map((hole) => ({
     round_id: roundId,
+    group_number: hole.groupNumber ?? 1,
     hole_number: hole.holeNumber,
     par: hole.par,
     handicap_index: hole.handicapIndex,
@@ -179,23 +212,24 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
 
   const { data: savedHoles, error: holesError } = await supabase
     .from('round_holes')
-    .upsert(holeRows, { onConflict: 'round_id,hole_number' })
+    .upsert(holeRows, { onConflict: 'round_id,group_number,hole_number' })
     .select('*');
 
   if (holesError) throw holesError;
 
   const typedSavedHoles = (savedHoles ?? []) as RoundHoleRow[];
-  const holeIdByNumber = new Map<number, string>(
-    typedSavedHoles.map((hole) => [hole.hole_number, hole.id])
+  const holeIdByNumber = new Map<string, string>(
+    typedSavedHoles.map((hole) => [`${hole.group_number ?? 1}:${hole.hole_number}`, hole.id])
   );
 
   const matchupRows = round.holes.flatMap((hole) => {
-    const roundHoleId = holeIdByNumber.get(hole.holeNumber);
+    const roundHoleId = holeIdByNumber.get(`${hole.groupNumber ?? 1}:${hole.holeNumber}`);
     if (!roundHoleId) return [];
 
     return hole.matchups.map((matchup) => ({
       round_id: roundId,
       round_hole_id: roundHoleId,
+      group_number: hole.groupNumber ?? 1,
       hole_number: hole.holeNumber,
       player_key: matchup.playerId,
       base_wager: matchup.baseWager,
@@ -217,9 +251,9 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
     .upsert(
       [
         { round_id: roundId, game_type: 'banker', pot_amount: 0, enabled: true },
-        { round_id: roundId, game_type: 'skins', pot_amount: 0, enabled: false },
-        { round_id: roundId, game_type: 'low_net', pot_amount: 0, enabled: false },
-        { round_id: roundId, game_type: 'ctp', pot_amount: 0, enabled: false },
+        { round_id: roundId, game_type: 'skins', pot_amount: round.gameSettings.skinsPot, enabled: round.gameSettings.skinsPot > 0 },
+        { round_id: roundId, game_type: 'low_net', pot_amount: round.gameSettings.lowNetPot, enabled: round.gameSettings.lowNetPot > 0 },
+        { round_id: roundId, game_type: 'ctp', pot_amount: round.gameSettings.ctpPot, enabled: round.gameSettings.ctpPot > 0 },
       ],
       { onConflict: 'round_id,game_type' }
     );
@@ -263,18 +297,22 @@ export async function loadSharedRoundById(roundId: string): Promise<SharedRoundB
     skinsResults,
     lowNetResults,
     participants,
+    groups,
+    groupPlayers,
   ] = await Promise.all([
     supabase.from('round_players').select('*').eq('round_id', roundId).order('sort_order'),
-    supabase.from('round_holes').select('*').eq('round_id', roundId).order('hole_number'),
-    supabase.from('round_matchups').select('*').eq('round_id', roundId).order('hole_number'),
+    supabase.from('round_holes').select('*').eq('round_id', roundId).order('group_number').order('hole_number'),
+    supabase.from('round_matchups').select('*').eq('round_id', roundId).order('group_number').order('hole_number'),
     supabase.from('round_games').select('*').eq('round_id', roundId),
     supabase.from('round_ctp_results').select('*').eq('round_id', roundId).order('hole_number'),
     supabase.from('round_skins_results').select('*').eq('round_id', roundId).order('hole_number'),
     supabase.from('round_low_net_results').select('*').eq('round_id', roundId),
     supabase.from('round_participants').select('*').eq('round_id', roundId),
+    supabase.from('round_groups').select('*').eq('round_id', roundId).order('group_number'),
+    supabase.from('round_group_players').select('*').eq('round_id', roundId).order('sort_order'),
   ]);
 
-  for (const result of [players, holes, matchups, games, ctpResults, skinsResults, lowNetResults, participants]) {
+  for (const result of [players, holes, matchups, games, ctpResults, skinsResults, lowNetResults, participants, groups, groupPlayers]) {
     if (result.error) throw result.error;
   }
 
@@ -296,6 +334,96 @@ export async function loadSharedRoundById(roundId: string): Promise<SharedRoundB
     skinsResults: (skinsResults.data ?? []) as RoundSkinsResultRow[],
     lowNetResults: (lowNetResults.data ?? []) as RoundLowNetResultRow[],
     participants: (participants.data ?? []) as RoundParticipantRow[],
+    groups: (groups.data ?? []) as RoundGroupRow[],
+    groupPlayers: (groupPlayers.data ?? []) as RoundGroupPlayerRow[],
+  };
+}
+
+export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundState {
+  const players = bundle.players.map((player) => ({
+    id: player.player_key,
+    name: player.name,
+    handicap: player.handicap,
+  }));
+  const games = new Map(bundle.games.map((game) => [game.game_type, game]));
+  const ctpByGroupHole = new Map(
+    bundle.ctpResults.map((ctp) => [`1:${ctp.hole_number}`, ctp.winner_player_key])
+  );
+
+  const holes: HoleState[] = bundle.holes.map((hole) => {
+    const groupNumber = hole.group_number ?? 1;
+    const holeMatchups = bundle.matchups.filter((matchup) => matchup.round_hole_id === hole.id);
+
+    return {
+      groupNumber,
+      holeNumber: hole.hole_number,
+      par: hole.par,
+      handicapIndex: hole.handicap_index,
+      bankerPlayerId: hole.banker_player_key,
+      bankerGrossScore: hole.banker_gross_score,
+      bankerPressed: hole.banker_pressed,
+      isSaved: hole.is_saved,
+      ctpWinnerPlayerId: ctpByGroupHole.get(`${groupNumber}:${hole.hole_number}`) ?? null,
+      matchups: holeMatchups.map((matchup) => ({
+        playerId: matchup.player_key,
+        baseWager: matchup.base_wager,
+        pressed: matchup.pressed,
+        grossScore: matchup.gross_score,
+      })),
+    };
+  });
+
+  const fallbackGroups = Array.from(new Set(holes.map((hole) => hole.groupNumber ?? 1))).map((groupNumber) => ({
+    groupNumber,
+    groupName: `Group ${groupNumber}`,
+    teeTime: null,
+    scorekeeperName: null,
+    scorekeeperDeviceId: null,
+    currentHole: bundle.round.current_hole,
+  }));
+  const groupNumberById = new Map(bundle.groups.map((group) => [group.id, group.group_number]));
+
+  return {
+    id: bundle.round.id,
+    roundCode: bundle.round.round_code,
+    title: bundle.round.title,
+    courseName: bundle.round.course_name,
+    selectedCourseId: bundle.round.selected_course_id,
+    currentHole: bundle.round.current_hole,
+    totalHoles: bundle.round.total_holes,
+    defaultBet: bundle.round.default_bet,
+    players,
+    holes,
+    gameSettings: {
+      skinsPot: games.get('skins')?.pot_amount ?? 0,
+      lowNetPot: games.get('low_net')?.pot_amount ?? 0,
+      ctpPot: games.get('ctp')?.pot_amount ?? 0,
+    },
+    multiFoursome: {
+      enabled: bundle.groups.length > 1,
+      groups: bundle.groups.length > 0
+        ? bundle.groups.map((group) => ({
+            id: group.id,
+            groupNumber: group.group_number,
+            groupName: group.group_name,
+            teeTime: group.tee_time,
+            scorekeeperName: group.scorekeeper_name,
+            scorekeeperDeviceId: group.scorekeeper_device_id,
+            currentHole: group.current_hole,
+          }))
+        : fallbackGroups,
+      groupPlayers: bundle.groupPlayers.length > 0
+        ? bundle.groupPlayers.map((assignment) => ({
+            playerId: assignment.player_key,
+            groupNumber: groupNumberById.get(assignment.round_group_id) ?? 1,
+            sortOrder: assignment.sort_order,
+          }))
+        : players.map((player, index) => ({
+            playerId: player.id,
+            groupNumber: Math.floor(index / 4) + 1,
+            sortOrder: index % 4,
+          })),
+    },
   };
 }
 
@@ -325,6 +453,16 @@ export function subscribeToSharedRound(roundId: string, onChange: () => void) {
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'round_games', filter: `round_id=eq.${roundId}` },
+      onChange
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'round_groups', filter: `round_id=eq.${roundId}` },
+      onChange
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'round_group_players', filter: `round_id=eq.${roundId}` },
       onChange
     )
     .on(
@@ -360,6 +498,7 @@ export async function updateSharedRoundCurrentHole(roundId: string, currentHole:
 
 export async function updateSharedHole(params: {
   roundId: string;
+  groupNumber?: number;
   holeNumber: number;
   bankerPlayerKey?: string;
   bankerGrossScore?: number | null;
@@ -376,6 +515,7 @@ export async function updateSharedHole(params: {
     .from('round_holes')
     .update(payload)
     .eq('round_id', params.roundId)
+    .eq('group_number', params.groupNumber ?? 1)
     .eq('hole_number', params.holeNumber);
 
   if (error) throw error;
@@ -383,6 +523,7 @@ export async function updateSharedHole(params: {
 
 export async function updateSharedMatchup(params: {
   roundId: string;
+  groupNumber?: number;
   holeNumber: number;
   playerKey: string;
   baseWager?: number;
@@ -398,6 +539,7 @@ export async function updateSharedMatchup(params: {
     .from('round_matchups')
     .update(payload)
     .eq('round_id', params.roundId)
+    .eq('group_number', params.groupNumber ?? 1)
     .eq('hole_number', params.holeNumber)
     .eq('player_key', params.playerKey);
 

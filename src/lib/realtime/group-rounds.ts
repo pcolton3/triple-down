@@ -1,5 +1,4 @@
 import { supabase } from '@/lib/supabase/client';
-import type { RoundState } from '@/types/round';
 import type { RoundGroup, RoundGroupPlayer } from '@/types/groups';
 
 type RoundGroupRow = {
