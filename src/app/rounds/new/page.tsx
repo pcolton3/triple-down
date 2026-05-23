@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card } from '@/components/shared/card';
 import { Button } from '@/components/shared/button';
@@ -11,12 +11,16 @@ import { getCourseDetails, getNearbyCourses, searchCourses } from '@/lib/course-
 import type { CourseRecord } from '@/types/course';
 import type { HoleConfig } from '@/types/round';
 
-const defaultPlayers = [
-  { id: 'p1', name: '', handicap: 0 },
-  { id: 'p2', name: '', handicap: 0 },
-  { id: 'p3', name: '', handicap: 0 },
-  { id: 'p4', name: '', handicap: 0 },
-];
+const MAX_PLAYERS = 24;
+const MIN_PLAYERS = 4;
+
+function buildDefaultPlayers(count = 4) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `p${index + 1}`,
+    name: '',
+    handicap: 0,
+  }));
+}
 
 function NumberField({
   value,
@@ -51,7 +55,8 @@ export default function NewRoundPage() {
   const [skinsPot, setSkinsPot] = useState(0);
   const [lowNetPot, setLowNetPot] = useState(0);
   const [ctpPot, setCtpPot] = useState(0);
-  const [players, setPlayers] = useState(defaultPlayers);
+  const [playerCount, setPlayerCount] = useState(4);
+  const [players, setPlayers] = useState(buildDefaultPlayers(4));
   const [firstBankerPlayerId, setFirstBankerPlayerId] = useState('p1');
   const [courseQuery, setCourseQuery] = useState('');
   const [courseResults, setCourseResults] = useState<CourseRecord[]>([]);
@@ -62,6 +67,13 @@ export default function NewRoundPage() {
   const [locationStatus, setLocationStatus] = useState('Getting nearby courses…');
   const [searchMode, setSearchMode] = useState<'nearby' | 'search'>('nearby');
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+
+  const groups = useMemo(() => {
+    return Array.from({ length: Math.ceil(players.length / 4) }, (_, groupIndex) => ({
+      groupNumber: groupIndex + 1,
+      players: players.slice(groupIndex * 4, groupIndex * 4 + 4),
+    }));
+  }, [players]);
 
   useEffect(() => {
     setRoundCode(generateRoundCode());
@@ -112,6 +124,28 @@ export default function NewRoundPage() {
     };
   }, []);
 
+  function updatePlayerCount(nextCount: number) {
+    const normalized = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, Math.floor(nextCount || MIN_PLAYERS)));
+    setPlayerCount(normalized);
+    setPlayers((current) => {
+      if (normalized === current.length) return current;
+      if (normalized < current.length) {
+        const next = current.slice(0, normalized);
+        if (!next.some((player) => player.id === firstBankerPlayerId)) {
+          setFirstBankerPlayerId(next[0]?.id ?? 'p1');
+        }
+        return next;
+      }
+
+      const additions = Array.from({ length: normalized - current.length }, (_, index) => {
+        const nextNumber = current.length + index + 1;
+        return { id: `p${nextNumber}`, name: '', handicap: 0 };
+      });
+
+      return [...current, ...additions];
+    });
+  }
+
   function updatePlayer(playerId: string, field: 'name' | 'handicap', value: string) {
     setPlayers((current) =>
       current.map((player) =>
@@ -142,7 +176,6 @@ export default function NewRoundPage() {
     const resultCourse = courseResults.find((course) => course.id === courseId) ?? null;
     if (!resultCourse) return;
 
-    // Immediately populate visible form fields from the selected search result.
     setSelectedCourse(resultCourse);
     setCourseName(resultCourse.name);
     setCourseQuery(resultCourse.name);
@@ -152,7 +185,6 @@ export default function NewRoundPage() {
       setManualHoles(resultCourse.holes.map((hole) => ({ ...hole })));
     }
 
-    // Then try to upgrade to richer hole data if a detailed source exists.
     const detailedCourse = await getCourseDetails(courseId);
     if (detailedCourse) {
       const mergedCourse = {
@@ -168,6 +200,7 @@ export default function NewRoundPage() {
 
       setSelectedCourse(mergedCourse);
       setCourseName(mergedCourse.name);
+
       if (mergedCourse.holes.length > 0) {
         setManualHoles(mergedCourse.holes.map((hole) => ({ ...hole })));
       }
@@ -192,7 +225,11 @@ export default function NewRoundPage() {
 
   function clearSelectedCourse() {
     setSelectedCourse(null);
+    setCourseName('');
     setCourseQuery('');
+    setManualHoles(
+      Array.from({ length: 18 }, (_, index) => ({ holeNumber: index + 1, par: 4, handicapIndex: index + 1 }))
+    );
     void getNearbyCourses(userLocation ?? undefined).then((results) => setCourseResults(results));
   }
 
@@ -225,12 +262,12 @@ export default function NewRoundPage() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-8">
+    <main className="mx-auto max-w-3xl px-4 py-8">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Create Round</h1>
           <p className="mt-2 text-slate-600">
-            Search for a course, confirm your group, then start your Banker round.
+            Search for a course, set side games, add 4 to 24 golfers, then start your Triple Track round.
           </p>
         </div>
         <Link href="/" className="text-sm font-medium text-[#2f8df3]">
@@ -258,7 +295,9 @@ export default function NewRoundPage() {
               onChange={(event) => void handleCourseSearch(event.target.value)}
             />
             <p className="mt-2 text-xs text-slate-500">
-              {searchMode === 'nearby' ? locationStatus : 'Search results are ranked with nearby courses first when location is available.'}
+              {searchMode === 'nearby'
+                ? locationStatus
+                : 'Search results are ranked with nearby courses first when location is available.'}
             </p>
           </div>
 
@@ -295,7 +334,7 @@ export default function NewRoundPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="mb-1 block text-sm font-medium">Default Bet</label>
+              <label className="mb-1 block text-sm font-medium">Default Banker Bet</label>
               <NumberField value={defaultBet} onChange={setDefaultBet} placeholder="Bet" />
             </div>
             <div>
@@ -314,7 +353,7 @@ export default function NewRoundPage() {
           <div>
             <h2 className="text-xl font-bold">Side Games</h2>
             <p className="text-sm text-slate-500">
-              Enter the total pot for each optional game. Leave at 0 to turn that game off.
+              Enter the total pot for each optional event-wide game. Leave at 0 to turn that game off.
             </p>
           </div>
 
@@ -335,6 +374,76 @@ export default function NewRoundPage() {
         </Card>
 
         <Card>
+          <div className="mb-4">
+            <h2 className="text-xl font-bold">Golfers and Foursomes</h2>
+            <p className="text-sm text-slate-500">
+              Add 4 to 24 golfers. Groups are automatically split into foursomes in order.
+            </p>
+          </div>
+
+          <div className="mb-4 max-w-xs">
+            <label className="mb-1 block text-sm font-medium">Number of Golfers</label>
+            <NumberField value={playerCount} onChange={updatePlayerCount} placeholder="4" />
+          </div>
+
+          <div className="mb-4">
+            <label className="mb-1 block text-sm font-medium">Opening Banker</label>
+            <select
+              className="w-full rounded-xl border border-slate-300 px-3 py-3"
+              value={firstBankerPlayerId}
+              onChange={(event) => setFirstBankerPlayerId(event.target.value)}
+            >
+              {players.map((player, index) => (
+                <option key={player.id} value={player.id}>
+                  {player.name.trim() || `Player ${index + 1}`}
+                </option>
+              ))}
+            </select>
+            <p className="mt-2 text-xs text-slate-500">
+              This applies to the first group for now. Group-specific banker screens are the next build step.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            {groups.map((group) => (
+              <div key={group.groupNumber} className="rounded-2xl border border-slate-200 p-3">
+                <h3 className="mb-3 font-bold">Group {group.groupNumber}</h3>
+                <div className="space-y-3">
+                  {group.players.map((player, groupIndex) => {
+                    const absoluteIndex = (group.groupNumber - 1) * 4 + groupIndex;
+                    return (
+                      <div key={player.id} className="grid grid-cols-[1fr_100px] gap-3 rounded-xl bg-slate-50 p-3">
+                        <div>
+                          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Name
+                          </label>
+                          <input
+                            className="w-full rounded-xl border border-slate-300 px-3 py-3"
+                            value={player.name}
+                            placeholder={`Player ${absoluteIndex + 1}`}
+                            onChange={(event) => updatePlayer(player.id, 'name', event.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Hcp
+                          </label>
+                          <NumberField
+                            value={player.handicap}
+                            onChange={(value) => updatePlayer(player.id, 'handicap', String(value))}
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card>
           <div className="mb-4 flex items-center justify-between gap-4">
             <div>
               <h2 className="text-xl font-bold">Course Setup</h2>
@@ -351,7 +460,15 @@ export default function NewRoundPage() {
 
           {selectedCourse ? (
             <div className="mb-4 rounded-xl bg-slate-50 px-3 py-3 text-sm text-slate-600">
-              Selected course: <span className="font-semibold text-slate-900">{selectedCourse.name}</span>{selectedCourse.city || selectedCourse.state ? <> • {selectedCourse.city}{selectedCourse.city && selectedCourse.state ? ', ' : ''}{selectedCourse.state}</> : null}
+              Selected course: <span className="font-semibold text-slate-900">{selectedCourse.name}</span>
+              {selectedCourse.city || selectedCourse.state ? (
+                <>
+                  {' '}
+                  • {selectedCourse.city}
+                  {selectedCourse.city && selectedCourse.state ? ', ' : ''}
+                  {selectedCourse.state}
+                </>
+              ) : null}
             </div>
           ) : (
             <div className="mb-4 rounded-xl bg-slate-50 px-3 py-3 text-sm text-slate-600">
@@ -363,7 +480,9 @@ export default function NewRoundPage() {
             {manualHoles.map((hole) => (
               <div key={hole.holeNumber} className="rounded-xl border border-slate-200 p-3">
                 <div className="mb-2 text-sm font-semibold text-slate-900">Hole {hole.holeNumber}</div>
-                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Par</label>
+                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Par
+                </label>
                 <select
                   className="mb-2 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm"
                   value={hole.par}
@@ -373,56 +492,14 @@ export default function NewRoundPage() {
                   <option value={4}>4</option>
                   <option value={5}>5</option>
                 </select>
-                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Hcp</label>
+                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Hcp
+                </label>
                 <NumberField
                   value={hole.handicapIndex}
                   onChange={(value) => updateHoleConfig(hole.holeNumber, 'handicapIndex', value)}
                   placeholder="Hcp"
                 />
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        <Card>
-          <div className="mb-4 flex items-center justify-between gap-4">
-            <div>
-              <h2 className="text-xl font-bold">Players and Handicaps</h2>
-              <p className="text-sm text-slate-500">Set the opening Banker and each player handicap.</p>
-            </div>
-            <select
-              className="rounded-xl border border-slate-300 px-3 py-2"
-              value={firstBankerPlayerId}
-              onChange={(event) => setFirstBankerPlayerId(event.target.value)}
-            >
-              {players.map((player, index) => (
-                <option key={player.id} value={player.id}>
-                  {(player.name.trim() || `Player ${index + 1}`)} as Banker
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-3">
-            {players.map((player, index) => (
-              <div key={player.id} className="grid grid-cols-[1fr_100px] gap-3 rounded-xl border border-slate-200 p-3">
-                <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Name</label>
-                  <input
-                    className="w-full rounded-xl border border-slate-300 px-3 py-3"
-                    value={player.name}
-                    placeholder={`Player ${index + 1}`}
-                    onChange={(event) => updatePlayer(player.id, 'name', event.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Hcp</label>
-                  <NumberField
-                    value={player.handicap}
-                    onChange={(value) => updatePlayer(player.id, 'handicap', String(value))}
-                    placeholder="0"
-                  />
-                </div>
               </div>
             ))}
           </div>
