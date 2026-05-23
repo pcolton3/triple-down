@@ -64,6 +64,8 @@ export default function LiveRoundPage() {
     getRunningTotals,
     getCurrentHoleSummary,
     getGrossTotals,
+    getSkinsSummary,
+    getCtpSummary,
     setCtpWinner,
   } = useRoundStore();
 
@@ -72,7 +74,22 @@ export default function LiveRoundPage() {
   const banker = round.players.find((player) => player.id === hole.bankerPlayerId) ?? round.players[0];
   const totals = getRunningTotals();
   const grossTotals = getGrossTotals();
+  const skinsSummary = getSkinsSummary();
+  const ctpSummary = getCtpSummary();
   const summary = getCurrentHoleSummary();
+
+  const eventLeaderboard = grossTotals
+    .map((item) => {
+      const skins = skinsSummary.payouts.find((skin) => skin.playerId === item.playerId)?.skins ?? 0;
+      const ctpWins = ctpSummary.payouts.find((ctp) => ctp.playerId === item.playerId)?.wins ?? 0;
+
+      return {
+        ...item,
+        skins,
+        ctpWins,
+      };
+    })
+    .sort((a, b) => a.grossTotal - b.grossTotal || a.playerName.localeCompare(b.playerName));
   const matchupSummaryByPlayerId = Object.fromEntries(summary.matchups.map((item) => [item.playerId, item]));
   const isFinalHole = round.currentHole === round.totalHoles;
   const holesSaved = useMemo(() => round.holes.filter((item) => item.isSaved).length, [round.holes]);
@@ -329,6 +346,48 @@ export default function LiveRoundPage() {
             <div key={total.playerId} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
               <span className="font-medium">{total.name}</span>
               <span className="font-bold">{formatPosition(total.amount)}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
+        <div className="mb-3">
+          <h3 className="text-lg font-bold">Event Leaderboard</h3>
+          <p className="text-sm text-slate-500">
+            Shows all golfers in the event. CTP counts are provisional until every group has played each par 3.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          {eventLeaderboard.map((item, index) => (
+            <div key={item.playerId} className="rounded-xl bg-slate-50 px-3 py-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div className="font-semibold">
+                  {index + 1}. {item.playerName}
+                </div>
+                <div className="text-sm font-bold">
+                  Gross {item.grossTotal}
+                </div>
+              </div>
+              <div className="grid grid-cols-4 gap-2 text-center text-xs text-slate-600">
+                <div className="rounded-lg bg-white px-2 py-2">
+                  <div className="font-semibold text-slate-900">{item.holesCounted}</div>
+                  <div>Holes</div>
+                </div>
+                <div className="rounded-lg bg-white px-2 py-2">
+                  <div className="font-semibold text-slate-900">{item.netTotal}</div>
+                  <div>Net</div>
+                </div>
+                <div className="rounded-lg bg-white px-2 py-2">
+                  <div className="font-semibold text-slate-900">{item.skins}</div>
+                  <div>Skins</div>
+                </div>
+                <div className="rounded-lg bg-white px-2 py-2">
+                  <div className="font-semibold text-slate-900">{item.ctpWins}</div>
+                  <div>CTP</div>
+                </div>
+              </div>
             </div>
           ))}
         </div>
