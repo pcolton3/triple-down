@@ -129,11 +129,6 @@ export type SharedRoundBundle = {
   participants: RoundParticipantRow[];
 };
 
-type SupabaseResult<T> = {
-  data: T | null;
-  error: { message: string } | null;
-};
-
 export async function createSharedRoundFromLocalRound(round: RoundState) {
   const { data: roundRow, error: roundError } = await supabase
     .from('rounds')
