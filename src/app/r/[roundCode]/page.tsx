@@ -30,24 +30,24 @@ function ScoreTable({
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200">
       <div className="min-w-[520px]">
-      <div className="grid grid-cols-[minmax(180px,1fr)_80px_80px_80px_80px] bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-        <div className="truncate">Player</div>
-        <div className="text-right tabular-nums">Gross</div>
-        <div className="text-right tabular-nums">Net</div>
-        <div className="text-right tabular-nums">Birdies</div>
-        <div className="text-right tabular-nums">Eagles</div>
-      </div>
-      {rows.map((item, index) => (
-        <div key={item.playerId} className="grid grid-cols-[minmax(180px,1fr)_80px_80px_80px_80px] border-t border-slate-200 px-3 py-3 text-sm">
-          <div className="truncate font-medium">
-            {index + 1}. {item.playerName}
-          </div>
-          <div className="text-right font-semibold tabular-nums">{item.grossTotal}</div>
-          <div className="text-right font-semibold tabular-nums">{item.netTotal}</div>
-          <div className="text-right font-semibold tabular-nums">{item.naturalBirdies}</div>
-          <div className="text-right font-semibold tabular-nums">{item.naturalEagles}</div>
+        <div className="grid grid-cols-[minmax(180px,1fr)_80px_80px_80px_80px] bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <div className="truncate">Player</div>
+          <div className="text-right tabular-nums">Gross</div>
+          <div className="text-right tabular-nums">Net</div>
+          <div className="text-right tabular-nums">Birdies</div>
+          <div className="text-right tabular-nums">Eagles</div>
         </div>
-      ))}
+        {rows.map((item, index) => (
+          <div key={item.playerId} className="grid grid-cols-[minmax(180px,1fr)_80px_80px_80px_80px] border-t border-slate-200 px-3 py-3 text-sm">
+            <div className="truncate font-medium">
+              {index + 1}. {item.playerName}
+            </div>
+            <div className="text-right font-semibold tabular-nums">{item.grossTotal}</div>
+            <div className="text-right font-semibold tabular-nums">{item.netTotal}</div>
+            <div className="text-right font-semibold tabular-nums">{item.naturalBirdies}</div>
+            <div className="text-right font-semibold tabular-nums">{item.naturalEagles}</div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -200,8 +200,8 @@ export default function EventLeaderboardPage() {
 
       <Card>
         <div className="mb-3">
-          <h2 className="text-xl font-bold">Group Scoring Links</h2>
-          <p className="text-sm text-slate-500">Each foursome keeps its own current hole and enters only its own scores.</p>
+          <h2 className="text-xl font-bold">Choose Your Group</h2>
+          <p className="text-sm text-slate-500">Open the event link, pick your foursome, then claim scorekeeper if you are entering scores.</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {savedByGroup.map((group) => {
@@ -219,13 +219,10 @@ export default function EventLeaderboardPage() {
                 className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 hover:bg-white"
               >
                 <div className="flex items-center justify-between gap-3">
-                  <span className="font-bold">Group {group.groupNumber}</span>
+                  <span className="font-bold">Enter Group {group.groupNumber}</span>
                   <span className="text-sm font-semibold text-[#2f8df3]">Hole {group.currentHole}</span>
                 </div>
                 <p className="mt-1 text-sm text-slate-500">{names}</p>
-                <p className="mt-2 break-all font-mono text-xs text-slate-500">
-                  /r/{round.roundCode}/group/{group.groupNumber}
-                </p>
                 <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                   {group.saved} of {round.totalHoles} saved
                 </p>
