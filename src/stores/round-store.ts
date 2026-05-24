@@ -122,6 +122,7 @@ type RoundStore = {
   updateHole: (groupNumber?: number) => { ok: boolean; message?: string };
   nextHole: (groupNumber?: number) => { ok: boolean; message?: string };
   getRunningTotals: () => Array<{ playerId: string; name: string; amount: number }>;
+  getGroupBankerTotals: (groupNumber?: number) => Array<{ playerId: string; name: string; amount: number }>;
   getHoleHistory: () => HoleHistoryItem[];
   getCurrentHoleSummary: (groupNumber?: number) => CurrentHoleSummary;
   getSettleUp: () => SettleUpItem[];
@@ -1032,6 +1033,21 @@ export const useRoundStore = create<RoundStore>()(
           name: item.playerName,
           amount: item.amount,
         }));
+      },
+
+      getGroupBankerTotals: (groupNumber = 1) => {
+        const { round } = get();
+        const groupPlayerIds = new Set(getGroupPlayerIds(round, groupNumber));
+        const groupLedger = recalcLedger(round).filter(
+          (entry) => groupPlayerIds.has(entry.fromPlayerId) && groupPlayerIds.has(entry.toPlayerId)
+        );
+        return buildRunningTotalsFromLedger(round, groupLedger)
+          .filter((item) => groupPlayerIds.has(item.playerId))
+          .map((item) => ({
+            playerId: item.playerId,
+            name: item.playerName,
+            amount: item.amount,
+          }));
       },
 
       getCurrentHoleSummary: (groupNumber = 1) => {

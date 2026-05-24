@@ -68,6 +68,7 @@ export default function GroupScoringPage() {
     updateHole,
     nextHole,
     getCurrentHoleSummary,
+    getGroupBankerTotals,
     setCtpWinner,
   } = useRoundStore();
   const [message, setMessage] = useState('');
@@ -256,6 +257,8 @@ export default function GroupScoringPage() {
 
   const summary = getCurrentHoleSummary(groupNumber);
   const matchupSummaryByPlayerId = Object.fromEntries(summary.matchups.map((item) => [item.playerId, item]));
+  const bankerRunningTotals = getGroupBankerTotals(groupNumber).sort((a, b) => b.amount - a.amount);
+  const bankerHasPop = summary.bankerGetsStrokeFromNames.length > 0;
 
   return (
     <main className="mx-auto max-w-md space-y-4 px-4 py-6 pb-24">
@@ -375,7 +378,15 @@ export default function GroupScoringPage() {
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
             <p className="text-sm text-slate-500">Banker gross score</p>
-            <h2 className="text-xl font-bold">{banker.name}</h2>
+            <h2 className="text-xl font-bold">
+              {banker.name}
+              {bankerHasPop ? ' *' : ''}
+            </h2>
+            {bankerHasPop ? (
+              <p className="mt-1 text-xs font-semibold text-slate-500">
+                * pop vs {summary.bankerGetsStrokeFromNames.join(', ')}
+              </p>
+            ) : null}
           </div>
           <Button variant="secondary" disabled={!canEdit} onClick={() => toggleBankerPress(groupNumber)}>
             {hole.bankerPressed ? `Undo Banker ${pressAction}` : `Banker ${pressAction}`}
@@ -445,13 +456,34 @@ export default function GroupScoringPage() {
           {summary.matchups.map((item) => (
             <div key={item.playerId} className="rounded-xl bg-slate-50 px-3 py-3">
               <div className="flex items-center justify-between gap-3">
-                <p className="font-semibold">{item.playerName}</p>
+                <p className="font-semibold">
+                  {item.playerName}
+                  {item.playerGetsStroke ? ' *' : ''}
+                </p>
                 <p className="text-sm font-semibold">{item.payoutText}</p>
               </div>
               <p className="mt-1 text-sm text-slate-600">
                 Bet {formatCurrency(item.baseWager)}
                 {item.modifiers.length > 0 ? `, ${item.modifiers.join(', ')}` : ''}
               </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
+        <h3 className="mb-3 text-lg font-bold">Banker Running Total</h3>
+        <div className="space-y-2">
+          {bankerRunningTotals.map((total) => (
+            <div key={total.playerId} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
+              <span className="font-medium">{total.name}</span>
+              <span className="font-bold">
+                {total.amount > 0
+                  ? `Up ${formatCurrency(total.amount)}`
+                  : total.amount < 0
+                    ? `Down ${formatCurrency(Math.abs(total.amount))}`
+                    : 'Even'}
+              </span>
             </div>
           ))}
         </div>
