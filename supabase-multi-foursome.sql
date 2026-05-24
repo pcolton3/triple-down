@@ -4,6 +4,9 @@ alter table public.round_holes
 alter table public.round_matchups
   add column if not exists group_number integer not null default 1;
 
+alter table public.round_holes
+  drop constraint if exists round_holes_round_id_hole_number_key;
+
 create unique index if not exists round_holes_round_group_hole_idx
   on public.round_holes (round_id, group_number, hole_number);
 

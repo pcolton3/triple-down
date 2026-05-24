@@ -4,9 +4,10 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { Card } from '@/components/shared/card';
+import { Button } from '@/components/shared/button';
 import { useRoundStore } from '@/stores/round-store';
 import { formatCurrency } from '@/lib/utils/currency';
-import { loadSharedRoundByCode, sharedRoundBundleToRoundState } from '@/lib/realtime/shared-rounds';
+import { createSharedRoundFromLocalRound, loadSharedRoundByCode, sharedRoundBundleToRoundState } from '@/lib/realtime/shared-rounds';
 
 function formatPosition(amount: number) {
   if (amount > 0) return `Up ${formatCurrency(amount)}`;
@@ -16,9 +17,10 @@ function formatPosition(amount: number) {
 
 export default function EventLeaderboardPage() {
   const params = useParams<{ roundCode: string }>();
-  const { round, hydrateRound, getRunningTotals, getGrossTotals, getSkinsSummary, getCtpSummary } = useRoundStore();
+  const { round, hydrateRound, simulateFullEvent, getRunningTotals, getGrossTotals, getSkinsSummary, getCtpSummary } = useRoundStore();
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
   const [loadStatus, setLoadStatus] = useState<'idle' | 'loading' | 'not_found' | 'ready'>('idle');
+  const [simulateStatus, setSimulateStatus] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -95,6 +97,17 @@ export default function EventLeaderboardPage() {
     setCopiedLink(label);
   }
 
+  async function handleSimulateEvent() {
+    try {
+      setSimulateStatus('Simulating event...');
+      simulateFullEvent();
+      await createSharedRoundFromLocalRound(useRoundStore.getState().round);
+      setSimulateStatus('Simulated 18 holes for every group.');
+    } catch (error) {
+      setSimulateStatus(error instanceof Error ? error.message : 'Unable to save simulated event.');
+    }
+  }
+
   return (
     <main className="mx-auto max-w-5xl space-y-4 px-4 py-6">
       <section className="rounded-3xl bg-[#2f8df3] p-5 text-white shadow-sm">
@@ -135,6 +148,17 @@ export default function EventLeaderboardPage() {
       {loadStatus === 'not_found' ? (
         <Card className="text-sm text-slate-600">No round was found for code {params.roundCode}.</Card>
       ) : null}
+
+      <Card className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-xl font-bold">Test Tools</h2>
+          <p className="text-sm text-slate-500">Fill all groups with simulated gross scores and event-wide CTP winners.</p>
+          {simulateStatus ? <p className="mt-2 text-sm text-slate-600">{simulateStatus}</p> : null}
+        </div>
+        <Button type="button" onClick={() => void handleSimulateEvent()}>
+          Simulate Full Event
+        </Button>
+      </Card>
 
       <Card>
         <div className="mb-3">

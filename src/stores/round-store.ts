@@ -105,6 +105,7 @@ type RoundStore = {
   ledger: LedgerEntry[];
   createRound: (input: CreateRoundInput) => void;
   hydrateRound: (round: RoundState) => void;
+  simulateFullEvent: () => void;
   resetRound: () => void;
   setBanker: (playerId: string, groupNumber?: number) => void;
   setPar: (par: 3 | 4 | 5, groupNumber?: number) => void;
@@ -747,6 +748,68 @@ function buildCtpSummary(round: RoundState): CtpSummary {
   return { pot, par3Holes, payouts };
 }
 
+function grossScoreForSimulation(playerIndex: number, hole: HoleState) {
+  const drift = ((playerIndex * 3 + hole.holeNumber * 2 + (hole.groupNumber ?? 1)) % 5) - 1;
+  const tougherHoleBump = hole.handicapIndex <= 6 ? 1 : 0;
+  return Math.max(1, hole.par + drift + tougherHoleBump);
+}
+
+function simulateRound(round: RoundState): RoundState {
+  const groups = round.multiFoursome?.groups.length ? round.multiFoursome.groups : buildGroupsForPlayers(round.players).groups;
+  const par3WinnersByHole = new Map<number, string>();
+
+  groups.forEach((group) => {
+    const groupPlayerIds = getGroupPlayerIds(round, group.groupNumber);
+    round.holes
+      .filter((hole) => (hole.groupNumber ?? 1) === group.groupNumber && hole.par === 3)
+      .forEach((hole) => {
+        if (!par3WinnersByHole.has(hole.holeNumber)) {
+          const winnerIndex = (hole.holeNumber + group.groupNumber) % Math.max(1, groupPlayerIds.length);
+          par3WinnersByHole.set(hole.holeNumber, groupPlayerIds[winnerIndex]);
+        }
+      });
+  });
+
+  const holes = round.holes.map((hole) => {
+    const groupNumber = hole.groupNumber ?? 1;
+    const groupPlayerIds = getGroupPlayerIds(round, groupNumber);
+    const bankerIndex = Math.max(0, groupPlayerIds.indexOf(hole.bankerPlayerId));
+    const bankerGrossScore = grossScoreForSimulation(bankerIndex, hole);
+    const ctpWinner = hole.par === 3 ? par3WinnersByHole.get(hole.holeNumber) ?? null : null;
+
+    return {
+      ...hole,
+      bankerGrossScore,
+      bankerPressed: (hole.holeNumber + groupNumber) % 7 === 0,
+      isSaved: true,
+      ctpWinnerPlayerId: ctpWinner && groupPlayerIds.includes(ctpWinner) ? ctpWinner : null,
+      matchups: hole.matchups.map((matchup) => {
+        const playerIndex = Math.max(0, groupPlayerIds.indexOf(matchup.playerId));
+        return {
+          ...matchup,
+          grossScore: grossScoreForSimulation(playerIndex, hole),
+          pressed: (hole.holeNumber + playerIndex + groupNumber) % 9 === 0,
+        };
+      }),
+    };
+  });
+
+  return {
+    ...round,
+    currentHole: round.totalHoles,
+    holes,
+    multiFoursome: round.multiFoursome
+      ? {
+          ...round.multiFoursome,
+          groups: round.multiFoursome.groups.map((group) => ({
+            ...group,
+            currentHole: round.totalHoles,
+          })),
+        }
+      : round.multiFoursome,
+  };
+}
+
 export const useRoundStore = create<RoundStore>()(
   persist(
     (set, get) => ({
@@ -803,6 +866,12 @@ export const useRoundStore = create<RoundStore>()(
         const hydratedRound = ensureMultiFoursomeRound(round);
         set({ round: hydratedRound, ledger: recalcLedger(hydratedRound) });
       },
+
+      simulateFullEvent: () =>
+        set((state) => {
+          const round = simulateRound(ensureMultiFoursomeRound(state.round));
+          return { round, ledger: recalcLedger(round) };
+        }),
 
       resetRound: () => set({ round: createDefaultRound(), ledger: [] }),
 
