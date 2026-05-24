@@ -72,6 +72,7 @@ export default function GroupScoringPage() {
     setCtpWinner,
   } = useRoundStore();
   const [message, setMessage] = useState('');
+  const [copiedEventLink, setCopiedEventLink] = useState(false);
   const [loadStatus, setLoadStatus] = useState<'idle' | 'loading' | 'not_found' | 'ready'>('idle');
   const [loadError, setLoadError] = useState('');
   const [scorekeeperName, setScorekeeperName] = useState('');
@@ -209,6 +210,12 @@ export default function GroupScoringPage() {
     setMessage(result.message ?? (result.ok ? `Moved to Hole ${hole.holeNumber + 1}.` : 'Unable to move to the next hole.'));
   }
 
+  async function copyEventLink() {
+    const origin = typeof window === 'undefined' ? '' : window.location.origin;
+    await navigator.clipboard?.writeText(`${origin}/r/${round.roundCode}`);
+    setCopiedEventLink(true);
+  }
+
   if (!hole || !banker) {
     const title =
       loadStatus === 'not_found'
@@ -283,6 +290,13 @@ export default function GroupScoringPage() {
                 {round.roundCode}
               </span>
               <span className="rounded-xl bg-white/20 px-3 py-2 text-sm font-semibold">Group {groupNumber}</span>
+              <button
+                type="button"
+                className="rounded-xl bg-white/20 px-3 py-2 text-sm font-semibold"
+                onClick={() => void copyEventLink()}
+              >
+                {copiedEventLink ? 'Event Link Copied' : 'Copy Event Link'}
+              </button>
             </div>
           </div>
           <Link className="rounded-xl bg-white/20 px-3 py-2 text-sm font-semibold" href={`/r/${round.roundCode}`}>
