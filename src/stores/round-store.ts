@@ -588,22 +588,14 @@ function getPlayerNetForHole(round: RoundState, hole: HoleState, playerId: strin
   const gross = getPlayerGrossForHole(hole, playerId);
   if (gross == null) return null;
 
-  const banker = round.players.find((player) => player.id === hole.bankerPlayerId);
   const player = round.players.find((item) => item.id === playerId);
-  if (!banker || !player) return gross;
+  if (!player) return gross;
 
-  if (playerId === hole.bankerPlayerId) {
-    const bankerGetsAnyStroke = hole.matchups.some((matchup) => {
-      const opponent = round.players.find((item) => item.id === matchup.playerId);
-      if (!opponent || hole.par === 3) return false;
-      return banker.handicap > opponent.handicap && Math.abs(banker.handicap - opponent.handicap) >= hole.handicapIndex;
-    });
-    return gross - (bankerGetsAnyStroke ? 1 : 0);
-  }
+  const fullRoundStrokes = Math.floor(Math.max(0, player.handicap) / round.totalHoles);
+  const extraStrokes = Math.max(0, player.handicap) % round.totalHoles;
+  const strokesOnHole = fullRoundStrokes + (hole.handicapIndex <= extraStrokes ? 1 : 0);
 
-  if (hole.par === 3) return gross;
-  if (player.handicap > banker.handicap && Math.abs(player.handicap - banker.handicap) >= hole.handicapIndex) return gross - 1;
-  return gross;
+  return gross - strokesOnHole;
 }
 
 function buildGrossTotals(round: RoundState): GrossTotalItem[] {
