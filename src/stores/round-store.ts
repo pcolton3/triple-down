@@ -766,15 +766,80 @@ function buildCtpSummary(round: RoundState): CtpSummary {
   return { pot, par3Holes, payouts };
 }
 
-function grossScoreForSimulation(playerIndex: number, hole: HoleState) {
-  const drift = ((playerIndex * 3 + hole.holeNumber * 2 + (hole.groupNumber ?? 1)) % 5) - 1;
-  const tougherHoleBump = hole.handicapIndex <= 6 ? 1 : 0;
-  return Math.max(1, hole.par + drift + tougherHoleBump);
+function simulationTargetScore(coursePar: number, handicap: number, playerIndex: number, groupNumber: number) {
+  const dayVariance = ((playerIndex * 2 + groupNumber) % 5) - 1;
+  return Math.max(coursePar - 4, Math.round(coursePar + Math.max(0, handicap) + dayVariance + 2));
+}
+
+function addStrokeToHardestAvailableHole(holes: HoleState[], scores: Map<number, number>, avoidHoleNumbers = new Set<number>()) {
+  const targetHole = [...holes]
+    .filter((hole) => !avoidHoleNumbers.has(hole.holeNumber))
+    .sort((a, b) => a.handicapIndex - b.handicapIndex || a.holeNumber - b.holeNumber)
+    .find((hole) => (scores.get(hole.holeNumber) ?? hole.par) < hole.par + 3);
+
+  if (!targetHole) return;
+  scores.set(targetHole.holeNumber, (scores.get(targetHole.holeNumber) ?? targetHole.par) + 1);
+}
+
+function buildSimulatedGrossScores(round: RoundState, groupNumber: number, playerId: string) {
+  const groupHoles = round.holes
+    .filter((hole) => (hole.groupNumber ?? 1) === groupNumber)
+    .sort((a, b) => a.holeNumber - b.holeNumber);
+  const player = round.players.find((item) => item.id === playerId);
+  const groupPlayerIds = getGroupPlayerIds(round, groupNumber);
+  const playerIndex = Math.max(0, groupPlayerIds.indexOf(playerId));
+  const coursePar = groupHoles.reduce((sum, hole) => sum + hole.par, 0);
+  const targetScore = simulationTargetScore(coursePar, player?.handicap ?? 0, playerIndex, groupNumber);
+  const scores = new Map<number, number>(groupHoles.map((hole) => [hole.holeNumber, hole.par]));
+
+  let overParBudget = Math.max(0, targetScore - coursePar);
+  const holesByDifficulty = [...groupHoles].sort((a, b) => a.handicapIndex - b.handicapIndex || a.holeNumber - b.holeNumber);
+  let pass = 0;
+
+  while (overParBudget > 0 && pass < 4) {
+    holesByDifficulty.forEach((hole) => {
+      if (overParBudget <= 0) return;
+      const current = scores.get(hole.holeNumber) ?? hole.par;
+      const extraLimit = hole.par === 3 ? 2 : 3;
+      if (current - hole.par < extraLimit) {
+        scores.set(hole.holeNumber, current + 1);
+        overParBudget -= 1;
+      }
+    });
+    pass += 1;
+  }
+
+  const birdieCount = player?.handicap == null
+    ? 1
+    : player.handicap <= 5
+      ? 3
+      : player.handicap <= 10
+        ? 2
+        : player.handicap <= 18
+          ? 1
+          : 0;
+  const birdieHoles = [...groupHoles]
+    .sort((a, b) => b.handicapIndex - a.handicapIndex || a.holeNumber - b.holeNumber)
+    .filter((hole, index) => hole.par > 3 || index % 2 === 0)
+    .slice(0, birdieCount);
+
+  birdieHoles.forEach((hole) => {
+    const current = scores.get(hole.holeNumber) ?? hole.par;
+    const adjustment = current - (hole.par - 1);
+    if (adjustment <= 0) return;
+    scores.set(hole.holeNumber, hole.par - 1);
+    for (let count = 0; count < adjustment; count += 1) {
+      addStrokeToHardestAvailableHole(groupHoles, scores, new Set([hole.holeNumber]));
+    }
+  });
+
+  return scores;
 }
 
 function simulateRound(round: RoundState): RoundState {
   const groups = round.multiFoursome?.groups.length ? round.multiFoursome.groups : buildGroupsForPlayers(round.players).groups;
   const par3WinnersByHole = new Map<number, string>();
+  const simulatedScores = new Map<string, Map<number, number>>();
 
   groups.forEach((group) => {
     const groupPlayerIds = getGroupPlayerIds(round, group.groupNumber);
@@ -791,8 +856,13 @@ function simulateRound(round: RoundState): RoundState {
   const holes = round.holes.map((hole) => {
     const groupNumber = hole.groupNumber ?? 1;
     const groupPlayerIds = getGroupPlayerIds(round, groupNumber);
-    const bankerIndex = Math.max(0, groupPlayerIds.indexOf(hole.bankerPlayerId));
-    const bankerGrossScore = grossScoreForSimulation(bankerIndex, hole);
+    groupPlayerIds.forEach((playerId) => {
+      const key = `${groupNumber}:${playerId}`;
+      if (!simulatedScores.has(key)) {
+        simulatedScores.set(key, buildSimulatedGrossScores(round, groupNumber, playerId));
+      }
+    });
+    const bankerGrossScore = simulatedScores.get(`${groupNumber}:${hole.bankerPlayerId}`)?.get(hole.holeNumber) ?? hole.par;
     const ctpWinner = hole.par === 3 ? par3WinnersByHole.get(hole.holeNumber) ?? null : null;
 
     return {
@@ -805,7 +875,7 @@ function simulateRound(round: RoundState): RoundState {
         const playerIndex = Math.max(0, groupPlayerIds.indexOf(matchup.playerId));
         return {
           ...matchup,
-          grossScore: grossScoreForSimulation(playerIndex, hole),
+          grossScore: simulatedScores.get(`${groupNumber}:${matchup.playerId}`)?.get(hole.holeNumber) ?? hole.par,
           pressed: (hole.holeNumber + playerIndex + groupNumber) % 9 === 0,
         };
       }),
