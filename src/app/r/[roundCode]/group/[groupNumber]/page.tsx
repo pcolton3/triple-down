@@ -9,6 +9,17 @@ import { formatCurrency } from '@/lib/utils/currency';
 import { createSharedRoundFromLocalRound, loadSharedRoundByCode, sharedRoundBundleToRoundState } from '@/lib/realtime/shared-rounds';
 import { claimGroupScorekeeper, userCanEditGroup } from '@/lib/realtime/group-rounds';
 
+function formatUnknownError(error: unknown, fallback: string) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object') {
+    const details = error as { message?: string; details?: string; hint?: string; code?: string };
+    return [details.message, details.details, details.hint, details.code ? `Code: ${details.code}` : null]
+      .filter(Boolean)
+      .join(' ') || fallback;
+  }
+  return fallback;
+}
+
 function NumberField({
   value,
   onChange,
@@ -89,7 +100,7 @@ export default function GroupScoringPage() {
       } catch (error) {
         if (cancelled) return;
         setLoadStatus('idle');
-        setLoadError(error instanceof Error ? error.message : 'Unable to load this round from Supabase.');
+        setLoadError(formatUnknownError(error, 'Unable to load this round from Supabase.'));
       }
     }
 
@@ -152,7 +163,7 @@ export default function GroupScoringPage() {
       await refreshRound();
       setClaimStatus('Scorekeeper mode enabled for this device.');
     } catch (error) {
-      setClaimStatus(error instanceof Error ? error.message : 'Unable to claim scorekeeper.');
+      setClaimStatus(formatUnknownError(error, 'Unable to claim scorekeeper.'));
       try {
         await refreshRound();
       } catch {

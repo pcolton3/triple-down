@@ -153,6 +153,26 @@ export type SharedRoundBundle = {
   groupPlayers: RoundGroupPlayerRow[];
 };
 
+function formatSupabaseError(error: unknown, fallback: string) {
+  if (!error || typeof error !== 'object') return fallback;
+  const details = error as { message?: string; details?: string; hint?: string; code?: string };
+  return [details.message, details.details, details.hint, details.code ? `Code: ${details.code}` : null]
+    .filter(Boolean)
+    .join(' ');
+}
+
+function isMissingSchemaError(error: unknown) {
+  if (!error || typeof error !== 'object') return false;
+  const details = error as { code?: string; message?: string };
+  const message = details.message ?? '';
+  return (
+    details.code === '42P01' ||
+    details.code === '42703' ||
+    message.includes('does not exist') ||
+    message.includes('Could not find')
+  );
+}
+
 export async function createSharedRoundFromLocalRound(round: RoundState) {
   const { data: roundRow, error: roundError } = await supabase
     .from('rounds')
@@ -172,7 +192,7 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
     .select('*')
     .single();
 
-  if (roundError) throw roundError;
+  if (roundError) throw new Error(formatSupabaseError(roundError, 'Unable to save round.'));
   const typedRoundRow = roundRow as RoundRow;
   const roundId = typedRoundRow.id;
 
@@ -196,7 +216,7 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
     .from('round_players')
     .upsert(playerRows, { onConflict: 'round_id,player_key' });
 
-  if (playersError) throw playersError;
+  if (playersError) throw new Error(formatSupabaseError(playersError, 'Unable to save players.'));
 
   const holeRows = round.holes.map((hole) => ({
     round_id: roundId,
@@ -215,7 +235,7 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
     .upsert(holeRows, { onConflict: 'round_id,group_number,hole_number' })
     .select('*');
 
-  if (holesError) throw holesError;
+  if (holesError) throw new Error(formatSupabaseError(holesError, 'Unable to save holes.'));
 
   const typedSavedHoles = (savedHoles ?? []) as RoundHoleRow[];
   const holeIdByNumber = new Map<string, string>(
@@ -243,7 +263,7 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
       .from('round_matchups')
       .upsert(matchupRows, { onConflict: 'round_hole_id,player_key' });
 
-    if (matchupsError) throw matchupsError;
+    if (matchupsError) throw new Error(formatSupabaseError(matchupsError, 'Unable to save matchups.'));
   }
 
   const { error: gamesError } = await supabase
@@ -258,7 +278,7 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
       { onConflict: 'round_id,game_type' }
     );
 
-  if (gamesError) throw gamesError;
+  if (gamesError) throw new Error(formatSupabaseError(gamesError, 'Unable to save games.'));
 
   const { error: participantError } = await supabase
     .from('round_participants')
@@ -269,7 +289,7 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
       device_id: getDeviceId(),
     });
 
-  if (participantError) throw participantError;
+  if (participantError) throw new Error(formatSupabaseError(participantError, 'Unable to save participant.'));
 
   return typedRoundRow;
 }
@@ -281,7 +301,7 @@ export async function loadSharedRoundByCode(roundCode: string): Promise<SharedRo
     .eq('round_code', roundCode)
     .maybeSingle();
 
-  if (roundError) throw roundError;
+  if (roundError) throw new Error(formatSupabaseError(roundError, 'Unable to load round by code.'));
   if (!round) return null;
 
   return loadSharedRoundById((round as RoundRow).id);
@@ -297,23 +317,32 @@ export async function loadSharedRoundById(roundId: string): Promise<SharedRoundB
     skinsResults,
     lowNetResults,
     participants,
-    groups,
-    groupPlayers,
   ] = await Promise.all([
     supabase.from('round_players').select('*').eq('round_id', roundId).order('sort_order'),
-    supabase.from('round_holes').select('*').eq('round_id', roundId).order('group_number').order('hole_number'),
-    supabase.from('round_matchups').select('*').eq('round_id', roundId).order('group_number').order('hole_number'),
+    supabase.from('round_holes').select('*').eq('round_id', roundId).order('hole_number'),
+    supabase.from('round_matchups').select('*').eq('round_id', roundId).order('hole_number'),
     supabase.from('round_games').select('*').eq('round_id', roundId),
     supabase.from('round_ctp_results').select('*').eq('round_id', roundId).order('hole_number'),
     supabase.from('round_skins_results').select('*').eq('round_id', roundId).order('hole_number'),
     supabase.from('round_low_net_results').select('*').eq('round_id', roundId),
     supabase.from('round_participants').select('*').eq('round_id', roundId),
+  ]);
+
+  for (const result of [players, holes, matchups, games, ctpResults, skinsResults, lowNetResults, participants]) {
+    if (result.error) throw new Error(formatSupabaseError(result.error, 'Unable to load round data.'));
+  }
+
+  const [groups, groupPlayers] = await Promise.all([
     supabase.from('round_groups').select('*').eq('round_id', roundId).order('group_number'),
     supabase.from('round_group_players').select('*').eq('round_id', roundId).order('sort_order'),
   ]);
 
-  for (const result of [players, holes, matchups, games, ctpResults, skinsResults, lowNetResults, participants, groups, groupPlayers]) {
-    if (result.error) throw result.error;
+  if (groups.error && !isMissingSchemaError(groups.error)) {
+    throw new Error(formatSupabaseError(groups.error, 'Unable to load round groups.'));
+  }
+
+  if (groupPlayers.error && !isMissingSchemaError(groupPlayers.error)) {
+    throw new Error(formatSupabaseError(groupPlayers.error, 'Unable to load group players.'));
   }
 
   const { data: round, error: roundError } = await supabase
@@ -322,7 +351,7 @@ export async function loadSharedRoundById(roundId: string): Promise<SharedRoundB
     .eq('id', roundId)
     .single();
 
-  if (roundError) throw roundError;
+  if (roundError) throw new Error(formatSupabaseError(roundError, 'Unable to load round.'));
 
   return {
     round: round as RoundRow,
@@ -334,8 +363,8 @@ export async function loadSharedRoundById(roundId: string): Promise<SharedRoundB
     skinsResults: (skinsResults.data ?? []) as RoundSkinsResultRow[],
     lowNetResults: (lowNetResults.data ?? []) as RoundLowNetResultRow[],
     participants: (participants.data ?? []) as RoundParticipantRow[],
-    groups: (groups.data ?? []) as RoundGroupRow[],
-    groupPlayers: (groupPlayers.data ?? []) as RoundGroupPlayerRow[],
+    groups: (groups.error ? [] : groups.data ?? []) as RoundGroupRow[],
+    groupPlayers: (groupPlayers.error ? [] : groupPlayers.data ?? []) as RoundGroupPlayerRow[],
   };
 }
 
