@@ -118,6 +118,7 @@ export async function claimGroupScorekeeper(params: {
   roundId: string;
   groupNumber: number;
   scorekeeperName: string;
+  currentHole?: number;
 }) {
   const deviceId = getDeviceId();
 
@@ -134,6 +135,21 @@ export async function claimGroupScorekeeper(params: {
   if (existingGroup?.scorekeeper_device_id === deviceId) return deviceId;
   if (existingGroup?.scorekeeper_device_id) {
     throw new Error(`Group ${params.groupNumber} already has a scorekeeper.`);
+  }
+  if (!existingGroup) {
+    const { error: insertError } = await supabase
+      .from('round_groups')
+      .insert({
+        round_id: params.roundId,
+        group_number: params.groupNumber,
+        group_name: `Group ${params.groupNumber}`,
+        current_hole: params.currentHole ?? 1,
+        scorekeeper_name: params.scorekeeperName,
+        scorekeeper_device_id: deviceId,
+      });
+
+    if (insertError) throw insertError;
+    return deviceId;
   }
 
   const { data, error } = await supabase

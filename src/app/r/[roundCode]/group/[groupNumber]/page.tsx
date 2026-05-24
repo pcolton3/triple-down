@@ -62,6 +62,7 @@ export default function GroupScoringPage() {
   const [message, setMessage] = useState('');
   const [copied, setCopied] = useState(false);
   const [loadStatus, setLoadStatus] = useState<'idle' | 'loading' | 'not_found' | 'ready'>('idle');
+  const [loadError, setLoadError] = useState('');
   const [scorekeeperName, setScorekeeperName] = useState('');
   const [claimStatus, setClaimStatus] = useState('');
 
@@ -72,17 +73,24 @@ export default function GroupScoringPage() {
       const requestedCode = params.roundCode?.toUpperCase();
       if (!requestedCode || (round.roundCode === requestedCode && !round.id.startsWith('round-'))) return;
 
-      setLoadStatus('loading');
-      const bundle = await loadSharedRoundByCode(requestedCode);
-      if (cancelled) return;
+      try {
+        setLoadStatus('loading');
+        setLoadError('');
+        const bundle = await loadSharedRoundByCode(requestedCode);
+        if (cancelled) return;
 
-      if (!bundle) {
-        setLoadStatus('not_found');
-        return;
+        if (!bundle) {
+          setLoadStatus('not_found');
+          return;
+        }
+
+        hydrateRound(sharedRoundBundleToRoundState(bundle));
+        setLoadStatus('ready');
+      } catch (error) {
+        if (cancelled) return;
+        setLoadStatus('idle');
+        setLoadError(error instanceof Error ? error.message : 'Unable to load this round from Supabase.');
       }
-
-      hydrateRound(sharedRoundBundleToRoundState(bundle));
-      setLoadStatus('ready');
     }
 
     void loadRound();
@@ -117,21 +125,39 @@ export default function GroupScoringPage() {
   async function refreshRound() {
     const bundle = await loadSharedRoundByCode(round.roundCode);
     if (bundle) hydrateRound(sharedRoundBundleToRoundState(bundle));
+    return bundle;
+  }
+
+  async function ensureSharedRoundId() {
+    if (!round.id.startsWith('round-')) return round.id;
+
+    await createSharedRoundFromLocalRound(useRoundStore.getState().round);
+    const bundle = await loadSharedRoundByCode(round.roundCode);
+    if (!bundle) throw new Error('Round was saved, but could not be reloaded from Supabase.');
+
+    hydrateRound(sharedRoundBundleToRoundState(bundle));
+    return bundle.round.id;
   }
 
   async function handleClaimScorekeeper() {
     try {
       setClaimStatus('');
+      const roundId = await ensureSharedRoundId();
       await claimGroupScorekeeper({
-        roundId: round.id,
+        roundId,
         groupNumber,
+        currentHole: hole.holeNumber,
         scorekeeperName: scorekeeperName.trim() || `Group ${groupNumber} Scorekeeper`,
       });
       await refreshRound();
       setClaimStatus('Scorekeeper mode enabled for this device.');
     } catch (error) {
       setClaimStatus(error instanceof Error ? error.message : 'Unable to claim scorekeeper.');
-      await refreshRound();
+      try {
+        await refreshRound();
+      } catch {
+        // The claim error is more useful than a follow-up refresh error.
+      }
     }
   }
 
@@ -188,6 +214,11 @@ export default function GroupScoringPage() {
       {loadStatus === 'not_found' ? (
         <section className="rounded-2xl border border-[#68aef7] bg-white p-4 text-sm text-slate-600">
           No round was found for code {params.roundCode}.
+        </section>
+      ) : null}
+      {loadError ? (
+        <section className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {loadError}
         </section>
       ) : null}
       <section className="rounded-3xl bg-[#2f8df3] p-5 text-white shadow-sm">
