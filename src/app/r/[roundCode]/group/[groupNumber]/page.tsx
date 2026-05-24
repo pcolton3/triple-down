@@ -82,7 +82,8 @@ export default function GroupScoringPage() {
 
     async function loadRound() {
       const requestedCode = params.roundCode?.toUpperCase();
-      if (!requestedCode || (round.roundCode === requestedCode && !round.id.startsWith('round-'))) return;
+      const hasUsableRound = Array.isArray(round.holes) && round.holes.length > 0;
+      if (!requestedCode || (round.roundCode === requestedCode && !round.id.startsWith('round-') && hasUsableRound)) return;
 
       try {
         setLoadStatus('loading');
@@ -109,7 +110,7 @@ export default function GroupScoringPage() {
     return () => {
       cancelled = true;
     };
-  }, [hydrateRound, params.roundCode, round.id, round.roundCode]);
+  }, [hydrateRound, params.roundCode, round.holes, round.id, round.roundCode]);
 
   const roundPlayers = Array.isArray(round.players) ? round.players : [];
   const roundHoles = Array.isArray(round.holes) ? round.holes : [];
@@ -215,13 +216,25 @@ export default function GroupScoringPage() {
   }
 
   if (!hole || !banker) {
+    const title =
+      loadStatus === 'not_found'
+        ? 'Round Not Found'
+        : loadError
+          ? 'Unable to Load Round'
+          : 'Loading Round';
+    const body =
+      loadStatus === 'not_found'
+        ? `No round was found for code ${params.roundCode}.`
+        : loadError || `Loading round ${params.roundCode} from Supabase...`;
+
     return (
       <main className="mx-auto max-w-md px-4 py-8">
         <div className="rounded-2xl border border-[#68aef7] bg-white p-4">
-          <h1 className="text-xl font-bold">Loading Round</h1>
-          <p className="mt-2 text-sm text-slate-500">
-            {loadError || `Loading round ${params.roundCode} from Supabase...`}
-          </p>
+          <h1 className="text-xl font-bold">{title}</h1>
+          <p className="mt-2 text-sm text-slate-500">{body}</p>
+          <Link className="mt-4 inline-block text-sm font-semibold text-[#2f8df3]" href="/">
+            Back Home
+          </Link>
         </div>
       </main>
     );

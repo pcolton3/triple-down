@@ -69,6 +69,8 @@ export default function NewRoundPage() {
   const [locationStatus, setLocationStatus] = useState('Getting nearby courses…');
   const [searchMode, setSearchMode] = useState<'nearby' | 'search'>('nearby');
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [createError, setCreateError] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
 
   const groups = useMemo(() => {
     return Array.from({ length: Math.ceil(players.length / 4) }, (_, groupIndex) => ({
@@ -239,6 +241,9 @@ export default function NewRoundPage() {
   }
 
   async function handleCreateRound() {
+    setCreateError('');
+    setIsCreating(true);
+
     const sanitizedPlayers = players.map((player, index) => ({
       ...player,
       name: player.name.trim() || `Player ${index + 1}`,
@@ -267,10 +272,15 @@ export default function NewRoundPage() {
       await createSharedRoundFromLocalRound(useRoundStore.getState().round);
     } catch (error) {
       console.error('Unable to save shared round to Supabase.', error);
+      const message = error instanceof Error ? error.message : 'Unable to save this round to Supabase.';
+      setCreateError(message);
+      setIsCreating(false);
+      return;
     }
 
     router.push(`/r/${finalRoundCode}/group/1`);
     setRoundCode(generateRoundCode());
+    setIsCreating(false);
   }
 
   return (
@@ -527,8 +537,16 @@ export default function NewRoundPage() {
           </div>
         </Card>
 
+        {createError ? (
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {createError}
+          </div>
+        ) : null}
+
         <div className="flex justify-end">
-          <Button onClick={() => void handleCreateRound()}>Create and Open Group 1</Button>
+          <Button disabled={isCreating} onClick={() => void handleCreateRound()}>
+            {isCreating ? 'Creating...' : 'Create and Open Group 1'}
+          </Button>
         </div>
       </div>
     </main>
