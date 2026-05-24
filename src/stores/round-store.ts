@@ -30,6 +30,7 @@ type MatchupSummary = {
 };
 
 type HoleHistoryItem = {
+  groupNumber: number;
   holeNumber: number;
   par: 3 | 4 | 5;
   handicapIndex: number;
@@ -1032,12 +1033,13 @@ export const useRoundStore = create<RoundStore>()(
         let runningLedger: LedgerEntry[] = [];
         return round.holes
           .filter((hole) => hole.isSaved)
-          .sort((a, b) => a.holeNumber - b.holeNumber)
+          .sort((a, b) => (a.groupNumber ?? 1) - (b.groupNumber ?? 1) || a.holeNumber - b.holeNumber)
           .map((hole) => {
             const summary = buildCurrentHoleSummary(round, hole);
             runningLedger = [...runningLedger, ...buildLedgerEntries(hole.bankerPlayerId, getHoleResults(round, hole))];
             return {
               holeNumber: hole.holeNumber,
+              groupNumber: hole.groupNumber ?? 1,
               par: hole.par,
               handicapIndex: hole.handicapIndex,
               bankerName: summary.bankerName,

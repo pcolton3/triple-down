@@ -10,48 +10,78 @@ function formatPosition(amount: number) {
   return 'Even';
 }
 
+function formatHoles(holes: number[]) {
+  return holes.length > 0 ? holes.join(', ') : '-';
+}
+
+function ScoreTable({
+  rows,
+}: {
+  rows: Array<{ playerId: string; playerName: string; grossTotal: number; netTotal: number }>;
+}) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200">
+      <div className="grid grid-cols-[1fr_90px_90px] bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div>Player</div>
+        <div className="text-right">Gross</div>
+        <div className="text-right">Net</div>
+      </div>
+      {rows.map((item, index) => (
+        <div key={item.playerId} className="grid grid-cols-[1fr_90px_90px] border-t border-slate-200 px-3 py-3 text-sm">
+          <div className="font-medium">
+            {index + 1}. {item.playerName}
+          </div>
+          <div className="text-right font-semibold">{item.grossTotal}</div>
+          <div className="text-right font-semibold">{item.netTotal}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function SettlePage() {
-  const { round, getRunningTotals, getSettleUp, getSkinsSummary, getLowNetSummary, getCtpSummary } = useRoundStore();
+  const {
+    round,
+    getRunningTotals,
+    getSettleUp,
+    getSkinsSummary,
+    getLowNetSummary,
+    getCtpSummary,
+    getGrossTotals,
+  } = useRoundStore();
   const totals = getRunningTotals().sort((a, b) => b.amount - a.amount);
   const settlements = getSettleUp();
   const skinsSummary = getSkinsSummary();
   const lowNetSummary = getLowNetSummary();
   const ctpSummary = getCtpSummary();
+  const grossScores = getGrossTotals().sort(
+    (a, b) => a.grossTotal - b.grossTotal || b.holesCounted - a.holesCounted || a.playerName.localeCompare(b.playerName)
+  );
 
   const holesSaved = round.holes.filter((hole) => hole.isSaved).length;
-  const roundComplete = holesSaved >= round.totalHoles;
+  const roundComplete = holesSaved >= round.totalHoles * Math.max(1, round.multiFoursome?.groups.length ?? 1);
 
-  // ✅ NEW: Calculate gross scores
-  const grossScores = round.players.map((player) => {
-    let total = 0;
-    let holesCounted = 0;
+  const skinWinnerRows = skinsSummary.payouts
+    .filter((item) => item.skins > 0)
+    .map((item) => ({
+      ...item,
+      holes: skinsSummary.holes
+        .filter((hole) => hole.winnerPlayerId === item.playerId)
+        .map((hole) => hole.holeNumber)
+        .sort((a, b) => a - b),
+    }));
 
-    round.holes.forEach((hole) => {
-      if (!hole.isSaved) return;
+  const ctpWinnerRows = ctpSummary.payouts
+    .filter((item) => item.wins > 0)
+    .map((item) => ({
+      ...item,
+      holes: ctpSummary.par3Holes
+        .filter((hole) => hole.winnerPlayerId === item.playerId)
+        .map((hole) => hole.holeNumber)
+        .sort((a, b) => a - b),
+    }));
 
-      // Banker score
-      if (hole.bankerPlayerId === player.id) {
-        if (hole.bankerGrossScore != null) {
-          total += hole.bankerGrossScore;
-          holesCounted++;
-        }
-      }
-
-      // Non-banker score
-      const matchup = hole.matchups.find((m) => m.playerId === player.id);
-      if (matchup && matchup.grossScore != null) {
-        total += matchup.grossScore;
-        holesCounted++;
-      }
-    });
-
-    return {
-      playerId: player.id,
-      name: player.name,
-      total,
-      holesCounted,
-    };
-  });
+  const lowNetWinnerRows = lowNetSummary.payouts.filter((item) => item.amount > 0);
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
@@ -61,7 +91,7 @@ export default function SettlePage() {
           <p className="mt-2 text-slate-600">
             {roundComplete
               ? `Recommended payouts for ${round.title} at ${round.courseName}.`
-              : `These payouts are based on ${holesSaved} of ${round.totalHoles} holes saved so far.`}
+              : `These payouts are based on ${holesSaved} group holes saved so far.`}
           </p>
         </div>
         <div className="flex gap-4 text-sm font-semibold text-[#2f8df3]">
@@ -70,87 +100,71 @@ export default function SettlePage() {
         </div>
       </div>
 
-      {/* ✅ NEW SECTION */}
       <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
-        <h2 className="mb-3 text-lg font-bold">Gross Scores</h2>
-        <div className="space-y-2">
-          {grossScores.map((player) => (
-            <div key={player.playerId} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
-              <span className="font-medium">{player.name}</span>
-              <span className="font-bold">
-                {roundComplete
-                  ? player.total
-                  : `${player.total} through ${player.holesCounted}`}
-              </span>
-            </div>
-          ))}
-        </div>
+        <h2 className="mb-3 text-xl font-bold">Final Scoring</h2>
+        <ScoreTable rows={grossScores} />
       </section>
 
       <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
-        <h2 className="mb-3 text-lg font-bold">Side Game Payouts</h2>
+        <h2 className="mb-3 text-xl font-bold">Payouts</h2>
 
         <div className="mb-4">
           <h3 className="mb-2 font-semibold">Skins</h3>
-          <div className="mb-3 space-y-2">
-            {skinsSummary.holes.map((skin) => (
-              <div key={skin.holeNumber} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
-                <span>Hole {skin.holeNumber}</span>
-                <span className="font-semibold">
-                  {skin.winnerName
-                    ? `${skin.winnerName} won skin${skin.winningNetScore != null ? `, net ${skin.winningNetScore}` : ''}`
-                    : skin.isTie
-                      ? 'No skin, tied low net'
-                      : 'No skin'}
-                </span>
-              </div>
-            ))}
-          </div>
           <div className="space-y-2">
-            {skinsSummary.payouts.map((item) => (
-              <div key={item.playerId} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
-                <span>{item.playerName} • {item.skins} skins</span>
-                <span className="font-bold">{formatCurrency(item.amount)}</span>
-              </div>
-            ))}
+            {skinWinnerRows.length === 0 ? (
+              <div className="rounded-xl bg-slate-50 px-3 py-3 text-slate-500">No skins winners yet.</div>
+            ) : (
+              skinWinnerRows.map((item) => (
+                <div key={item.playerId} className="rounded-xl bg-slate-50 px-3 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium">{item.playerName} wins {formatCurrency(item.amount)} skins</span>
+                    <span className="font-bold">{item.skins} skin{item.skins === 1 ? '' : 's'}</span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-500">Skin holes: {formatHoles(item.holes)}</p>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
         <div className="mb-4">
-          <h3 className="mb-2 font-semibold">Low Net</h3>
+          <h3 className="mb-2 font-semibold">Closest to the Pin</h3>
           <div className="space-y-2">
-            {lowNetSummary.payouts.map((item) => (
-              <div key={item.playerId} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
-                <span>{item.playerName} • {item.placement}</span>
-                <span className="font-bold">{formatCurrency(item.amount)}</span>
-              </div>
-            ))}
+            {ctpWinnerRows.length === 0 ? (
+              <div className="rounded-xl bg-slate-50 px-3 py-3 text-slate-500">No CTP winners yet.</div>
+            ) : (
+              ctpWinnerRows.map((item) => (
+                <div key={item.playerId} className="rounded-xl bg-slate-50 px-3 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium">{item.playerName} wins {formatCurrency(item.amount)} CTP</span>
+                    <span className="font-bold">{item.wins} win{item.wins === 1 ? '' : 's'}</span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-500">CTP holes: {formatHoles(item.holes)}</p>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
         <div>
-          <h3 className="mb-2 font-semibold">Closest to the Pin</h3>
-          <div className="mb-3 space-y-2">
-            {ctpSummary.par3Holes.map((ctp) => (
-              <div key={ctp.holeNumber} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
-                <span>Hole {ctp.holeNumber}</span>
-                <span className="font-semibold">{ctp.winnerName ?? 'No winner'}</span>
-              </div>
-            ))}
-          </div>
+          <h3 className="mb-2 font-semibold">Low Net</h3>
           <div className="space-y-2">
-            {ctpSummary.payouts.map((item) => (
-              <div key={item.playerId} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
-                <span>{item.playerName} • {item.wins} CTP wins</span>
-                <span className="font-bold">{formatCurrency(item.amount)}</span>
-              </div>
-            ))}
+            {lowNetWinnerRows.length === 0 ? (
+              <div className="rounded-xl bg-slate-50 px-3 py-3 text-slate-500">No low net payouts yet.</div>
+            ) : (
+              lowNetWinnerRows.map((item) => (
+                <div key={item.playerId} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
+                  <span>{item.playerName} wins {formatCurrency(item.amount)} low net ({item.placement})</span>
+                  <span className="font-bold">{formatCurrency(item.amount)}</span>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </section>
 
       <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
-        <h2 className="mb-3 text-lg font-bold">Final Positions</h2>
+        <h2 className="mb-3 text-lg font-bold">Banker Final Positions</h2>
         <div className="space-y-2">
           {totals.map((total) => (
             <div key={total.playerId} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
@@ -162,7 +176,7 @@ export default function SettlePage() {
       </section>
 
       <section className="rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
-        <h2 className="mb-3 text-lg font-bold">Who Pays Whom</h2>
+        <h2 className="mb-3 text-lg font-bold">Who Pays Whom - Banker Only</h2>
         {settlements.length === 0 ? (
           <div className="rounded-xl bg-slate-50 px-3 py-4 text-slate-500">
             Nobody owes anything right now.

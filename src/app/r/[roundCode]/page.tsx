@@ -15,6 +15,31 @@ function formatPosition(amount: number) {
   return 'Even';
 }
 
+function ScoreTable({
+  rows,
+}: {
+  rows: Array<{ playerId: string; playerName: string; grossTotal: number; netTotal: number }>;
+}) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200">
+      <div className="grid grid-cols-[1fr_90px_90px] bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div>Player</div>
+        <div className="text-right">Gross</div>
+        <div className="text-right">Net</div>
+      </div>
+      {rows.map((item, index) => (
+        <div key={item.playerId} className="grid grid-cols-[1fr_90px_90px] border-t border-slate-200 px-3 py-3 text-sm">
+          <div className="font-medium">
+            {index + 1}. {item.playerName}
+          </div>
+          <div className="text-right font-semibold">{item.grossTotal}</div>
+          <div className="text-right font-semibold">{item.netTotal}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function EventLeaderboardPage() {
   const params = useParams<{ roundCode: string }>();
   const { round, hydrateRound, simulateFullEvent, getRunningTotals, getGrossTotals, getSkinsSummary, getCtpSummary } = useRoundStore();
@@ -199,36 +224,13 @@ export default function EventLeaderboardPage() {
 
       <Card>
         <h2 className="mb-3 text-xl font-bold">Leaderboard</h2>
-        <div className="space-y-2">
-          {eventLeaderboard.map((item, index) => (
-            <div key={item.playerId} className="rounded-xl bg-slate-50 px-3 py-3">
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <div className="font-semibold">
-                  {index + 1}. {item.playerName}
-                </div>
-                <div className="text-sm font-bold">Net {item.netTotal}</div>
-              </div>
-              <div className="grid grid-cols-5 gap-2 text-center text-xs text-slate-600">
-                <div className="rounded-lg bg-white px-2 py-2">
-                  <div className="font-semibold text-slate-900">{item.grossTotal}</div>
-                  <div>Gross</div>
-                </div>
-                <div className="rounded-lg bg-white px-2 py-2">
-                  <div className="font-semibold text-slate-900">{item.holesCounted}</div>
-                  <div>Holes</div>
-                </div>
-                <div className="rounded-lg bg-white px-2 py-2">
-                  <div className="font-semibold text-slate-900">{item.skins}</div>
-                  <div>Skins</div>
-                </div>
-                <div className="rounded-lg bg-white px-2 py-2">
-                  <div className="font-semibold text-slate-900">{item.ctpWins}</div>
-                  <div>CTP</div>
-                </div>
-                <div className="rounded-lg bg-white px-2 py-2">
-                  <div className="font-semibold text-slate-900">{formatPosition(item.position)}</div>
-                  <div>Banker</div>
-                </div>
+        <ScoreTable rows={eventLeaderboard} />
+        <div className="mt-4 grid gap-2 sm:grid-cols-3">
+          {eventLeaderboard.map((item) => (
+            <div key={item.playerId} className="rounded-xl bg-slate-50 px-3 py-3 text-sm">
+              <div className="font-semibold">{item.playerName}</div>
+              <div className="mt-1 text-slate-600">
+                Holes {item.holesCounted} | Skins {item.skins} | CTP {item.ctpWins} | Banker {formatPosition(item.position)}
               </div>
             </div>
           ))}

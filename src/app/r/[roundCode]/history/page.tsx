@@ -10,16 +10,37 @@ function formatAmount(value: number) {
   return 'Push';
 }
 
-function formatPosition(value: number) {
-  if (value > 0) return `Up ${formatCurrency(value)}`;
-  if (value < 0) return `Down ${formatCurrency(Math.abs(value))}`;
-  return 'Even';
+function ScoreTable({
+  rows,
+}: {
+  rows: Array<{ playerId: string; playerName: string; grossTotal: number; netTotal: number }>;
+}) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200">
+      <div className="grid grid-cols-[1fr_90px_90px] bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div>Player</div>
+        <div className="text-right">Gross</div>
+        <div className="text-right">Net</div>
+      </div>
+      {rows.map((item, index) => (
+        <div key={item.playerId} className="grid grid-cols-[1fr_90px_90px] border-t border-slate-200 px-3 py-3 text-sm">
+          <div className="font-medium">
+            {index + 1}. {item.playerName}
+          </div>
+          <div className="text-right font-semibold">{item.grossTotal}</div>
+          <div className="text-right font-semibold">{item.netTotal}</div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default function HistoryPage() {
   const { round, getHoleHistory, getGrossTotals, getSkinsSummary, getLowNetSummary, getCtpSummary } = useRoundStore();
   const history = getHoleHistory();
-  const grossTotals = getGrossTotals();
+  const grossTotals = getGrossTotals().sort(
+    (a, b) => a.grossTotal - b.grossTotal || b.holesCounted - a.holesCounted || a.playerName.localeCompare(b.playerName)
+  );
   const skinsSummary = getSkinsSummary();
   const lowNetSummary = getLowNetSummary();
   const ctpSummary = getCtpSummary();
@@ -29,7 +50,7 @@ export default function HistoryPage() {
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Hole History</h1>
-          <p className="mt-2 text-slate-600">Review each updated hole, the Banker, matchup net scores, and running totals after that hole.</p>
+          <p className="mt-2 text-slate-600">Review each updated hole by group, the Banker, matchup net scores, and hole results.</p>
         </div>
         <Link href={`/r/${round.roundCode}`} className="text-sm font-semibold text-[#2f8df3]">
           Back to Round
@@ -37,15 +58,8 @@ export default function HistoryPage() {
       </div>
 
       <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
-        <h2 className="mb-3 text-lg font-bold">Running Gross</h2>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {grossTotals.map((item) => (
-            <div key={item.playerId} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
-              <span className="font-medium">{item.playerName}</span>
-              <span className="font-bold">Gross {item.grossTotal}</span>
-            </div>
-          ))}
-        </div>
+        <h2 className="mb-3 text-lg font-bold">Total Scoring</h2>
+        <ScoreTable rows={grossTotals} />
       </section>
 
       <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
@@ -109,10 +123,10 @@ export default function HistoryPage() {
           </div>
         ) : (
           history.map((hole) => (
-            <section key={hole.holeNumber} className="rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
+            <section key={`${hole.groupNumber}-${hole.holeNumber}`} className="rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
               <div className="mb-4 flex items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-xl font-bold">Hole {hole.holeNumber}</h2>
+                  <h2 className="text-xl font-bold">Group {hole.groupNumber} Hole {hole.holeNumber} Results</h2>
                   <p className="text-sm text-slate-500">
                     Par {hole.par} • Handicap {hole.handicapIndex} • Banker: {hole.bankerName}
                   </p>
@@ -149,18 +163,6 @@ export default function HistoryPage() {
                     </div>
                   </div>
                 ))}
-              </div>
-
-              <div className="mt-4 border-t border-slate-200 pt-4">
-                <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">Running totals after hole {hole.holeNumber}</h3>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {hole.runningTotals.map((item) => (
-                    <div key={item.playerId} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
-                      <span className="font-medium">{item.playerName}</span>
-                      <span className="font-bold">{formatPosition(item.amount)}</span>
-                    </div>
-                  ))}
-                </div>
               </div>
             </section>
           ))
