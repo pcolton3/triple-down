@@ -6,18 +6,21 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/shared/button';
 import { useRoundStore } from '@/stores/round-store';
 import { formatCurrency } from '@/lib/utils/currency';
-import { loadSharedRoundByCode, sharedRoundBundleToRoundState } from '@/lib/realtime/shared-rounds';
+import { createSharedRoundFromLocalRound, loadSharedRoundByCode, sharedRoundBundleToRoundState } from '@/lib/realtime/shared-rounds';
+import { claimGroupScorekeeper, userCanEditGroup } from '@/lib/realtime/group-rounds';
 
 function NumberField({
   value,
   onChange,
   placeholder,
   blankWhenZero = false,
+  disabled = false,
 }: {
   value: number | null;
   onChange: (value: number | null) => void;
   placeholder?: string;
   blankWhenZero?: boolean;
+  disabled?: boolean;
 }) {
   const displayValue = value == null ? '' : blankWhenZero && value === 0 ? '' : value;
 
@@ -26,11 +29,12 @@ function NumberField({
       type="number"
       inputMode="numeric"
       value={displayValue}
+      disabled={disabled}
       placeholder={placeholder}
       onFocus={(event) => event.currentTarget.select()}
       onMouseUp={(event) => event.preventDefault()}
       onChange={(event) => onChange(event.target.value === '' ? null : Number(event.target.value))}
-      className="w-full rounded-xl border border-slate-300 px-3 py-3 font-semibold"
+      className="w-full rounded-xl border border-slate-300 px-3 py-3 font-semibold disabled:bg-slate-100 disabled:text-slate-500"
     />
   );
 }
@@ -58,13 +62,15 @@ export default function GroupScoringPage() {
   const [message, setMessage] = useState('');
   const [copied, setCopied] = useState(false);
   const [loadStatus, setLoadStatus] = useState<'idle' | 'loading' | 'not_found' | 'ready'>('idle');
+  const [scorekeeperName, setScorekeeperName] = useState('');
+  const [claimStatus, setClaimStatus] = useState('');
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadRound() {
       const requestedCode = params.roundCode?.toUpperCase();
-      if (!requestedCode || round.roundCode === requestedCode) return;
+      if (!requestedCode || (round.roundCode === requestedCode && !round.id.startsWith('round-'))) return;
 
       setLoadStatus('loading');
       const bundle = await loadSharedRoundByCode(requestedCode);
@@ -84,7 +90,7 @@ export default function GroupScoringPage() {
     return () => {
       cancelled = true;
     };
-  }, [hydrateRound, params.roundCode, round.roundCode]);
+  }, [hydrateRound, params.roundCode, round.id, round.roundCode]);
 
   const group = round.multiFoursome?.groups.find((item) => item.groupNumber === groupNumber);
   const groupPlayerIds =
@@ -105,14 +111,46 @@ export default function GroupScoringPage() {
   const matchupSummaryByPlayerId = Object.fromEntries(summary.matchups.map((item) => [item.playerId, item]));
   const isFinalHole = hole.holeNumber === round.totalHoles;
   const pressAction = hole.par === 3 ? 'Triple' : 'Double';
+  const isClaimed = Boolean(group?.scorekeeperDeviceId);
+  const canEdit = group ? userCanEditGroup(group) : false;
 
-  function handleUpdate() {
+  async function refreshRound() {
+    const bundle = await loadSharedRoundByCode(round.roundCode);
+    if (bundle) hydrateRound(sharedRoundBundleToRoundState(bundle));
+  }
+
+  async function handleClaimScorekeeper() {
+    try {
+      setClaimStatus('');
+      await claimGroupScorekeeper({
+        roundId: round.id,
+        groupNumber,
+        scorekeeperName: scorekeeperName.trim() || `Group ${groupNumber} Scorekeeper`,
+      });
+      await refreshRound();
+      setClaimStatus('Scorekeeper mode enabled for this device.');
+    } catch (error) {
+      setClaimStatus(error instanceof Error ? error.message : 'Unable to claim scorekeeper.');
+      await refreshRound();
+    }
+  }
+
+  async function persistRound() {
+    await createSharedRoundFromLocalRound(useRoundStore.getState().round);
+    await refreshRound();
+  }
+
+  async function handleUpdate() {
+    if (!canEdit) return;
     const result = updateHole(groupNumber);
+    if (result.ok) await persistRound();
     setMessage(result.message ?? (result.ok ? `Hole ${hole.holeNumber} updated.` : 'Unable to update this hole.'));
   }
 
-  function handleNext() {
+  async function handleNext() {
+    if (!canEdit) return;
     const result = nextHole(groupNumber);
+    if (result.ok) await persistRound();
     if (result.ok && isFinalHole) {
       router.push(`/r/${round.roundCode}`);
       return;
@@ -180,12 +218,45 @@ export default function GroupScoringPage() {
       </section>
 
       <section className="rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold">Scorekeeper</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              {canEdit
+                ? 'This device can edit scores for this group.'
+                : isClaimed
+                  ? `${group?.scorekeeperName ?? 'Another scorekeeper'} is scoring this group. You can still view live scores.`
+                  : 'Anyone can view. The first person to claim this group can edit scores.'}
+            </p>
+          </div>
+          {canEdit ? <span className="rounded-xl bg-green-50 px-3 py-2 text-sm font-bold text-green-700">Can Edit</span> : null}
+        </div>
+
+        {!isClaimed ? (
+          <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]">
+            <input
+              className="min-w-0 rounded-xl border border-slate-300 px-3 py-3"
+              value={scorekeeperName}
+              placeholder="Scorekeeper name"
+              onChange={(event) => setScorekeeperName(event.target.value)}
+            />
+            <Button type="button" onClick={() => void handleClaimScorekeeper()}>
+              Claim
+            </Button>
+          </div>
+        ) : null}
+
+        {claimStatus ? <p className="mt-3 text-sm text-slate-500">{claimStatus}</p> : null}
+      </section>
+
+      <section className="rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
         <div className="mb-3 grid grid-cols-3 gap-3">
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Par</label>
             <select
               className="w-full rounded-xl border border-slate-300 px-3 py-3 font-semibold"
               value={hole.par}
+              disabled={!canEdit}
               onChange={(event) => setPar(Number(event.target.value) as 3 | 4 | 5, groupNumber)}
             >
               <option value={3}>3</option>
@@ -195,13 +266,14 @@ export default function GroupScoringPage() {
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Hole Hcp</label>
-            <NumberField value={hole.handicapIndex} onChange={(value) => setHoleHandicap(value ?? 1, groupNumber)} />
+            <NumberField value={hole.handicapIndex} disabled={!canEdit} onChange={(value) => setHoleHandicap(value ?? 1, groupNumber)} />
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Banker</label>
             <select
               className="w-full rounded-xl border border-slate-300 px-3 py-3 font-semibold"
               value={hole.bankerPlayerId}
+              disabled={!canEdit}
               onChange={(event) => setBanker(event.target.value, groupNumber)}
             >
               {groupPlayers.map((player) => (
@@ -221,11 +293,11 @@ export default function GroupScoringPage() {
             <p className="text-sm text-slate-500">Banker gross score</p>
             <h2 className="text-xl font-bold">{banker.name}</h2>
           </div>
-          <Button variant="secondary" onClick={() => toggleBankerPress(groupNumber)}>
+          <Button variant="secondary" disabled={!canEdit} onClick={() => toggleBankerPress(groupNumber)}>
             {hole.bankerPressed ? `Undo Banker ${pressAction}` : `Banker ${pressAction}`}
           </Button>
         </div>
-        <NumberField value={hole.bankerGrossScore} onChange={(value) => setBankerGrossScore(value, groupNumber)} placeholder="Gross" blankWhenZero />
+        <NumberField value={hole.bankerGrossScore} disabled={!canEdit} onChange={(value) => setBankerGrossScore(value, groupNumber)} placeholder="Gross" blankWhenZero />
       </section>
 
       {hole.par === 3 ? (
@@ -234,6 +306,7 @@ export default function GroupScoringPage() {
           <select
             className="w-full rounded-xl border border-slate-300 px-3 py-3 font-semibold"
             value={hole.ctpWinnerPlayerId ?? ''}
+            disabled={!canEdit}
             onChange={(event) => setCtpWinner(hole.holeNumber, event.target.value || null, groupNumber)}
           >
             <option value="">No Winner</option>
@@ -260,18 +333,18 @@ export default function GroupScoringPage() {
                   </h3>
                   <p className="text-sm text-slate-500">vs {banker.name}</p>
                 </div>
-                <Button variant="secondary" onClick={() => togglePlayerPress(player.id, groupNumber)}>
+                <Button variant="secondary" disabled={!canEdit} onClick={() => togglePlayerPress(player.id, groupNumber)}>
                   {matchup.pressed ? `Undo ${pressAction}` : pressAction}
                 </Button>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Bet</label>
-                  <NumberField value={matchup.baseWager} onChange={(value) => setWager(player.id, value ?? 0, groupNumber)} placeholder="Bet" blankWhenZero />
+                  <NumberField value={matchup.baseWager} disabled={!canEdit} onChange={(value) => setWager(player.id, value ?? 0, groupNumber)} placeholder="Bet" blankWhenZero />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Gross</label>
-                  <NumberField value={matchup.grossScore} onChange={(value) => setPlayerGrossScore(player.id, value, groupNumber)} placeholder="Gross" blankWhenZero />
+                  <NumberField value={matchup.grossScore} disabled={!canEdit} onChange={(value) => setPlayerGrossScore(player.id, value, groupNumber)} placeholder="Gross" blankWhenZero />
                 </div>
               </div>
               <p className="mt-3 text-sm text-slate-500">
@@ -303,10 +376,10 @@ export default function GroupScoringPage() {
       {message ? <p className="rounded-xl bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">{message}</p> : null}
 
       <div className="flex gap-3">
-        <Button className="flex-1" variant="secondary" onClick={handleUpdate}>
+        <Button className="flex-1" variant="secondary" disabled={!canEdit} onClick={() => void handleUpdate()}>
           Update
         </Button>
-        <Button className="flex-1" onClick={handleNext}>
+        <Button className="flex-1" disabled={!canEdit} onClick={() => void handleNext()}>
           {isFinalHole ? 'Finish Group' : 'Next'}
         </Button>
       </div>

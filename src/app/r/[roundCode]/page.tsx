@@ -51,11 +51,16 @@ export default function EventLeaderboardPage() {
   const skinsSummary = getSkinsSummary();
   const ctpSummary = getCtpSummary();
 
-  const groups = round.multiFoursome?.groups ?? [{ groupNumber: 1, groupName: 'Group 1', currentHole: round.currentHole }];
-  const groupPlayers = round.multiFoursome?.groupPlayers ?? round.players.map((player, index) => ({
+  const fallbackGroups = Array.from({ length: Math.max(1, Math.ceil(round.players.length / 4)) }, (_, index) => ({
+    groupNumber: index + 1,
+    groupName: `Group ${index + 1}`,
+    currentHole: round.currentHole,
+  }));
+  const groups = round.multiFoursome?.groups.length ? round.multiFoursome.groups : fallbackGroups;
+  const groupPlayers = round.multiFoursome?.groupPlayers.length ? round.multiFoursome.groupPlayers : round.players.map((player, index) => ({
     playerId: player.id,
-    groupNumber: 1,
-    sortOrder: index,
+    groupNumber: Math.floor(index / 4) + 1,
+    sortOrder: index % 4,
   }));
 
   const eventLeaderboard = useMemo(

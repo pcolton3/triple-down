@@ -121,25 +121,44 @@ export async function claimGroupScorekeeper(params: {
 }) {
   const deviceId = getDeviceId();
 
-  const { error } = await supabase
+  const { data: existing, error: loadError } = await supabase
+    .from('round_groups')
+    .select('*')
+    .eq('round_id', params.roundId)
+    .eq('group_number', params.groupNumber)
+    .maybeSingle();
+
+  if (loadError) throw loadError;
+
+  const existingGroup = existing as RoundGroupRow | null;
+  if (existingGroup?.scorekeeper_device_id === deviceId) return deviceId;
+  if (existingGroup?.scorekeeper_device_id) {
+    throw new Error(`Group ${params.groupNumber} already has a scorekeeper.`);
+  }
+
+  const { data, error } = await supabase
     .from('round_groups')
     .update({
       scorekeeper_name: params.scorekeeperName,
       scorekeeper_device_id: deviceId,
     })
     .eq('round_id', params.roundId)
-    .eq('group_number', params.groupNumber);
+    .eq('group_number', params.groupNumber)
+    .is('scorekeeper_device_id', null)
+    .select('*');
 
   if (error) throw error;
+  if ((data ?? []).length === 0) throw new Error(`Group ${params.groupNumber} already has a scorekeeper.`);
 
   return deviceId;
 }
 
 export function userCanEditGroup(group: {
-  scorekeeper_device_id: string | null;
+  scorekeeper_device_id?: string | null;
+  scorekeeperDeviceId?: string | null;
 }) {
   if (typeof window === 'undefined') return false;
-  return group.scorekeeper_device_id === getDeviceId();
+  return (group.scorekeeper_device_id ?? group.scorekeeperDeviceId) === getDeviceId();
 }
 
 function getDeviceId() {

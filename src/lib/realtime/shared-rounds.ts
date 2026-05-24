@@ -373,9 +373,9 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
     };
   });
 
-  const fallbackGroups = Array.from(new Set(holes.map((hole) => hole.groupNumber ?? 1))).map((groupNumber) => ({
-    groupNumber,
-    groupName: `Group ${groupNumber}`,
+  const fallbackGroups = Array.from({ length: Math.max(1, Math.ceil(players.length / 4)) }, (_, index) => ({
+    groupNumber: index + 1,
+    groupName: `Group ${index + 1}`,
     teeTime: null,
     scorekeeperName: null,
     scorekeeperDeviceId: null,

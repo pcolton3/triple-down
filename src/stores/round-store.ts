@@ -229,6 +229,45 @@ function getGroupPlayerIds(round: RoundState, groupNumber: number) {
   return assigned && assigned.length > 0 ? assigned : round.players.map((player) => player.id);
 }
 
+function ensureMultiFoursomeRound(round: RoundState): RoundState {
+  const multiFoursome = round.multiFoursome ?? { enabled: round.players.length > 4, ...buildGroupsForPlayers(round.players) };
+  const existingGroups = multiFoursome.groups.length > 0 ? multiFoursome.groups : buildGroupsForPlayers(round.players).groups;
+  const existingGroupPlayers =
+    multiFoursome.groupPlayers.length > 0 ? multiFoursome.groupPlayers : buildGroupsForPlayers(round.players).groupPlayers;
+  const holes: HoleState[] = [];
+
+  existingGroups.forEach((group) => {
+    const groupHoles = round.holes.filter((hole) => (hole.groupNumber ?? 1) === group.groupNumber);
+    if (groupHoles.length > 0) {
+      holes.push(...groupHoles.map((hole) => ({ ...hole, groupNumber: group.groupNumber })));
+      return;
+    }
+
+    const groupPlayerIds = existingGroupPlayers
+      .filter((assignment) => assignment.groupNumber === group.groupNumber)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((assignment) => assignment.playerId);
+    const templateHoles = round.holes.filter((hole) => (hole.groupNumber ?? 1) === 1);
+    const bankerId = groupPlayerIds[0] ?? round.players[0]?.id ?? 'p1';
+
+    holes.push(
+      ...templateHoles.map((hole) =>
+        createHole(group.groupNumber, hole.holeNumber, hole.par, hole.handicapIndex, bankerId, groupPlayerIds, round.defaultBet)
+      )
+    );
+  });
+
+  return {
+    ...round,
+    holes: holes.length > 0 ? holes : round.holes,
+    multiFoursome: {
+      enabled: round.players.length > 4,
+      groups: existingGroups,
+      groupPlayers: existingGroupPlayers,
+    },
+  };
+}
+
 function updateGroupHole(round: RoundState, groupNumber: number, updater: (hole: HoleState) => HoleState) {
   const currentHole = activeHole(round, groupNumber);
   return {
@@ -760,7 +799,10 @@ export const useRoundStore = create<RoundStore>()(
           };
         }),
 
-      hydrateRound: (round) => set({ round, ledger: recalcLedger(round) }),
+      hydrateRound: (round) => {
+        const hydratedRound = ensureMultiFoursomeRound(round);
+        set({ round: hydratedRound, ledger: recalcLedger(hydratedRound) });
+      },
 
       resetRound: () => set({ round: createDefaultRound(), ledger: [] }),
 
