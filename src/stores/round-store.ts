@@ -58,6 +58,7 @@ type CurrentHoleSummary = {
 };
 
 type SettleUpItem = {
+  groupNumber: number;
   fromPlayerId: string;
   fromPlayerName: string;
   toPlayerId: string;
@@ -71,6 +72,8 @@ type GrossTotalItem = {
   grossTotal: number;
   netTotal: number;
   holesCounted: number;
+  naturalBirdies: number;
+  naturalEagles: number;
 };
 
 type SkinsHoleResult = {
@@ -228,7 +231,11 @@ function getGroupPlayerIds(round: RoundState, groupNumber: number) {
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((item) => item.playerId);
 
-  return assigned && assigned.length > 0 ? assigned : round.players.map((player) => player.id);
+  if (assigned && assigned.length > 0) return assigned;
+  if (round.multiFoursome?.groups.length && round.multiFoursome.groups.length > 1) {
+    return round.players.slice((groupNumber - 1) * 4, groupNumber * 4).map((player) => player.id);
+  }
+  return round.players.map((player) => player.id);
 }
 
 function ensureMultiFoursomeRound(round: RoundState): RoundState {
@@ -521,41 +528,52 @@ function buildCurrentHoleSummary(round: RoundState, hole: HoleState): CurrentHol
 }
 
 function buildSettleUp(round: RoundState, ledger: LedgerEntry[]): SettleUpItem[] {
-  const totals = buildRunningTotalsFromLedger(round, ledger);
-  const debtors = totals
-    .filter((item) => item.amount < 0)
-    .map((item) => ({ ...item, remaining: Math.abs(item.amount) }))
-    .sort((a, b) => b.remaining - a.remaining);
-  const creditors = totals
-    .filter((item) => item.amount > 0)
-    .map((item) => ({ ...item, remaining: item.amount }))
-    .sort((a, b) => b.remaining - a.remaining);
-
   const settlements: SettleUpItem[] = [];
-  let i = 0;
-  let j = 0;
+  const groupNumbers = round.multiFoursome?.groups.length
+    ? round.multiFoursome.groups.map((group) => group.groupNumber)
+    : [1];
 
-  while (i < debtors.length && j < creditors.length) {
-    const debtor = debtors[i];
-    const creditor = creditors[j];
-    const amount = Math.min(debtor.remaining, creditor.remaining);
+  groupNumbers.forEach((groupNumber) => {
+    const groupPlayerIds = new Set(getGroupPlayerIds(round, groupNumber));
+    const groupLedger = ledger.filter(
+      (entry) => groupPlayerIds.has(entry.fromPlayerId) && groupPlayerIds.has(entry.toPlayerId)
+    );
+    const totals = buildRunningTotalsFromLedger(round, groupLedger).filter((item) => groupPlayerIds.has(item.playerId));
+    const debtors = totals
+      .filter((item) => item.amount < 0)
+      .map((item) => ({ ...item, remaining: Math.abs(item.amount) }))
+      .sort((a, b) => b.remaining - a.remaining);
+    const creditors = totals
+      .filter((item) => item.amount > 0)
+      .map((item) => ({ ...item, remaining: item.amount }))
+      .sort((a, b) => b.remaining - a.remaining);
 
-    if (amount > 0) {
-      settlements.push({
-        fromPlayerId: debtor.playerId,
-        fromPlayerName: debtor.playerName,
-        toPlayerId: creditor.playerId,
-        toPlayerName: creditor.playerName,
-        amount,
-      });
+    let i = 0;
+    let j = 0;
+
+    while (i < debtors.length && j < creditors.length) {
+      const debtor = debtors[i];
+      const creditor = creditors[j];
+      const amount = Math.min(debtor.remaining, creditor.remaining);
+
+      if (amount > 0) {
+        settlements.push({
+          groupNumber,
+          fromPlayerId: debtor.playerId,
+          fromPlayerName: debtor.playerName,
+          toPlayerId: creditor.playerId,
+          toPlayerName: creditor.playerName,
+          amount,
+        });
+      }
+
+      debtor.remaining -= amount;
+      creditor.remaining -= amount;
+
+      if (debtor.remaining <= 0.0001) i += 1;
+      if (creditor.remaining <= 0.0001) j += 1;
     }
-
-    debtor.remaining -= amount;
-    creditor.remaining -= amount;
-
-    if (debtor.remaining <= 0.0001) i += 1;
-    if (creditor.remaining <= 0.0001) j += 1;
-  }
+  });
 
   return settlements;
 }
@@ -593,6 +611,8 @@ function buildGrossTotals(round: RoundState): GrossTotalItem[] {
     let grossTotal = 0;
     let netTotal = 0;
     let holesCounted = 0;
+    let naturalBirdies = 0;
+    let naturalEagles = 0;
 
     round.holes.forEach((hole) => {
       if (!hole.isSaved) return;
@@ -602,6 +622,8 @@ function buildGrossTotals(round: RoundState): GrossTotalItem[] {
       grossTotal += gross;
       netTotal += net;
       holesCounted += 1;
+      if (gross === hole.par - 1) naturalBirdies += 1;
+      if (gross === hole.par - 2) naturalEagles += 1;
     });
 
     return {
@@ -610,6 +632,8 @@ function buildGrossTotals(round: RoundState): GrossTotalItem[] {
       grossTotal,
       netTotal,
       holesCounted,
+      naturalBirdies,
+      naturalEagles,
     };
   });
 }

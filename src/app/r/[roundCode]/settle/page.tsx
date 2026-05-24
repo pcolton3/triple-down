@@ -57,6 +57,18 @@ export default function SettlePage() {
   const grossScores = getGrossTotals().sort(
     (a, b) => a.grossTotal - b.grossTotal || b.holesCounted - a.holesCounted || a.playerName.localeCompare(b.playerName)
   );
+  const bankerSettlementGroups = settlements.reduce<Array<{ groupNumber: number; items: typeof settlements }>>(
+    (groups, item) => {
+      const group = groups.find((entry) => entry.groupNumber === item.groupNumber);
+      if (group) {
+        group.items.push(item);
+      } else {
+        groups.push({ groupNumber: item.groupNumber, items: [item] });
+      }
+      return groups;
+    },
+    []
+  );
 
   const holesSaved = round.holes.filter((hole) => hole.isSaved).length;
   const roundComplete = holesSaved >= round.totalHoles * Math.max(1, round.multiFoursome?.groups.length ?? 1);
@@ -177,18 +189,25 @@ export default function SettlePage() {
 
       <section className="rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
         <h2 className="mb-3 text-lg font-bold">Who Pays Whom - Banker Only</h2>
-        {settlements.length === 0 ? (
+        {bankerSettlementGroups.length === 0 ? (
           <div className="rounded-xl bg-slate-50 px-3 py-4 text-slate-500">
             Nobody owes anything right now.
           </div>
         ) : (
-          <div className="space-y-2">
-            {settlements.map((item, index) => (
-              <div key={`${item.fromPlayerId}-${item.toPlayerId}-${index}`} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
-                <span className="font-medium">
-                  {item.fromPlayerName} pays {item.toPlayerName}
-                </span>
-                <span className="font-bold">{formatCurrency(item.amount)}</span>
+          <div className="space-y-4">
+            {bankerSettlementGroups.map((group) => (
+              <div key={group.groupNumber}>
+                <h3 className="mb-2 font-semibold">Group {group.groupNumber}</h3>
+                <div className="space-y-2">
+                  {group.items.map((item, index) => (
+                    <div key={`${item.groupNumber}-${item.fromPlayerId}-${item.toPlayerId}-${index}`} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
+                      <span className="font-medium">
+                        {item.fromPlayerName} pays {item.toPlayerName}
+                      </span>
+                      <span className="font-bold">{formatCurrency(item.amount)}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>

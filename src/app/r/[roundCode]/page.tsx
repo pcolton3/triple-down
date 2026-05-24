@@ -18,22 +18,33 @@ function formatPosition(amount: number) {
 function ScoreTable({
   rows,
 }: {
-  rows: Array<{ playerId: string; playerName: string; grossTotal: number; netTotal: number }>;
+  rows: Array<{
+    playerId: string;
+    playerName: string;
+    grossTotal: number;
+    netTotal: number;
+    naturalBirdies: number;
+    naturalEagles: number;
+  }>;
 }) {
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200">
-      <div className="grid grid-cols-[1fr_90px_90px] bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <div className="grid grid-cols-[1fr_72px_72px_72px_72px] bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
         <div>Player</div>
         <div className="text-right">Gross</div>
         <div className="text-right">Net</div>
+        <div className="text-right">Birdies</div>
+        <div className="text-right">Eagles</div>
       </div>
       {rows.map((item, index) => (
-        <div key={item.playerId} className="grid grid-cols-[1fr_90px_90px] border-t border-slate-200 px-3 py-3 text-sm">
+        <div key={item.playerId} className="grid grid-cols-[1fr_72px_72px_72px_72px] border-t border-slate-200 px-3 py-3 text-sm">
           <div className="font-medium">
             {index + 1}. {item.playerName}
           </div>
           <div className="text-right font-semibold">{item.grossTotal}</div>
           <div className="text-right font-semibold">{item.netTotal}</div>
+          <div className="text-right font-semibold">{item.naturalBirdies}</div>
+          <div className="text-right font-semibold">{item.naturalEagles}</div>
         </div>
       ))}
     </div>
