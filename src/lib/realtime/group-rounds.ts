@@ -30,8 +30,6 @@ export async function createRoundGroups(params: {
     group_number: group.groupNumber,
     group_name: group.groupName ?? `Group ${group.groupNumber}`,
     tee_time: group.teeTime ?? null,
-    scorekeeper_name: group.scorekeeperName ?? null,
-    scorekeeper_device_id: group.scorekeeperDeviceId ?? null,
     current_hole: group.currentHole ?? 1,
   }));
 
