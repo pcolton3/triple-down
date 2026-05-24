@@ -28,25 +28,27 @@ function ScoreTable({
   }>;
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200">
-      <div className="grid grid-cols-[1fr_72px_72px_72px_72px] bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-        <div>Player</div>
-        <div className="text-right">Gross</div>
-        <div className="text-right">Net</div>
-        <div className="text-right">Birdies</div>
-        <div className="text-right">Eagles</div>
+    <div className="overflow-x-auto rounded-xl border border-slate-200">
+      <div className="min-w-[520px]">
+      <div className="grid grid-cols-[minmax(180px,1fr)_80px_80px_80px_80px] bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="truncate">Player</div>
+        <div className="text-right tabular-nums">Gross</div>
+        <div className="text-right tabular-nums">Net</div>
+        <div className="text-right tabular-nums">Birdies</div>
+        <div className="text-right tabular-nums">Eagles</div>
       </div>
       {rows.map((item, index) => (
-        <div key={item.playerId} className="grid grid-cols-[1fr_72px_72px_72px_72px] border-t border-slate-200 px-3 py-3 text-sm">
-          <div className="font-medium">
+        <div key={item.playerId} className="grid grid-cols-[minmax(180px,1fr)_80px_80px_80px_80px] border-t border-slate-200 px-3 py-3 text-sm">
+          <div className="truncate font-medium">
             {index + 1}. {item.playerName}
           </div>
-          <div className="text-right font-semibold">{item.grossTotal}</div>
-          <div className="text-right font-semibold">{item.netTotal}</div>
-          <div className="text-right font-semibold">{item.naturalBirdies}</div>
-          <div className="text-right font-semibold">{item.naturalEagles}</div>
+          <div className="text-right font-semibold tabular-nums">{item.grossTotal}</div>
+          <div className="text-right font-semibold tabular-nums">{item.netTotal}</div>
+          <div className="text-right font-semibold tabular-nums">{item.naturalBirdies}</div>
+          <div className="text-right font-semibold tabular-nums">{item.naturalEagles}</div>
         </div>
       ))}
+      </div>
     </div>
   );
 }
