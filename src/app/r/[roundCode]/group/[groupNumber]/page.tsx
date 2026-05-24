@@ -141,8 +141,6 @@ export default function GroupScoringPage() {
     roundHoles.find((item) => item.holeNumber === currentHoleNumber) ??
     roundHoles[0];
   const banker = groupPlayers.find((player) => player.id === hole?.bankerPlayerId) ?? groupPlayers[0] ?? roundPlayers[0];
-  const summary = getCurrentHoleSummary(groupNumber);
-  const matchupSummaryByPlayerId = Object.fromEntries(summary.matchups.map((item) => [item.playerId, item]));
   const isFinalHole = hole?.holeNumber === round.totalHoles;
   const pressAction = hole?.par === 3 ? 'Triple' : 'Double';
   const isClaimed = Boolean(group?.scorekeeperDeviceId);
@@ -242,6 +240,9 @@ export default function GroupScoringPage() {
       </main>
     );
   }
+
+  const summary = getCurrentHoleSummary(groupNumber);
+  const matchupSummaryByPlayerId = Object.fromEntries(summary.matchups.map((item) => [item.playerId, item]));
 
   return (
     <main className="mx-auto max-w-md space-y-4 px-4 py-6 pb-24">
