@@ -46,18 +46,22 @@ export default function EventLeaderboardPage() {
       cancelled = true;
     };
   }, [hydrateRound, params.roundCode, round.roundCode]);
+  const roundPlayers = Array.isArray(round.players) ? round.players : [];
+  const roundHoles = Array.isArray(round.holes) ? round.holes : [];
+  const roundGroups = Array.isArray(round.multiFoursome?.groups) ? round.multiFoursome.groups : [];
+  const roundGroupPlayers = Array.isArray(round.multiFoursome?.groupPlayers) ? round.multiFoursome.groupPlayers : [];
   const totals = getRunningTotals();
   const grossTotals = getGrossTotals();
   const skinsSummary = getSkinsSummary();
   const ctpSummary = getCtpSummary();
 
-  const fallbackGroups = Array.from({ length: Math.max(1, Math.ceil(round.players.length / 4)) }, (_, index) => ({
+  const fallbackGroups = Array.from({ length: Math.max(1, Math.ceil(roundPlayers.length / 4)) }, (_, index) => ({
     groupNumber: index + 1,
     groupName: `Group ${index + 1}`,
     currentHole: round.currentHole,
   }));
-  const groups = round.multiFoursome?.groups.length ? round.multiFoursome.groups : fallbackGroups;
-  const groupPlayers = round.multiFoursome?.groupPlayers.length ? round.multiFoursome.groupPlayers : round.players.map((player, index) => ({
+  const groups = roundGroups.length ? roundGroups : fallbackGroups;
+  const groupPlayers = roundGroupPlayers.length ? roundGroupPlayers : roundPlayers.map((player, index) => ({
     playerId: player.id,
     groupNumber: Math.floor(index / 4) + 1,
     sortOrder: index % 4,
@@ -79,9 +83,9 @@ export default function EventLeaderboardPage() {
 
   const savedByGroup = groups.map((group) => ({
     ...group,
-    saved: round.holes.filter((hole) => (hole.groupNumber ?? 1) === group.groupNumber && hole.isSaved).length,
+    saved: roundHoles.filter((hole) => (hole.groupNumber ?? 1) === group.groupNumber && hole.isSaved).length,
   }));
-  const totalSaved = round.holes.filter((hole) => hole.isSaved).length;
+  const totalSaved = roundHoles.filter((hole) => hole.isSaved).length;
   const totalPossible = groups.length * round.totalHoles;
   const eventPath = `/r/${round.roundCode}`;
 
@@ -99,7 +103,7 @@ export default function EventLeaderboardPage() {
             <p className="text-sm opacity-90">{round.courseName}</p>
             <h1 className="mt-1 text-3xl font-bold">{round.title}</h1>
             <p className="mt-2 text-sm">
-              Event leaderboard - {round.players.length} golfers - {totalSaved} of {totalPossible} group holes saved
+              Event leaderboard - {roundPlayers.length} golfers - {totalSaved} of {totalPossible} group holes saved
             </p>
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <span className="rounded-xl bg-white px-3 py-2 font-mono text-lg font-bold text-[#1f2937]">
@@ -142,7 +146,7 @@ export default function EventLeaderboardPage() {
             const names = groupPlayers
               .filter((item) => item.groupNumber === group.groupNumber)
               .sort((a, b) => a.sortOrder - b.sortOrder)
-              .map((item) => round.players.find((player) => player.id === item.playerId)?.name)
+              .map((item) => roundPlayers.find((player) => player.id === item.playerId)?.name)
               .filter(Boolean)
               .join(', ');
 

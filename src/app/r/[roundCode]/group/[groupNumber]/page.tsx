@@ -111,25 +111,40 @@ export default function GroupScoringPage() {
     };
   }, [hydrateRound, params.roundCode, round.id, round.roundCode]);
 
-  const group = round.multiFoursome?.groups.find((item) => item.groupNumber === groupNumber);
+  const roundPlayers = Array.isArray(round.players) ? round.players : [];
+  const roundHoles = Array.isArray(round.holes) ? round.holes : [];
+  const roundGroups = Array.isArray(round.multiFoursome?.groups) ? round.multiFoursome.groups : [];
+  const roundGroupPlayers = Array.isArray(round.multiFoursome?.groupPlayers) ? round.multiFoursome.groupPlayers : [];
+  const fallbackGroup = {
+    groupNumber,
+    groupName: `Group ${groupNumber}`,
+    currentHole: round.currentHole || 1,
+    scorekeeperName: null,
+    scorekeeperDeviceId: null,
+  };
+  const group = roundGroups.find((item) => item.groupNumber === groupNumber) ?? fallbackGroup;
   const groupPlayerIds =
-    round.multiFoursome?.groupPlayers
+    roundGroupPlayers
       .filter((item) => item.groupNumber === groupNumber)
       .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((item) => item.playerId) ?? round.players.map((player) => player.id);
-  const groupPlayers = groupPlayerIds
-    .map((playerId) => round.players.find((player) => player.id === playerId))
+      .map((item) => item.playerId);
+  const fallbackPlayerIds = roundPlayers
+    .slice((groupNumber - 1) * 4, groupNumber * 4)
+    .map((player) => player.id);
+  const effectiveGroupPlayerIds = groupPlayerIds.length > 0 ? groupPlayerIds : fallbackPlayerIds;
+  const groupPlayers = effectiveGroupPlayerIds
+    .map((playerId) => roundPlayers.find((player) => player.id === playerId))
     .filter((player): player is typeof round.players[number] => Boolean(player));
   const currentHoleNumber = group?.currentHole ?? round.currentHole;
   const hole =
-    round.holes.find((item) => (item.groupNumber ?? 1) === groupNumber && item.holeNumber === currentHoleNumber) ??
-    round.holes.find((item) => item.holeNumber === currentHoleNumber) ??
-    round.holes[0];
-  const banker = groupPlayers.find((player) => player.id === hole.bankerPlayerId) ?? groupPlayers[0] ?? round.players[0];
+    roundHoles.find((item) => (item.groupNumber ?? 1) === groupNumber && item.holeNumber === currentHoleNumber) ??
+    roundHoles.find((item) => item.holeNumber === currentHoleNumber) ??
+    roundHoles[0];
+  const banker = groupPlayers.find((player) => player.id === hole?.bankerPlayerId) ?? groupPlayers[0] ?? roundPlayers[0];
   const summary = getCurrentHoleSummary(groupNumber);
   const matchupSummaryByPlayerId = Object.fromEntries(summary.matchups.map((item) => [item.playerId, item]));
-  const isFinalHole = hole.holeNumber === round.totalHoles;
-  const pressAction = hole.par === 3 ? 'Triple' : 'Double';
+  const isFinalHole = hole?.holeNumber === round.totalHoles;
+  const pressAction = hole?.par === 3 ? 'Triple' : 'Double';
   const isClaimed = Boolean(group?.scorekeeperDeviceId);
   const canEdit = group ? userCanEditGroup(group) : false;
 
@@ -201,7 +216,20 @@ export default function GroupScoringPage() {
     setCopied(true);
   }
 
-  if (!group && round.multiFoursome?.groups.length) {
+  if (!hole || !banker) {
+    return (
+      <main className="mx-auto max-w-md px-4 py-8">
+        <div className="rounded-2xl border border-[#68aef7] bg-white p-4">
+          <h1 className="text-xl font-bold">Loading Round</h1>
+          <p className="mt-2 text-sm text-slate-500">
+            {loadError || `Loading round ${params.roundCode} from Supabase...`}
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  if (roundGroups.length > 0 && !roundGroups.some((item) => item.groupNumber === groupNumber)) {
     return (
       <main className="mx-auto max-w-md px-4 py-8">
         <div className="rounded-2xl border border-[#68aef7] bg-white p-4">
