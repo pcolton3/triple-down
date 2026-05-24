@@ -50,6 +50,28 @@ function NumberField({
   );
 }
 
+function formatScore(value: number | null | undefined) {
+  return value == null ? '-' : String(value);
+}
+
+function strokeSummary(item: {
+  playerName: string;
+  playerGetsStroke: boolean;
+  bankerGetsStroke: boolean;
+  playerGrossScore: number | null;
+  playerNetScore: number | null;
+  bankerGrossScore: number | null;
+  bankerNetScore: number | null;
+}) {
+  const strokeText = item.playerGetsStroke
+    ? `${item.playerName} got 1 stroke`
+    : item.bankerGetsStroke
+      ? 'Banker got 1 stroke'
+      : 'No strokes';
+
+  return `${strokeText}. ${item.playerName}: gross ${formatScore(item.playerGrossScore)}, net ${formatScore(item.playerNetScore)}. Banker: gross ${formatScore(item.bankerGrossScore)}, net ${formatScore(item.bankerNetScore)}.`;
+}
+
 export default function GroupScoringPage() {
   const router = useRouter();
   const params = useParams<{ roundCode: string; groupNumber: string }>();
@@ -467,6 +489,7 @@ export default function GroupScoringPage() {
                 Bet {formatCurrency(item.baseWager)}
                 {item.modifiers.length > 0 ? `, ${item.modifiers.join(', ')}` : ''}
               </p>
+              <p className="mt-1 text-sm text-slate-600">{strokeSummary(item)}</p>
             </div>
           ))}
         </div>
