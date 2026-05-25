@@ -81,7 +81,6 @@ export default function GroupScoringPage() {
     hydrateRound,
     setBanker,
     setPar,
-    setHoleHandicap,
     setWager,
     togglePlayerPress,
     toggleBankerPress,
@@ -230,6 +229,7 @@ export default function GroupScoringPage() {
       return;
     }
     setMessage(result.message ?? (result.ok ? `Moved to Hole ${hole.holeNumber + 1}.` : 'Unable to move to the next hole.'));
+    if (result.ok) window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   async function copyEventLink() {
@@ -382,7 +382,7 @@ export default function GroupScoringPage() {
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Hole Hcp</label>
-            <NumberField value={hole.handicapIndex} disabled={!canEdit} onChange={(value) => setHoleHandicap(value ?? 1, groupNumber)} />
+            <NumberField value={hole.handicapIndex} disabled onChange={() => undefined} />
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Banker</label>
