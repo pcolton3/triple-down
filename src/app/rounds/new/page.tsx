@@ -15,7 +15,7 @@ import type { HoleConfig } from '@/types/round';
 
 const MAX_PLAYERS = 24;
 const MIN_PLAYERS = 4;
-const PLAYER_COUNTS = Array.from({ length: MAX_PLAYERS - MIN_PLAYERS + 1 }, (_, index) => MIN_PLAYERS + index);
+const PLAYER_COUNTS = [4, 5, 8, 12, 16, 20, 24];
 
 function buildDefaultPlayers(count = 4) {
   return Array.from({ length: count }, (_, index) => ({
