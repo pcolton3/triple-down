@@ -9,6 +9,7 @@ import { generateRoundCode } from '@/lib/utils/round-code';
 import { useRoundStore } from '@/stores/round-store';
 import { getCourseDetails, getNearbyCourses, searchCourses } from '@/lib/course-search';
 import { createSharedRoundFromLocalRound } from '@/lib/realtime/shared-rounds';
+import { loadSavedGolfers, saveGolfersForLater, type SavedGolfer } from '@/lib/realtime/saved-golfers';
 import type { CourseRecord } from '@/types/course';
 import type { HoleConfig } from '@/types/round';
 
@@ -70,6 +71,8 @@ export default function NewRoundPage() {
   const [locationStatus, setLocationStatus] = useState('Getting nearby courses…');
   const [searchMode, setSearchMode] = useState<'nearby' | 'search'>('nearby');
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [savedGolfers, setSavedGolfers] = useState<SavedGolfer[]>([]);
+  const [savedGolfersStatus, setSavedGolfersStatus] = useState('');
   const [createError, setCreateError] = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
@@ -82,6 +85,31 @@ export default function NewRoundPage() {
 
   useEffect(() => {
     setRoundCode(generateRoundCode());
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadGolfers() {
+      try {
+        const golfers = await loadSavedGolfers();
+        if (!cancelled) {
+          setSavedGolfers(golfers);
+          setSavedGolfersStatus(golfers.length > 0 ? `${golfers.length} saved golfers available.` : '');
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Unable to load saved golfers.', error);
+          setSavedGolfersStatus('Saved golfers are unavailable right now.');
+        }
+      }
+    }
+
+    void loadGolfers();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -161,6 +189,23 @@ export default function NewRoundPage() {
           ? {
               ...player,
               [field]: field === 'name' ? value : Number(value) || 0,
+            }
+          : player
+      )
+    );
+  }
+
+  function selectSavedGolfer(playerId: string, savedGolferId: string) {
+    const savedGolfer = savedGolfers.find((golfer) => golfer.id === savedGolferId);
+    if (!savedGolfer) return;
+
+    setPlayers((current) =>
+      current.map((player) =>
+        player.id === playerId
+          ? {
+              ...player,
+              name: savedGolfer.name,
+              handicap: savedGolfer.handicap,
             }
           : player
       )
@@ -278,6 +323,19 @@ export default function NewRoundPage() {
       setCreateError(message);
       setIsCreating(false);
       return;
+    }
+
+    try {
+      await saveGolfersForLater(
+        players
+          .filter((player) => player.name.trim().length > 0)
+          .map((player) => ({
+            name: player.name.trim(),
+            handicap: player.handicap,
+          }))
+      );
+    } catch (error) {
+      console.error('Unable to save golfers for later.', error);
     }
 
     router.push(`/r/${finalRoundCode}/group/1`);
@@ -403,6 +461,7 @@ export default function NewRoundPage() {
             <p className="text-sm text-slate-500">
               Add 4 to 24 golfers. Groups are automatically split into foursomes or fivesomes in order.
             </p>
+            {savedGolfersStatus ? <p className="mt-2 text-xs text-slate-500">{savedGolfersStatus}</p> : null}
           </div>
 
           <div className="mb-4 grid gap-4 sm:grid-cols-2">
@@ -467,7 +526,24 @@ export default function NewRoundPage() {
                   {group.players.map((player, groupIndex) => {
                     const absoluteIndex = (group.groupNumber - 1) * groupSize + groupIndex;
                     return (
-                      <div key={player.id} className="grid grid-cols-[1fr_100px] gap-3 rounded-xl bg-slate-50 p-3">
+                      <div key={player.id} className="grid gap-3 rounded-xl bg-slate-50 p-3 sm:grid-cols-[1fr_1fr_100px]">
+                        <div>
+                          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Saved Golfer
+                          </label>
+                          <select
+                            className="w-full rounded-xl border border-slate-300 px-3 py-3"
+                            value=""
+                            onChange={(event) => selectSavedGolfer(player.id, event.target.value)}
+                          >
+                            <option value="">Select golfer</option>
+                            {savedGolfers.map((golfer) => (
+                              <option key={golfer.id} value={golfer.id}>
+                                {golfer.name} ({golfer.handicap})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                         <div>
                           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                             Name

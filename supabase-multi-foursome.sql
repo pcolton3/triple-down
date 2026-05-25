@@ -108,3 +108,52 @@ begin
       with check (true);
   end if;
 end $$;
+
+create table if not exists public.saved_golfers (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  normalized_name text not null,
+  handicap numeric not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (normalized_name)
+);
+
+alter table public.saved_golfers enable row level security;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'saved_golfers'
+      and policyname = 'saved_golfers_public_read'
+  ) then
+    create policy saved_golfers_public_read
+      on public.saved_golfers for select
+      using (true);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'saved_golfers'
+      and policyname = 'saved_golfers_public_insert'
+  ) then
+    create policy saved_golfers_public_insert
+      on public.saved_golfers for insert
+      with check (true);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'saved_golfers'
+      and policyname = 'saved_golfers_public_update'
+  ) then
+    create policy saved_golfers_public_update
+      on public.saved_golfers for update
+      using (true)
+      with check (true);
+  end if;
+end $$;
