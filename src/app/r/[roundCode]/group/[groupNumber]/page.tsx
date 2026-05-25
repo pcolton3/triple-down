@@ -223,13 +223,13 @@ export default function GroupScoringPage() {
   async function handleNext() {
     if (!canEdit) return;
     const result = nextHole(groupNumber);
+    if (result.ok && !isFinalHole) window.scrollTo({ top: 0, behavior: 'smooth' });
     if (result.ok) await persistRound();
     if (result.ok && isFinalHole) {
       router.push(`/r/${round.roundCode}`);
       return;
     }
     setMessage(result.message ?? (result.ok ? `Moved to Hole ${hole.holeNumber + 1}.` : 'Unable to move to the next hole.'));
-    if (result.ok) window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   async function copyEventLink() {

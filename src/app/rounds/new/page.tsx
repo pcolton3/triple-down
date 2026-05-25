@@ -484,30 +484,19 @@ export default function NewRoundPage() {
             {savedGolfersStatus ? <p className="mt-2 text-xs text-slate-500">{savedGolfersStatus}</p> : null}
           </div>
 
-          <div className="mb-4 grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-sm font-medium">Number of Golfers</label>
-              <select
-                className="w-full rounded-xl border border-slate-300 px-3 py-3"
-                value={playerCount}
-                onChange={(event) => updatePlayerCount(Number(event.target.value))}
-              >
-                {PLAYER_COUNTS.map((count) => (
-                  <option key={count} value={count}>
-                    {count}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Group Setup</label>
-              <div className="rounded-xl border border-slate-300 bg-slate-50 px-3 py-3 text-slate-700">
-                {effectiveGroupSize === 5 ? 'One fivesome' : 'Foursome slots'}
-              </div>
-              <p className="mt-2 text-xs text-slate-500">
-                Exactly 5 golfers creates one fivesome. Larger events use foursome slots; leave rows blank for 3-player groups.
-              </p>
-            </div>
+          <div className="mb-4 max-w-xs">
+            <label className="mb-1 block text-sm font-medium">Number of Golfers</label>
+            <select
+              className="w-full rounded-xl border border-slate-300 px-3 py-3"
+              value={playerCount}
+              onChange={(event) => updatePlayerCount(Number(event.target.value))}
+            >
+              {PLAYER_COUNTS.map((count) => (
+                <option key={count} value={count}>
+                  {count}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="mb-4">
