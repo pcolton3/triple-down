@@ -62,17 +62,18 @@ export default function EventLeaderboardPage() {
 
   useEffect(() => {
     let cancelled = false;
+    let refreshTimer: number | null = null;
 
-    async function loadRound() {
+    async function loadRound(showLoading = false) {
       const requestedCode = params.roundCode?.toUpperCase();
-      if (!requestedCode || round.roundCode === requestedCode) return;
+      if (!requestedCode) return;
 
-      setLoadStatus('loading');
+      if (showLoading) setLoadStatus('loading');
       const bundle = await loadSharedRoundByCode(requestedCode);
       if (cancelled) return;
 
       if (!bundle) {
-        setLoadStatus('not_found');
+        if (showLoading) setLoadStatus('not_found');
         return;
       }
 
@@ -80,12 +81,16 @@ export default function EventLeaderboardPage() {
       setLoadStatus('ready');
     }
 
-    void loadRound();
+    void loadRound(true);
+    refreshTimer = window.setInterval(() => {
+      void loadRound(false);
+    }, 5000);
 
     return () => {
       cancelled = true;
+      if (refreshTimer) window.clearInterval(refreshTimer);
     };
-  }, [hydrateRound, params.roundCode, round.roundCode]);
+  }, [hydrateRound, params.roundCode]);
   const roundPlayers = Array.isArray(round.players) ? round.players : [];
   const roundHoles = Array.isArray(round.holes) ? round.holes : [];
   const roundGroups = Array.isArray(round.multiFoursome?.groups) ? round.multiFoursome.groups : [];

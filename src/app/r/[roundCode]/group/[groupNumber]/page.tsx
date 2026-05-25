@@ -360,6 +360,18 @@ export default function GroupScoringPage() {
       </section>
 
       <section className="rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
+        <div className="mb-3 rounded-xl bg-slate-50 px-3 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Current Hole</p>
+              <p className="mt-1 text-xl font-bold">Hole {hole.holeNumber} of {round.totalHoles}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Hole Hcp</p>
+              <p className="mt-1 text-xl font-bold">{hole.handicapIndex}</p>
+            </div>
+          </div>
+        </div>
         <div className="mb-3 grid grid-cols-3 gap-3">
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Par</label>
