@@ -59,7 +59,6 @@ export default function NewRoundPage() {
   const [lowNetPot, setLowNetPot] = useState(0);
   const [ctpPot, setCtpPot] = useState(0);
   const [playerCount, setPlayerCount] = useState(4);
-  const [groupSize, setGroupSize] = useState<4 | 5>(4);
   const [players, setPlayers] = useState(buildDefaultPlayers(4));
   const [firstBankerPlayerId, setFirstBankerPlayerId] = useState('p1');
   const [courseQuery, setCourseQuery] = useState('');
@@ -75,7 +74,7 @@ export default function NewRoundPage() {
   const [savedGolfersStatus, setSavedGolfersStatus] = useState('');
   const [createError, setCreateError] = useState('');
   const [isCreating, setIsCreating] = useState(false);
-  const effectiveGroupSize: 4 | 5 = groupSize === 5 && players.length === 5 ? 5 : 4;
+  const effectiveGroupSize: 4 | 5 = players.length === 5 ? 5 : 4;
 
   const groups = useMemo(() => {
     return Array.from({ length: Math.ceil(players.length / effectiveGroupSize) }, (_, groupIndex) => ({
@@ -501,26 +500,13 @@ export default function NewRoundPage() {
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">Group Type</label>
-              <div className="grid grid-cols-2 gap-2">
-                {[4, 5].map((size) => (
-                  <button
-                    key={size}
-                    type="button"
-                    className={`rounded-xl border px-3 py-3 font-semibold ${
-                      groupSize === size
-                        ? 'border-[#2f8df3] bg-[#2f8df3] text-white'
-                        : 'border-slate-300 bg-white text-slate-700'
-                    }`}
-                    onClick={() => setGroupSize(size as 4 | 5)}
-                  >
-                    {size === 4 ? 'Foursomes' : 'Fivesomes'}
-                  </button>
-                ))}
+              <label className="mb-1 block text-sm font-medium">Group Setup</label>
+              <div className="rounded-xl border border-slate-300 bg-slate-50 px-3 py-3 text-slate-700">
+                {effectiveGroupSize === 5 ? 'One fivesome' : 'Foursome slots'}
               </div>
-              {groupSize === 5 && players.length !== 5 ? (
-                <p className="mt-2 text-xs text-slate-500">Fivesome applies only when exactly 5 golfers are selected. This event will be grouped as foursomes.</p>
-              ) : null}
+              <p className="mt-2 text-xs text-slate-500">
+                Exactly 5 golfers creates one fivesome. Larger events use foursome slots; leave rows blank for 3-player groups.
+              </p>
             </div>
           </div>
 
