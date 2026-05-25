@@ -75,13 +75,14 @@ export default function NewRoundPage() {
   const [savedGolfersStatus, setSavedGolfersStatus] = useState('');
   const [createError, setCreateError] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const effectiveGroupSize: 4 | 5 = groupSize === 5 && players.length === 5 ? 5 : 4;
 
   const groups = useMemo(() => {
-    return Array.from({ length: Math.ceil(players.length / groupSize) }, (_, groupIndex) => ({
+    return Array.from({ length: Math.ceil(players.length / effectiveGroupSize) }, (_, groupIndex) => ({
       groupNumber: groupIndex + 1,
-      players: players.slice(groupIndex * groupSize, groupIndex * groupSize + groupSize),
+      players: players.slice(groupIndex * effectiveGroupSize, groupIndex * effectiveGroupSize + effectiveGroupSize),
     }));
-  }, [groupSize, players]);
+  }, [effectiveGroupSize, players]);
 
   useEffect(() => {
     setRoundCode(generateRoundCode());
@@ -290,10 +291,29 @@ export default function NewRoundPage() {
     setCreateError('');
     setIsCreating(true);
 
-    const sanitizedPlayers = players.map((player, index) => ({
+    const filledPlayers = players.filter((player) => player.name.trim().length > 0);
+    if (filledPlayers.length < MIN_PLAYERS) {
+      setCreateError('Enter at least 4 golfer names before creating the round.');
+      setIsCreating(false);
+      return;
+    }
+
+    const sanitizedPlayers = filledPlayers.map((player) => ({
       ...player,
-      name: player.name.trim() || `Player ${index + 1}`,
+      name: player.name.trim(),
     }));
+    const playerIds = new Set(sanitizedPlayers.map((player) => player.id));
+    const groupPlayers = groups.flatMap((group) =>
+      group.players
+        .filter((player) => playerIds.has(player.id))
+        .map((player, sortOrder) => ({
+          playerId: player.id,
+          groupNumber: group.groupNumber,
+          sortOrder,
+        }))
+    );
+    const firstFilledPlayerId = sanitizedPlayers[0]?.id ?? firstBankerPlayerId;
+    const openingBankerId = playerIds.has(firstBankerPlayerId) ? firstBankerPlayerId : firstFilledPlayerId;
 
     const finalRoundCode = roundCode || generateRoundCode();
 
@@ -309,8 +329,9 @@ export default function NewRoundPage() {
         ctpPot: Number.isFinite(ctpPot) ? Math.max(0, ctpPot) : 0,
       },
       players: sanitizedPlayers,
-      firstBankerPlayerId,
-      groupSize,
+      firstBankerPlayerId: openingBankerId,
+      groupSize: effectiveGroupSize,
+      groupPlayers,
       totalHoles: 18,
       holesConfig: manualHoles,
     });
@@ -459,7 +480,7 @@ export default function NewRoundPage() {
           <div className="mb-4">
             <h2 className="text-xl font-bold">Golfers and Foursomes</h2>
             <p className="text-sm text-slate-500">
-              Add 4 to 24 golfers. Groups are automatically split into foursomes or fivesomes in order.
+              Pick the number of setup slots you need. Blank golfer rows are ignored, so 8 slots can become 4/3, 3/3, or 4/4.
             </p>
             {savedGolfersStatus ? <p className="mt-2 text-xs text-slate-500">{savedGolfersStatus}</p> : null}
           </div>
@@ -497,6 +518,9 @@ export default function NewRoundPage() {
                   </button>
                 ))}
               </div>
+              {groupSize === 5 && players.length !== 5 ? (
+                <p className="mt-2 text-xs text-slate-500">Fivesome applies only when exactly 5 golfers are selected. This event will be grouped as foursomes.</p>
+              ) : null}
             </div>
           </div>
 
@@ -524,7 +548,7 @@ export default function NewRoundPage() {
                 <h3 className="mb-3 font-bold">Group {group.groupNumber}</h3>
                 <div className="space-y-3">
                   {group.players.map((player, groupIndex) => {
-                    const absoluteIndex = (group.groupNumber - 1) * groupSize + groupIndex;
+                    const absoluteIndex = (group.groupNumber - 1) * effectiveGroupSize + groupIndex;
                     return (
                       <div key={player.id} className="grid gap-3 rounded-xl bg-slate-50 p-3 sm:grid-cols-[1fr_1fr_100px]">
                         <div>

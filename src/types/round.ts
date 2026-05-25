@@ -60,6 +60,7 @@ export type CreateRoundInput = {
   players: Player[];
   firstBankerPlayerId: string;
   groupSize?: 4 | 5;
+  groupPlayers?: import('@/types/groups').RoundGroupPlayer[];
   totalHoles?: number;
   holesConfig?: HoleConfig[];
   gameSettings?: Partial<RoundGameSettings>;

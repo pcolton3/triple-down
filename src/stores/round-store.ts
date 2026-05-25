@@ -911,7 +911,25 @@ export const useRoundStore = create<RoundStore>()(
         set(() => {
           const totalHoles = input.totalHoles ?? 18;
           const groupSize = input.groupSize ?? 4;
-          const multiFoursome = buildGroupsForPlayers(input.players, groupSize);
+          const builtGroups = buildGroupsForPlayers(input.players, groupSize);
+          const assignedGroupNumbers = Array.from(
+            new Set((input.groupPlayers ?? builtGroups.groupPlayers).map((assignment) => assignment.groupNumber))
+          ).sort((a, b) => a - b);
+          const multiFoursome = {
+            groupSize,
+            groups: assignedGroupNumbers.map(
+              (groupNumber) =>
+                builtGroups.groups.find((group) => group.groupNumber === groupNumber) ?? {
+                  groupNumber,
+                  groupName: `Group ${groupNumber}`,
+                  teeTime: null,
+                  scorekeeperName: null,
+                  scorekeeperDeviceId: null,
+                  currentHole: 1,
+                }
+            ),
+            groupPlayers: input.groupPlayers ?? builtGroups.groupPlayers,
+          };
           const groupedHoles = multiFoursome.groups.flatMap((group) => {
             const groupPlayerIds = multiFoursome.groupPlayers
               .filter((item) => item.groupNumber === group.groupNumber)
