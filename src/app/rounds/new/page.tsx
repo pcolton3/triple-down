@@ -52,7 +52,7 @@ export default function NewRoundPage() {
   const router = useRouter();
   const createRound = useRoundStore((state) => state.createRound);
   const [roundCode, setRoundCode] = useState('');
-  const [title, setTitle] = useState('Saturday Group');
+  const [title, setTitle] = useState('Triples R Us');
   const [courseName, setCourseName] = useState('');
   const [defaultBet, setDefaultBet] = useState(5);
   const [skinsPot, setSkinsPot] = useState(0);
