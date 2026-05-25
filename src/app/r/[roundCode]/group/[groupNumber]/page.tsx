@@ -80,7 +80,6 @@ export default function GroupScoringPage() {
     round,
     hydrateRound,
     setBanker,
-    setPar,
     setWager,
     togglePlayerPress,
     toggleBankerPress,
@@ -361,29 +360,22 @@ export default function GroupScoringPage() {
 
       <section className="rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
         <div className="mb-3 rounded-xl bg-slate-50 px-3 py-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Current Hole</p>
-            <p className="mt-1 text-xl font-bold">Hole {hole.holeNumber} of {round.totalHoles}</p>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Current Hole</p>
+              <p className="mt-1 text-xl font-bold">Hole {hole.holeNumber} of {round.totalHoles}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Par</p>
+              <p className="mt-1 text-xl font-bold">{hole.par}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Hcp</p>
+              <p className="mt-1 text-xl font-bold">{hole.handicapIndex}</p>
+            </div>
           </div>
         </div>
-        <div className="mb-3 grid grid-cols-3 gap-3">
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Par</label>
-            <select
-              className="w-full rounded-xl border border-slate-300 px-3 py-3 font-semibold"
-              value={hole.par}
-              disabled={!canEdit}
-              onChange={(event) => setPar(Number(event.target.value) as 3 | 4 | 5, groupNumber)}
-            >
-              <option value={3}>3</option>
-              <option value={4}>4</option>
-              <option value={5}>5</option>
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Hole Hcp</label>
-            <NumberField value={hole.handicapIndex} disabled onChange={() => undefined} />
-          </div>
+        <div className="mb-3">
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Banker</label>
             <select
