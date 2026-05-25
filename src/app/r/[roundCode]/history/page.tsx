@@ -132,6 +132,12 @@ export default function HistoryPage() {
                   </p>
                 </div>
                 <div className="text-right text-sm text-slate-500">
+                  <Link
+                    className="mb-2 inline-block rounded-xl border border-[#2f8df3] px-3 py-2 text-sm font-semibold text-[#2f8df3]"
+                    href={`/r/${round.roundCode}/group/${hole.groupNumber}?hole=${hole.holeNumber}`}
+                  >
+                    Edit
+                  </Link>
                   <div>Banker gross: {hole.bankerGrossScore ?? '-'}</div>
                   <div>Banker hcp: {hole.bankerHandicap}</div>
                   <div>{hole.bankerPressed ? `Banker ${hole.pressLabel}` : `No Banker ${hole.pressLabel.toLowerCase()}`}</div>

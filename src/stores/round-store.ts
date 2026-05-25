@@ -111,20 +111,20 @@ type RoundStore = {
   hydrateRound: (round: RoundState) => void;
   simulateFullEvent: () => void;
   resetRound: () => void;
-  setBanker: (playerId: string, groupNumber?: number) => void;
-  setPar: (par: 3 | 4 | 5, groupNumber?: number) => void;
-  setHoleHandicap: (handicapIndex: number, groupNumber?: number) => void;
-  setWager: (playerId: string, amount: number, groupNumber?: number) => void;
-  togglePlayerPress: (playerId: string, groupNumber?: number) => void;
-  toggleBankerPress: (groupNumber?: number) => void;
-  setPlayerGrossScore: (playerId: string, score: number | null, groupNumber?: number) => void;
-  setBankerGrossScore: (score: number | null, groupNumber?: number) => void;
-  updateHole: (groupNumber?: number) => { ok: boolean; message?: string };
+  setBanker: (playerId: string, groupNumber?: number, holeNumber?: number) => void;
+  setPar: (par: 3 | 4 | 5, groupNumber?: number, holeNumber?: number) => void;
+  setHoleHandicap: (handicapIndex: number, groupNumber?: number, holeNumber?: number) => void;
+  setWager: (playerId: string, amount: number, groupNumber?: number, holeNumber?: number) => void;
+  togglePlayerPress: (playerId: string, groupNumber?: number, holeNumber?: number) => void;
+  toggleBankerPress: (groupNumber?: number, holeNumber?: number) => void;
+  setPlayerGrossScore: (playerId: string, score: number | null, groupNumber?: number, holeNumber?: number) => void;
+  setBankerGrossScore: (score: number | null, groupNumber?: number, holeNumber?: number) => void;
+  updateHole: (groupNumber?: number, holeNumber?: number) => { ok: boolean; message?: string };
   nextHole: (groupNumber?: number) => { ok: boolean; message?: string };
   getRunningTotals: () => Array<{ playerId: string; name: string; amount: number }>;
   getGroupBankerTotals: (groupNumber?: number) => Array<{ playerId: string; name: string; amount: number }>;
   getHoleHistory: () => HoleHistoryItem[];
-  getCurrentHoleSummary: (groupNumber?: number) => CurrentHoleSummary;
+  getCurrentHoleSummary: (groupNumber?: number, holeNumber?: number) => CurrentHoleSummary;
   getSettleUp: () => SettleUpItem[];
   setCtpWinner: (holeNumber: number, playerId: string | null, groupNumber?: number) => void;
   getGrossTotals: () => GrossTotalItem[];
@@ -281,12 +281,19 @@ function ensureMultiFoursomeRound(round: RoundState): RoundState {
   };
 }
 
-function updateGroupHole(round: RoundState, groupNumber: number, updater: (hole: HoleState) => HoleState) {
-  const currentHole = activeHole(round, groupNumber);
+function getGroupHole(round: RoundState, groupNumber: number, holeNumber?: number) {
+  return holeNumber == null
+    ? activeHole(round, groupNumber)
+    : round.holes.find((hole) => (hole.groupNumber ?? 1) === groupNumber && hole.holeNumber === holeNumber) ??
+        activeHole(round, groupNumber);
+}
+
+function updateGroupHole(round: RoundState, groupNumber: number, updater: (hole: HoleState) => HoleState, holeNumber?: number) {
+  const targetHole = getGroupHole(round, groupNumber, holeNumber);
   return {
     ...round,
     holes: round.holes.map((hole) =>
-      (hole.groupNumber ?? 1) === groupNumber && hole.holeNumber === currentHole.holeNumber ? updater(hole) : hole
+      (hole.groupNumber ?? 1) === groupNumber && hole.holeNumber === targetHole.holeNumber ? updater(hole) : hole
     ),
   };
 }
@@ -985,10 +992,13 @@ export const useRoundStore = create<RoundStore>()(
 
       resetRound: () => set({ round: createDefaultRound(), ledger: [] }),
 
-      setBanker: (playerId, groupNumber = 1) =>
+      setBanker: (playerId, groupNumber = 1, holeNumber) =>
         set((state) => {
-          const round = updateGroupHole(state.round, groupNumber, (hole) =>
-            createHole(
+          const round = updateGroupHole(
+            state.round,
+            groupNumber,
+            (hole) =>
+              createHole(
                 groupNumber,
                 hole.holeNumber,
                 hole.par,
@@ -996,85 +1006,86 @@ export const useRoundStore = create<RoundStore>()(
                 playerId,
                 getGroupPlayerIds(state.round, groupNumber),
                 state.round.defaultBet
-              )
+              ),
+            holeNumber
           );
           return { round, ledger: recalcLedger(round) };
         }),
 
-      setPar: (par, groupNumber = 1) =>
+      setPar: (par, groupNumber = 1, holeNumber) =>
         set((state) => {
-          const currentHole = activeHole(state.round, groupNumber).holeNumber;
+          const currentHole = getGroupHole(state.round, groupNumber, holeNumber).holeNumber;
           const round = {
             ...state.round,
             holes: state.round.holes.map((hole) =>
-              hole.holeNumber === currentHole ? { ...hole, par } : hole
+              (hole.groupNumber ?? 1) === groupNumber && hole.holeNumber === currentHole ? { ...hole, par } : hole
             ),
           };
           return { round, ledger: recalcLedger(round) };
         }),
 
-      setHoleHandicap: (handicapIndex, groupNumber = 1) =>
+      setHoleHandicap: (handicapIndex, groupNumber = 1, holeNumber) =>
         set((state) => {
           const normalized = Math.min(18, Math.max(1, Math.floor(handicapIndex || 1)));
-          const currentHole = activeHole(state.round, groupNumber).holeNumber;
+          const currentHole = getGroupHole(state.round, groupNumber, holeNumber).holeNumber;
           const round = {
             ...state.round,
             holes: state.round.holes.map((hole) =>
-              hole.holeNumber === currentHole ? { ...hole, handicapIndex: normalized } : hole
+              (hole.groupNumber ?? 1) === groupNumber && hole.holeNumber === currentHole ? { ...hole, handicapIndex: normalized } : hole
             ),
           };
           return { round, ledger: recalcLedger(round) };
         }),
 
-      setWager: (playerId, amount, groupNumber = 1) =>
+      setWager: (playerId, amount, groupNumber = 1, holeNumber) =>
         set((state) => {
           const round = updateGroupHole(state.round, groupNumber, (hole) => ({
                     ...hole,
                     matchups: hole.matchups.map((m) =>
                       m.playerId === playerId ? { ...m, baseWager: Number.isFinite(amount) ? Math.max(0, amount) : 0 } : m
                     ),
-                  }));
+                  }), holeNumber);
           return { round, ledger: recalcLedger(round) };
         }),
 
-      togglePlayerPress: (playerId, groupNumber = 1) =>
+      togglePlayerPress: (playerId, groupNumber = 1, holeNumber) =>
         set((state) => {
           const round = updateGroupHole(state.round, groupNumber, (hole) => ({
                     ...hole,
                     matchups: hole.matchups.map((m) => (m.playerId === playerId ? { ...m, pressed: !m.pressed } : m)),
-                  }));
+                  }), holeNumber);
           return { round, ledger: recalcLedger(round) };
         }),
 
-      toggleBankerPress: (groupNumber = 1) =>
+      toggleBankerPress: (groupNumber = 1, holeNumber) =>
         set((state) => {
-          const round = updateGroupHole(state.round, groupNumber, (hole) => ({ ...hole, bankerPressed: !hole.bankerPressed }));
+          const round = updateGroupHole(state.round, groupNumber, (hole) => ({ ...hole, bankerPressed: !hole.bankerPressed }), holeNumber);
           return { round, ledger: recalcLedger(round) };
         }),
 
-      setPlayerGrossScore: (playerId, score, groupNumber = 1) =>
+      setPlayerGrossScore: (playerId, score, groupNumber = 1, holeNumber) =>
         set((state) => {
           const round = updateGroupHole(state.round, groupNumber, (hole) => ({
             ...hole,
             matchups: hole.matchups.map((m) => (m.playerId === playerId ? { ...m, grossScore: score } : m)),
-          }));
+          }), holeNumber);
           return { round, ledger: recalcLedger(round) };
         }),
 
-      setBankerGrossScore: (score, groupNumber = 1) =>
+      setBankerGrossScore: (score, groupNumber = 1, holeNumber) =>
         set((state) => {
-          const round = updateGroupHole(state.round, groupNumber, (hole) => ({ ...hole, bankerGrossScore: score }));
+          const round = updateGroupHole(state.round, groupNumber, (hole) => ({ ...hole, bankerGrossScore: score }), holeNumber);
           return { round, ledger: recalcLedger(round) };
         }),
 
-      updateHole: (groupNumber = 1) => {
+      updateHole: (groupNumber = 1, holeNumber) => {
         const { round } = get();
-        const hole = activeHole(round, groupNumber);
+        const hole = getGroupHole(round, groupNumber, holeNumber);
         if (hole.bankerGrossScore == null || hole.matchups.some((matchup) => matchup.grossScore == null)) {
           return { ok: false, message: 'Enter all gross scores before updating the hole.' };
         }
 
-        const nextRound = updateGroupHole(round, groupNumber, (item) => ({ ...item, isSaved: true }));
+        const nextRound = updateGroupHole(round, groupNumber, (item) => ({ ...item, isSaved: true }), holeNumber);
         set({ round: nextRound, ledger: recalcLedger(nextRound) });
         return { ok: true, message: `Group ${groupNumber} hole ${hole.holeNumber} updated.` };
       },
@@ -1142,9 +1153,9 @@ export const useRoundStore = create<RoundStore>()(
           }));
       },
 
-      getCurrentHoleSummary: (groupNumber = 1) => {
+      getCurrentHoleSummary: (groupNumber = 1, holeNumber) => {
         const { round } = get();
-        return buildCurrentHoleSummary(round, activeHole(round, groupNumber));
+        return buildCurrentHoleSummary(round, getGroupHole(round, groupNumber, holeNumber));
       },
 
       getSettleUp: () => {

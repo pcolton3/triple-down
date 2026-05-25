@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/shared/button';
 import { useRoundStore } from '@/stores/round-store';
@@ -75,7 +75,14 @@ function strokeSummary(item: {
 export default function GroupScoringPage() {
   const router = useRouter();
   const params = useParams<{ roundCode: string; groupNumber: string }>();
+  const searchParams = useSearchParams();
   const groupNumber = Math.max(1, Number(params.groupNumber) || 1);
+  const requestedHoleNumber = Number(searchParams.get('hole'));
+  const editHoleNumber =
+    Number.isInteger(requestedHoleNumber) && requestedHoleNumber >= 1 && requestedHoleNumber <= 18
+      ? requestedHoleNumber
+      : null;
+  const isEditingPastHole = editHoleNumber != null;
   const {
     round,
     hydrateRound,
@@ -159,9 +166,10 @@ export default function GroupScoringPage() {
     .map((playerId) => roundPlayers.find((player) => player.id === playerId))
     .filter((player): player is typeof round.players[number] => Boolean(player));
   const currentHoleNumber = group?.currentHole ?? round.currentHole;
+  const targetHoleNumber = editHoleNumber ?? currentHoleNumber;
   const hole =
-    roundHoles.find((item) => (item.groupNumber ?? 1) === groupNumber && item.holeNumber === currentHoleNumber) ??
-    roundHoles.find((item) => item.holeNumber === currentHoleNumber) ??
+    roundHoles.find((item) => (item.groupNumber ?? 1) === groupNumber && item.holeNumber === targetHoleNumber) ??
+    roundHoles.find((item) => item.holeNumber === targetHoleNumber) ??
     roundHoles[0];
   const banker = groupPlayers.find((player) => player.id === hole?.bankerPlayerId) ?? groupPlayers[0] ?? roundPlayers[0];
   const isFinalHole = hole?.holeNumber === round.totalHoles;
@@ -215,9 +223,16 @@ export default function GroupScoringPage() {
 
   async function handleUpdate() {
     if (!canEdit) return;
-    const result = updateHole(groupNumber);
+    const result = updateHole(groupNumber, targetHoleNumber);
     if (result.ok) await persistRound();
-    setMessage(result.message ?? (result.ok ? `Hole ${hole.holeNumber} updated.` : 'Unable to update this hole.'));
+    setMessage(
+      result.message ??
+        (result.ok
+          ? isEditingPastHole
+            ? `Group ${groupNumber} hole ${hole.holeNumber} correction saved.`
+            : `Hole ${hole.holeNumber} updated.`
+          : 'Unable to update this hole.')
+    );
   }
 
   async function handleNext() {
@@ -277,7 +292,7 @@ export default function GroupScoringPage() {
     );
   }
 
-  const summary = getCurrentHoleSummary(groupNumber);
+  const summary = getCurrentHoleSummary(groupNumber, targetHoleNumber);
   const matchupSummaryByPlayerId = Object.fromEntries(summary.matchups.map((item) => [item.playerId, item]));
   const bankerRunningTotals = getGroupBankerTotals(groupNumber).sort((a, b) => b.amount - a.amount);
   const bankerHasPop = summary.bankerGetsStrokeFromNames.length > 0;
@@ -305,7 +320,7 @@ export default function GroupScoringPage() {
             <p className="text-sm opacity-90">{round.courseName}</p>
             <h1 className="mt-1 text-2xl font-bold">Group {groupNumber}</h1>
             <p className="mt-2 text-sm">
-              Hole {hole.holeNumber} of {round.totalHoles} - {round.title}
+              {isEditingPastHole ? `Editing Hole ${hole.holeNumber}` : `Hole ${hole.holeNumber} of ${round.totalHoles}`} - {round.title}
             </p>
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <span className="rounded-xl bg-white px-3 py-2 font-mono text-lg font-bold text-[#1f2937]">
@@ -330,10 +345,12 @@ export default function GroupScoringPage() {
       <section className="rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-bold">Scorekeeper</h2>
+          <h2 className="text-lg font-bold">Scorekeeper</h2>
             <p className="mt-1 text-sm text-slate-500">
               {canEdit
-                ? 'This device can edit scores for this group.'
+                ? isEditingPastHole
+                  ? 'This device can edit this saved hole for this group.'
+                  : 'This device can edit scores for this group.'
                 : isClaimed
                   ? `${group?.scorekeeperName ?? 'Another scorekeeper'} is scoring this group. You can still view live scores.`
                   : 'Anyone can view. The first person to claim this group can edit scores.'}
@@ -383,7 +400,7 @@ export default function GroupScoringPage() {
               className="w-full rounded-xl border border-slate-300 px-3 py-3 font-semibold"
               value={hole.bankerPlayerId}
               disabled={!canEdit}
-              onChange={(event) => setBanker(event.target.value, groupNumber)}
+              onChange={(event) => setBanker(event.target.value, groupNumber, targetHoleNumber)}
             >
               {groupPlayers.map((player) => (
                 <option key={player.id} value={player.id}>
@@ -410,11 +427,11 @@ export default function GroupScoringPage() {
               </p>
             ) : null}
           </div>
-          <Button variant="secondary" disabled={!canEdit} onClick={() => toggleBankerPress(groupNumber)}>
+          <Button variant="secondary" disabled={!canEdit} onClick={() => toggleBankerPress(groupNumber, targetHoleNumber)}>
             {hole.bankerPressed ? `Undo Banker ${pressAction}` : `Banker ${pressAction}`}
           </Button>
         </div>
-        <NumberField value={hole.bankerGrossScore} disabled={!canEdit} onChange={(value) => setBankerGrossScore(value, groupNumber)} placeholder="Gross" blankWhenZero />
+        <NumberField value={hole.bankerGrossScore} disabled={!canEdit} onChange={(value) => setBankerGrossScore(value, groupNumber, targetHoleNumber)} placeholder="Gross" blankWhenZero />
       </section>
 
       {hole.par === 3 ? (
@@ -450,18 +467,18 @@ export default function GroupScoringPage() {
                   </h3>
                   <p className="text-sm text-slate-500">vs {banker.name}</p>
                 </div>
-                <Button variant="secondary" disabled={!canEdit} onClick={() => togglePlayerPress(player.id, groupNumber)}>
+                <Button variant="secondary" disabled={!canEdit} onClick={() => togglePlayerPress(player.id, groupNumber, targetHoleNumber)}>
                   {matchup.pressed ? `Undo ${pressAction}` : pressAction}
                 </Button>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Bet</label>
-                  <NumberField value={matchup.baseWager} disabled={!canEdit} onChange={(value) => setWager(player.id, value ?? 0, groupNumber)} placeholder="Bet" blankWhenZero />
+                  <NumberField value={matchup.baseWager} disabled={!canEdit} onChange={(value) => setWager(player.id, value ?? 0, groupNumber, targetHoleNumber)} placeholder="Bet" blankWhenZero />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Gross</label>
-                  <NumberField value={matchup.grossScore} disabled={!canEdit} onChange={(value) => setPlayerGrossScore(player.id, value, groupNumber)} placeholder="Gross" blankWhenZero />
+                  <NumberField value={matchup.grossScore} disabled={!canEdit} onChange={(value) => setPlayerGrossScore(player.id, value, groupNumber, targetHoleNumber)} placeholder="Gross" blankWhenZero />
                 </div>
               </div>
               <p className="mt-3 text-sm text-slate-500">
@@ -516,11 +533,17 @@ export default function GroupScoringPage() {
 
       <div className="flex gap-3">
         <Button className="flex-1" variant="secondary" disabled={!canEdit} onClick={() => void handleUpdate()}>
-          Update
+          {isEditingPastHole ? 'Save Correction' : 'Update'}
         </Button>
-        <Button className="flex-1" disabled={!canEdit} onClick={() => void handleNext()}>
-          {isFinalHole ? 'Finish Group' : 'Next'}
-        </Button>
+        {isEditingPastHole ? (
+          <Link className="flex-1 rounded-xl border border-[#2f8df3] px-4 py-3 text-center font-semibold text-[#2f8df3]" href={`/r/${round.roundCode}/history`}>
+            Back to History
+          </Link>
+        ) : (
+          <Button className="flex-1" disabled={!canEdit} onClick={() => void handleNext()}>
+            {isFinalHole ? 'Finish Group' : 'Next'}
+          </Button>
+        )}
       </div>
     </main>
   );
