@@ -1,7 +1,7 @@
 import type { Player } from '@/types/round';
 import type { GroupedPlayer, RoundGroup, RoundGroupPlayer } from '@/types/groups';
 
-export function buildGroupsForPlayers(players: Player[], groupSize = 4) {
+export function buildGroupsForPlayers(players: Player[], groupSize: 4 | 5 = 4) {
   const groups: RoundGroup[] = [];
   const groupPlayers: RoundGroupPlayer[] = [];
 
@@ -27,17 +27,17 @@ export function buildGroupsForPlayers(players: Player[], groupSize = 4) {
     });
   });
 
-  return { groups, groupPlayers };
+  return { groupSize, groups, groupPlayers };
 }
 
-export function assignPlayersToGroups(players: Player[], groupPlayers: RoundGroupPlayer[]): GroupedPlayer[] {
+export function assignPlayersToGroups(players: Player[], groupPlayers: RoundGroupPlayer[], groupSize: 4 | 5 = 4): GroupedPlayer[] {
   return players.map((player, index) => {
     const assignment = groupPlayers.find((item) => item.playerId === player.id);
 
     return {
       ...player,
-      groupNumber: assignment?.groupNumber ?? Math.floor(index / 4) + 1,
-      sortOrder: assignment?.sortOrder ?? index % 4,
+      groupNumber: assignment?.groupNumber ?? Math.floor(index / groupSize) + 1,
+      sortOrder: assignment?.sortOrder ?? index % groupSize,
     };
   });
 }
@@ -52,7 +52,7 @@ export function getUniqueGroupNumbers(players: GroupedPlayer[]) {
   return Array.from(new Set(players.map((player) => player.groupNumber))).sort((a, b) => a - b);
 }
 
-export function isValidGroupSize(players: GroupedPlayer[], groupNumber: number) {
+export function isValidGroupSize(players: GroupedPlayer[], groupNumber: number, maxGroupSize: 4 | 5 = 4) {
   const count = players.filter((player) => player.groupNumber === groupNumber).length;
-  return count >= 1 && count <= 4;
+  return count >= 1 && count <= maxGroupSize;
 }

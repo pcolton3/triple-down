@@ -59,6 +59,7 @@ export type CreateRoundInput = {
   defaultBet: number;
   players: Player[];
   firstBankerPlayerId: string;
+  groupSize?: 4 | 5;
   totalHoles?: number;
   holesConfig?: HoleConfig[];
   gameSettings?: Partial<RoundGameSettings>;

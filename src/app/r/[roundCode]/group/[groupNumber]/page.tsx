@@ -137,6 +137,7 @@ export default function GroupScoringPage() {
   const roundHoles = Array.isArray(round.holes) ? round.holes : [];
   const roundGroups = Array.isArray(round.multiFoursome?.groups) ? round.multiFoursome.groups : [];
   const roundGroupPlayers = Array.isArray(round.multiFoursome?.groupPlayers) ? round.multiFoursome.groupPlayers : [];
+  const groupSize = round.multiFoursome?.groupSize ?? 4;
   const fallbackGroup = {
     groupNumber,
     groupName: `Group ${groupNumber}`,
@@ -151,7 +152,7 @@ export default function GroupScoringPage() {
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((item) => item.playerId);
   const fallbackPlayerIds = roundPlayers
-    .slice((groupNumber - 1) * 4, groupNumber * 4)
+    .slice((groupNumber - 1) * groupSize, groupNumber * groupSize)
     .map((player) => player.id);
   const effectiveGroupPlayerIds = groupPlayerIds.length > 0 ? groupPlayerIds : fallbackPlayerIds;
   const groupPlayers = effectiveGroupPlayerIds
@@ -363,7 +364,7 @@ export default function GroupScoringPage() {
           <div className="grid grid-cols-3 gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Current Hole</p>
-              <p className="mt-1 text-xl font-bold">Hole {hole.holeNumber} of {round.totalHoles}</p>
+              <p className="mt-1 text-xl font-bold">Hole {hole.holeNumber}</p>
             </div>
             <div className="text-center">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Par</p>

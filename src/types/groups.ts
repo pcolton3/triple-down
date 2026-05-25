@@ -24,6 +24,7 @@ export type GroupedPlayer = {
 
 export type MultiFoursomeSetup = {
   enabled: boolean;
+  groupSize: 4 | 5;
   groups: RoundGroup[];
   groupPlayers: RoundGroupPlayer[];
 };

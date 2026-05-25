@@ -14,7 +14,7 @@ import type { HoleConfig } from '@/types/round';
 
 const MAX_PLAYERS = 24;
 const MIN_PLAYERS = 4;
-const PLAYER_COUNTS = [4, 8, 12, 16, 20, 24];
+const PLAYER_COUNTS = Array.from({ length: MAX_PLAYERS - MIN_PLAYERS + 1 }, (_, index) => MIN_PLAYERS + index);
 
 function buildDefaultPlayers(count = 4) {
   return Array.from({ length: count }, (_, index) => ({
@@ -58,6 +58,7 @@ export default function NewRoundPage() {
   const [lowNetPot, setLowNetPot] = useState(0);
   const [ctpPot, setCtpPot] = useState(0);
   const [playerCount, setPlayerCount] = useState(4);
+  const [groupSize, setGroupSize] = useState<4 | 5>(4);
   const [players, setPlayers] = useState(buildDefaultPlayers(4));
   const [firstBankerPlayerId, setFirstBankerPlayerId] = useState('p1');
   const [courseQuery, setCourseQuery] = useState('');
@@ -73,11 +74,11 @@ export default function NewRoundPage() {
   const [isCreating, setIsCreating] = useState(false);
 
   const groups = useMemo(() => {
-    return Array.from({ length: Math.ceil(players.length / 4) }, (_, groupIndex) => ({
+    return Array.from({ length: Math.ceil(players.length / groupSize) }, (_, groupIndex) => ({
       groupNumber: groupIndex + 1,
-      players: players.slice(groupIndex * 4, groupIndex * 4 + 4),
+      players: players.slice(groupIndex * groupSize, groupIndex * groupSize + groupSize),
     }));
-  }, [players]);
+  }, [groupSize, players]);
 
   useEffect(() => {
     setRoundCode(generateRoundCode());
@@ -264,6 +265,7 @@ export default function NewRoundPage() {
       },
       players: sanitizedPlayers,
       firstBankerPlayerId,
+      groupSize,
       totalHoles: 18,
       holesConfig: manualHoles,
     });
@@ -399,23 +401,44 @@ export default function NewRoundPage() {
           <div className="mb-4">
             <h2 className="text-xl font-bold">Golfers and Foursomes</h2>
             <p className="text-sm text-slate-500">
-              Add 4 to 24 golfers. Groups are automatically split into foursomes in order.
+              Add 4 to 24 golfers. Groups are automatically split into foursomes or fivesomes in order.
             </p>
           </div>
 
-          <div className="mb-4 max-w-xs">
-            <label className="mb-1 block text-sm font-medium">Number of Golfers</label>
-            <select
-              className="w-full rounded-xl border border-slate-300 px-3 py-3"
-              value={playerCount}
-              onChange={(event) => updatePlayerCount(Number(event.target.value))}
-            >
-              {PLAYER_COUNTS.map((count) => (
-                <option key={count} value={count}>
-                  {count}
-                </option>
-              ))}
-            </select>
+          <div className="mb-4 grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-sm font-medium">Number of Golfers</label>
+              <select
+                className="w-full rounded-xl border border-slate-300 px-3 py-3"
+                value={playerCount}
+                onChange={(event) => updatePlayerCount(Number(event.target.value))}
+              >
+                {PLAYER_COUNTS.map((count) => (
+                  <option key={count} value={count}>
+                    {count}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Group Type</label>
+              <div className="grid grid-cols-2 gap-2">
+                {[4, 5].map((size) => (
+                  <button
+                    key={size}
+                    type="button"
+                    className={`rounded-xl border px-3 py-3 font-semibold ${
+                      groupSize === size
+                        ? 'border-[#2f8df3] bg-[#2f8df3] text-white'
+                        : 'border-slate-300 bg-white text-slate-700'
+                    }`}
+                    onClick={() => setGroupSize(size as 4 | 5)}
+                  >
+                    {size === 4 ? 'Foursomes' : 'Fivesomes'}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           <div className="mb-4">
@@ -432,7 +455,7 @@ export default function NewRoundPage() {
               ))}
             </select>
             <p className="mt-2 text-xs text-slate-500">
-              Each group starts with the first listed golfer in that foursome unless this player belongs to the group.
+              Each group starts with the first listed golfer in that group unless this player belongs to the group.
             </p>
           </div>
 
@@ -442,7 +465,7 @@ export default function NewRoundPage() {
                 <h3 className="mb-3 font-bold">Group {group.groupNumber}</h3>
                 <div className="space-y-3">
                   {group.players.map((player, groupIndex) => {
-                    const absoluteIndex = (group.groupNumber - 1) * 4 + groupIndex;
+                    const absoluteIndex = (group.groupNumber - 1) * groupSize + groupIndex;
                     return (
                       <div key={player.id} className="grid grid-cols-[1fr_100px] gap-3 rounded-xl bg-slate-50 p-3">
                         <div>

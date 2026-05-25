@@ -402,7 +402,12 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
     };
   });
 
-  const fallbackGroups = Array.from({ length: Math.max(1, Math.ceil(players.length / 4)) }, (_, index) => ({
+  const groupCounts = new Map<string, number>();
+  bundle.groupPlayers.forEach((assignment) => {
+    groupCounts.set(assignment.round_group_id, (groupCounts.get(assignment.round_group_id) ?? 0) + 1);
+  });
+  const groupSize: 4 | 5 = Math.max(...groupCounts.values(), 4) > 4 ? 5 : 4;
+  const fallbackGroups = Array.from({ length: Math.max(1, Math.ceil(players.length / groupSize)) }, (_, index) => ({
     groupNumber: index + 1,
     groupName: `Group ${index + 1}`,
     teeTime: null,
@@ -430,6 +435,7 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
     },
     multiFoursome: {
       enabled: bundle.groups.length > 1,
+      groupSize,
       groups: bundle.groups.length > 0
         ? bundle.groups.map((group) => ({
             id: group.id,
@@ -449,8 +455,8 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
           }))
         : players.map((player, index) => ({
             playerId: player.id,
-            groupNumber: Math.floor(index / 4) + 1,
-            sortOrder: index % 4,
+            groupNumber: Math.floor(index / groupSize) + 1,
+            sortOrder: index % groupSize,
           })),
     },
   };

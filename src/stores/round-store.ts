@@ -227,6 +227,7 @@ function activeHole(round: RoundState, groupNumber = 1) {
 }
 
 function getGroupPlayerIds(round: RoundState, groupNumber: number) {
+  const groupSize = round.multiFoursome?.groupSize ?? 4;
   const assigned = round.multiFoursome?.groupPlayers
     .filter((item) => item.groupNumber === groupNumber)
     .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -234,16 +235,17 @@ function getGroupPlayerIds(round: RoundState, groupNumber: number) {
 
   if (assigned && assigned.length > 0) return assigned;
   if (round.multiFoursome?.groups.length && round.multiFoursome.groups.length > 1) {
-    return round.players.slice((groupNumber - 1) * 4, groupNumber * 4).map((player) => player.id);
+    return round.players.slice((groupNumber - 1) * groupSize, groupNumber * groupSize).map((player) => player.id);
   }
   return round.players.map((player) => player.id);
 }
 
 function ensureMultiFoursomeRound(round: RoundState): RoundState {
   const multiFoursome = round.multiFoursome ?? { enabled: round.players.length > 4, ...buildGroupsForPlayers(round.players) };
-  const existingGroups = multiFoursome.groups.length > 0 ? multiFoursome.groups : buildGroupsForPlayers(round.players).groups;
+  const groupSize = multiFoursome.groupSize ?? 4;
+  const existingGroups = multiFoursome.groups.length > 0 ? multiFoursome.groups : buildGroupsForPlayers(round.players, groupSize).groups;
   const existingGroupPlayers =
-    multiFoursome.groupPlayers.length > 0 ? multiFoursome.groupPlayers : buildGroupsForPlayers(round.players).groupPlayers;
+    multiFoursome.groupPlayers.length > 0 ? multiFoursome.groupPlayers : buildGroupsForPlayers(round.players, groupSize).groupPlayers;
   const holes: HoleState[] = [];
 
   existingGroups.forEach((group) => {
@@ -272,6 +274,7 @@ function ensureMultiFoursomeRound(round: RoundState): RoundState {
     holes: holes.length > 0 ? holes : round.holes,
     multiFoursome: {
       enabled: round.players.length > 4,
+      groupSize,
       groups: existingGroups,
       groupPlayers: existingGroupPlayers,
     },
@@ -907,7 +910,8 @@ export const useRoundStore = create<RoundStore>()(
       createRound: (input) =>
         set(() => {
           const totalHoles = input.totalHoles ?? 18;
-          const multiFoursome = buildGroupsForPlayers(input.players);
+          const groupSize = input.groupSize ?? 4;
+          const multiFoursome = buildGroupsForPlayers(input.players, groupSize);
           const groupedHoles = multiFoursome.groups.flatMap((group) => {
             const groupPlayerIds = multiFoursome.groupPlayers
               .filter((item) => item.groupNumber === group.groupNumber)
@@ -944,7 +948,7 @@ export const useRoundStore = create<RoundStore>()(
                 ctpPot: input.gameSettings?.ctpPot ?? 0,
               },
               players: input.players,
-              multiFoursome: { enabled: input.players.length > 4, ...multiFoursome },
+              multiFoursome: { enabled: input.players.length > groupSize, ...multiFoursome },
               holes: groupedHoles,
             },
           };

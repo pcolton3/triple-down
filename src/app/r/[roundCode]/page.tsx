@@ -95,12 +95,13 @@ export default function EventLeaderboardPage() {
   const roundHoles = Array.isArray(round.holes) ? round.holes : [];
   const roundGroups = Array.isArray(round.multiFoursome?.groups) ? round.multiFoursome.groups : [];
   const roundGroupPlayers = Array.isArray(round.multiFoursome?.groupPlayers) ? round.multiFoursome.groupPlayers : [];
+  const groupSize = round.multiFoursome?.groupSize ?? 4;
   const totals = getRunningTotals();
   const grossTotals = getGrossTotals();
   const skinsSummary = getSkinsSummary();
   const ctpSummary = getCtpSummary();
 
-  const fallbackGroups = Array.from({ length: Math.max(1, Math.ceil(roundPlayers.length / 4)) }, (_, index) => ({
+  const fallbackGroups = Array.from({ length: Math.max(1, Math.ceil(roundPlayers.length / groupSize)) }, (_, index) => ({
     groupNumber: index + 1,
     groupName: `Group ${index + 1}`,
     currentHole: round.currentHole,
@@ -108,8 +109,8 @@ export default function EventLeaderboardPage() {
   const groups = roundGroups.length ? roundGroups : fallbackGroups;
   const groupPlayers = roundGroupPlayers.length ? roundGroupPlayers : roundPlayers.map((player, index) => ({
     playerId: player.id,
-    groupNumber: Math.floor(index / 4) + 1,
-    sortOrder: index % 4,
+    groupNumber: Math.floor(index / groupSize) + 1,
+    sortOrder: index % groupSize,
   }));
 
   const eventLeaderboard = useMemo(
