@@ -78,6 +78,7 @@ type RoundGameRow = {
 type RoundCtpResultRow = {
   id: string;
   round_id: string;
+  group_number: number | null;
   hole_number: number;
   winner_player_key: string | null;
   note: string | null;
@@ -266,6 +267,25 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
     if (matchupsError) throw new Error(formatSupabaseError(matchupsError, 'Unable to save matchups.'));
   }
 
+  const ctpRows = round.holes
+    .filter((hole) => hole.par === 3)
+    .map((hole) => ({
+      round_id: roundId,
+      group_number: hole.groupNumber ?? 1,
+      hole_number: hole.holeNumber,
+      winner_player_key: hole.ctpWinnerPlayerId ?? null,
+      note: null,
+      payout_amount: 0,
+    }));
+
+  if (ctpRows.length > 0) {
+    const { error: ctpError } = await supabase
+      .from('round_ctp_results')
+      .upsert(ctpRows, { onConflict: 'round_id,group_number,hole_number' });
+
+    if (ctpError) throw new Error(formatSupabaseError(ctpError, 'Unable to save CTP results.'));
+  }
+
   const { error: gamesError } = await supabase
     .from('round_games')
     .upsert(
@@ -376,7 +396,7 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
   }));
   const games = new Map(bundle.games.map((game) => [game.game_type, game]));
   const ctpByGroupHole = new Map(
-    bundle.ctpResults.map((ctp) => [`1:${ctp.hole_number}`, ctp.winner_player_key])
+    bundle.ctpResults.map((ctp) => [`${ctp.group_number ?? 1}:${ctp.hole_number}`, ctp.winner_player_key])
   );
 
   const holes: HoleState[] = bundle.holes.map((hole) => {

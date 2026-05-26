@@ -4,11 +4,22 @@ alter table public.round_holes
 alter table public.round_matchups
   add column if not exists group_number integer not null default 1;
 
+alter table public.round_ctp_results
+  add column if not exists group_number integer not null default 1;
+
 alter table public.round_holes
   drop constraint if exists round_holes_round_id_hole_number_key;
 
 create unique index if not exists round_holes_round_group_hole_idx
   on public.round_holes (round_id, group_number, hole_number);
+
+alter table public.round_ctp_results
+  drop constraint if exists round_ctp_results_round_id_hole_number_key;
+
+drop index if exists public.round_ctp_results_round_id_hole_number_key;
+
+create unique index if not exists round_ctp_results_round_group_hole_idx
+  on public.round_ctp_results (round_id, group_number, hole_number);
 
 create table if not exists public.round_groups (
   id uuid primary key default gen_random_uuid(),
