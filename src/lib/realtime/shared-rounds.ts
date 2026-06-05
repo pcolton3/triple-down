@@ -294,8 +294,14 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
     .from('round_games')
     .upsert(
       [
-        { round_id: roundId, game_type: 'banker', pot_amount: 0, enabled: true },
-        { round_id: roundId, game_type: 'skins', pot_amount: round.gameSettings.skinsPot, enabled: round.gameSettings.skinsPot > 0 },
+        { round_id: roundId, game_type: 'banker', pot_amount: 0, enabled: true, settings: {} },
+        {
+          round_id: roundId,
+          game_type: 'skins',
+          pot_amount: round.gameSettings.skinsPot,
+          enabled: round.gameSettings.skinsPot > 0,
+          settings: {},
+        },
         {
           round_id: roundId,
           game_type: 'low_net',
@@ -307,7 +313,13 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
             pcc: round.gameSettings.pcc ?? 0,
           },
         },
-        { round_id: roundId, game_type: 'ctp', pot_amount: round.gameSettings.ctpPot, enabled: round.gameSettings.ctpPot > 0 },
+        {
+          round_id: roundId,
+          game_type: 'ctp',
+          pot_amount: round.gameSettings.ctpPot,
+          enabled: round.gameSettings.ctpPot > 0,
+          settings: {},
+        },
       ],
       { onConflict: 'round_id,game_type' }
     );
