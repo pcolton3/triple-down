@@ -59,6 +59,9 @@ export default function NewRoundPage() {
   const [skinsPot, setSkinsPot] = useState(0);
   const [lowNetPot, setLowNetPot] = useState(0);
   const [ctpPot, setCtpPot] = useState(0);
+  const [courseRating, setCourseRating] = useState('');
+  const [slopeRating, setSlopeRating] = useState('');
+  const [pcc, setPcc] = useState('0');
   const [playerCount, setPlayerCount] = useState(4);
   const [players, setPlayers] = useState(buildDefaultPlayers(4));
   const [firstBankerPlayerId, setFirstBankerPlayerId] = useState('p1');
@@ -345,6 +348,9 @@ export default function NewRoundPage() {
         skinsPot: Number.isFinite(skinsPot) ? Math.max(0, skinsPot) : 0,
         lowNetPot: Number.isFinite(lowNetPot) ? Math.max(0, lowNetPot) : 0,
         ctpPot: Number.isFinite(ctpPot) ? Math.max(0, ctpPot) : 0,
+        courseRating: courseRating.trim() ? Number(courseRating) || null : null,
+        slopeRating: slopeRating.trim() ? Number(slopeRating) || null : null,
+        pcc: pcc.trim() ? Number(pcc) || 0 : 0,
       },
       players: sanitizedPlayers,
       firstBankerPlayerId: openingBankerId,
@@ -451,6 +457,48 @@ export default function NewRoundPage() {
               onChange={(event) => setCourseName(event.target.value)}
               placeholder="Manual course name"
             />
+          </div>
+
+          <div>
+            <h2 className="mb-2 text-lg font-bold">Handicap Posting</h2>
+            <p className="mb-3 text-sm text-slate-500">
+              Optional USGA/WHS posting values. These prefill the handicap posting section after the round.
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Course Rating</label>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-3"
+                  value={courseRating}
+                  placeholder="71.2"
+                  onChange={(event) => setCourseRating(event.target.value)}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Slope Rating</label>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-3"
+                  value={slopeRating}
+                  placeholder="128"
+                  onChange={(event) => setSlopeRating(event.target.value)}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">PCC</label>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-3"
+                  value={pcc}
+                  placeholder="0"
+                  onChange={(event) => setPcc(event.target.value)}
+                />
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

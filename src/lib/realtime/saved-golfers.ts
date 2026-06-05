@@ -34,17 +34,33 @@ function normalizedName(name: string) {
 }
 
 export async function loadSavedGolfers(): Promise<SavedGolfer[]> {
-  const { data, error } = await supabase
+  const result = await supabase
     .from('saved_golfers')
     .select('id,name,normalized_name,handicap,posted_rounds')
     .order('name');
 
-  if (error) {
-    if (isMissingSchemaError(error)) return [];
-    throw error;
+  if (result.error) {
+    if (!isMissingSchemaError(result.error)) throw result.error;
+
+    const fallback = await supabase
+      .from('saved_golfers')
+      .select('id,name,normalized_name,handicap')
+      .order('name');
+
+    if (fallback.error) {
+      if (isMissingSchemaError(fallback.error)) return [];
+      throw fallback.error;
+    }
+
+    return ((fallback.data ?? []) as SavedGolferRow[]).map((row) => ({
+      id: row.id,
+      name: row.name,
+      handicap: row.handicap,
+      postedRounds: 0,
+    }));
   }
 
-  return ((data ?? []) as SavedGolferRow[]).map((row) => ({
+  return ((result.data ?? []) as SavedGolferRow[]).map((row) => ({
     id: row.id,
     name: row.name,
     handicap: row.handicap,

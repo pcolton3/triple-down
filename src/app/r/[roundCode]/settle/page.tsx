@@ -60,9 +60,9 @@ export default function SettlePage() {
   const grossScores = getGrossTotals().sort(
     (a, b) => a.grossTotal - b.grossTotal || b.holesCounted - a.holesCounted || a.playerName.localeCompare(b.playerName)
   );
-  const [courseRating, setCourseRating] = useState('');
-  const [slopeRating, setSlopeRating] = useState('');
-  const [pcc, setPcc] = useState('0');
+  const [courseRating, setCourseRating] = useState(round.gameSettings.courseRating ? String(round.gameSettings.courseRating) : '');
+  const [slopeRating, setSlopeRating] = useState(round.gameSettings.slopeRating ? String(round.gameSettings.slopeRating) : '');
+  const [pcc, setPcc] = useState(String(round.gameSettings.pcc ?? 0));
   const [adjustedScores, setAdjustedScores] = useState<Record<string, string>>({});
   const [handicapPostStatus, setHandicapPostStatus] = useState('');
   const bankerSettlementGroups = settlements.reduce<Array<{ groupNumber: number; items: typeof settlements }>>(
@@ -106,6 +106,18 @@ export default function SettlePage() {
       return next;
     });
   }, [grossScores]);
+
+  useEffect(() => {
+    if (!courseRating && round.gameSettings.courseRating) {
+      setCourseRating(String(round.gameSettings.courseRating));
+    }
+    if (!slopeRating && round.gameSettings.slopeRating) {
+      setSlopeRating(String(round.gameSettings.slopeRating));
+    }
+    if (pcc === '' && round.gameSettings.pcc != null) {
+      setPcc(String(round.gameSettings.pcc));
+    }
+  }, [courseRating, pcc, round.gameSettings.courseRating, round.gameSettings.pcc, round.gameSettings.slopeRating, slopeRating]);
 
   const skinWinnerRows = skinsSummary.payouts
     .filter((item) => item.skins > 0)

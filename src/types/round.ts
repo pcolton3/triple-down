@@ -36,6 +36,9 @@ export type RoundGameSettings = {
   skinsPot: number;
   lowNetPot: number;
   ctpPot: number;
+  courseRating?: number | null;
+  slopeRating?: number | null;
+  pcc?: number | null;
 };
 
 export type RoundState = {

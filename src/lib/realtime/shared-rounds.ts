@@ -296,7 +296,17 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
       [
         { round_id: roundId, game_type: 'banker', pot_amount: 0, enabled: true },
         { round_id: roundId, game_type: 'skins', pot_amount: round.gameSettings.skinsPot, enabled: round.gameSettings.skinsPot > 0 },
-        { round_id: roundId, game_type: 'low_net', pot_amount: round.gameSettings.lowNetPot, enabled: round.gameSettings.lowNetPot > 0 },
+        {
+          round_id: roundId,
+          game_type: 'low_net',
+          pot_amount: round.gameSettings.lowNetPot,
+          enabled: round.gameSettings.lowNetPot > 0,
+          settings: {
+            courseRating: round.gameSettings.courseRating ?? null,
+            slopeRating: round.gameSettings.slopeRating ?? null,
+            pcc: round.gameSettings.pcc ?? 0,
+          },
+        },
         { round_id: roundId, game_type: 'ctp', pot_amount: round.gameSettings.ctpPot, enabled: round.gameSettings.ctpPot > 0 },
       ],
       { onConflict: 'round_id,game_type' }
@@ -400,6 +410,7 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
     bankerParticipant: player.banker_participant !== false,
   }));
   const games = new Map(bundle.games.map((game) => [game.game_type, game]));
+  const handicapSettings = games.get('low_net')?.settings ?? {};
   const ctpByGroupHole = new Map(
     bundle.ctpResults.map((ctp) => [`${ctp.group_number ?? 1}:${ctp.hole_number}`, ctp.winner_player_key])
   );
@@ -458,6 +469,9 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
       skinsPot: games.get('skins')?.pot_amount ?? 0,
       lowNetPot: games.get('low_net')?.pot_amount ?? 0,
       ctpPot: games.get('ctp')?.pot_amount ?? 0,
+      courseRating: typeof handicapSettings.courseRating === 'number' ? handicapSettings.courseRating : null,
+      slopeRating: typeof handicapSettings.slopeRating === 'number' ? handicapSettings.slopeRating : null,
+      pcc: typeof handicapSettings.pcc === 'number' ? handicapSettings.pcc : 0,
     },
     multiFoursome: {
       enabled: bundle.groups.length > 1,
