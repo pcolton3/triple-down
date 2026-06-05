@@ -23,6 +23,7 @@ type RoundPlayerRow = {
   player_key: string;
   name: string;
   handicap: number;
+  banker_participant: boolean | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -53,6 +54,7 @@ type RoundMatchupRow = {
   base_wager: number;
   pressed: boolean;
   gross_score: number | null;
+  banker_participant: boolean | null;
   player_net_score: number | null;
   banker_net_score: number | null;
   player_gets_stroke: boolean;
@@ -210,6 +212,7 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
     player_key: player.id,
     name: player.name,
     handicap: player.handicap,
+    banker_participant: player.bankerParticipant !== false,
     sort_order: index,
   }));
 
@@ -256,6 +259,7 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
       base_wager: matchup.baseWager,
       pressed: matchup.pressed,
       gross_score: matchup.grossScore,
+      banker_participant: matchup.bankerParticipant !== false,
     }));
   });
 
@@ -393,6 +397,7 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
     id: player.player_key,
     name: player.name,
     handicap: player.handicap,
+    bankerParticipant: player.banker_participant !== false,
   }));
   const games = new Map(bundle.games.map((game) => [game.game_type, game]));
   const ctpByGroupHole = new Map(
@@ -418,6 +423,7 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
         baseWager: matchup.base_wager,
         pressed: matchup.pressed,
         grossScore: matchup.gross_score,
+        bankerParticipant: matchup.banker_participant !== false,
       })),
     };
   });

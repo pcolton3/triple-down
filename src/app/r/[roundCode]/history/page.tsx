@@ -150,12 +150,12 @@ export default function HistoryPage() {
                   <div key={matchup.playerId} className="rounded-xl bg-slate-50 px-3 py-3">
                     <div className="flex items-center justify-between gap-4">
                       <div>
-                        <p className="font-semibold">{matchup.playerName}{matchup.playerGetsStroke ? ' *' : ''}</p>
+                        <p className="font-semibold">{matchup.playerName}{matchup.playerGetsStroke && matchup.bankerParticipant ? ' *' : ''}</p>
                         <p className="text-sm text-slate-500">
                           Bet {formatCurrency(matchup.baseWager)} • Gross {matchup.playerGrossScore ?? '-'} vs Banker {matchup.bankerGrossScore ?? '-'}
                         </p>
                         <p className="text-sm text-slate-500">
-                          Net {matchup.playerNetScore ?? '-'} vs Banker {matchup.bankerNetScore ?? '-'}
+                          {matchup.bankerParticipant ? `Net ${matchup.playerNetScore ?? '-'} vs Banker ${matchup.bankerNetScore ?? '-'}` : 'Not playing Banker'}
                           {matchup.playerGetsStroke ? ' • Player gets stroke' : ''}
                           {matchup.bankerGetsStroke ? ' • Banker gets stroke' : ''}
                           {matchup.playerPressed ? ` • Player ${hole.pressLabel}` : ''}
@@ -163,7 +163,7 @@ export default function HistoryPage() {
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="font-bold">{formatAmount(matchup.amount)}</p>
+                        <p className="font-bold">{matchup.bankerParticipant ? formatAmount(matchup.amount) : 'Score only'}</p>
                         <p className="text-xs text-slate-500">{matchup.reason}</p>
                       </div>
                     </div>

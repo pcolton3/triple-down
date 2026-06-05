@@ -22,6 +22,7 @@ function buildDefaultPlayers(count = 4) {
     id: `p${index + 1}`,
     name: '',
     handicap: 0,
+    bankerParticipant: true,
   }));
 }
 
@@ -82,10 +83,20 @@ export default function NewRoundPage() {
       players: players.slice(groupIndex * effectiveGroupSize, groupIndex * effectiveGroupSize + effectiveGroupSize),
     }));
   }, [effectiveGroupSize, players]);
+  const bankerEligiblePlayers = useMemo(
+    () => players.filter((player) => player.bankerParticipant !== false),
+    [players]
+  );
 
   useEffect(() => {
     setRoundCode(generateRoundCode());
   }, []);
+
+  useEffect(() => {
+    if (!bankerEligiblePlayers.some((player) => player.id === firstBankerPlayerId)) {
+      setFirstBankerPlayerId(bankerEligiblePlayers[0]?.id ?? 'p1');
+    }
+  }, [bankerEligiblePlayers, firstBankerPlayerId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -175,7 +186,7 @@ export default function NewRoundPage() {
 
       const additions = Array.from({ length: normalized - current.length }, (_, index) => {
         const nextNumber = current.length + index + 1;
-        return { id: `p${nextNumber}`, name: '', handicap: 0 };
+        return { id: `p${nextNumber}`, name: '', handicap: 0, bankerParticipant: true };
       });
 
       return [...current, ...additions];
@@ -191,6 +202,14 @@ export default function NewRoundPage() {
               [field]: field === 'name' ? value : Number(value) || 0,
             }
           : player
+      )
+    );
+  }
+
+  function togglePlayerBanker(playerId: string) {
+    setPlayers((current) =>
+      current.map((player) =>
+        player.id === playerId ? { ...player, bankerParticipant: player.bankerParticipant === false } : player
       )
     );
   }
@@ -311,6 +330,15 @@ export default function NewRoundPage() {
           sortOrder,
         }))
     );
+    const invalidBankerGroup = groups.find((group) => {
+      const filledGroupPlayers = group.players.filter((player) => playerIds.has(player.id));
+      return filledGroupPlayers.length > 0 && !filledGroupPlayers.some((player) => player.bankerParticipant !== false);
+    });
+    if (invalidBankerGroup) {
+      setCreateError(`Group ${invalidBankerGroup.groupNumber} needs at least one golfer playing Banker.`);
+      setIsCreating(false);
+      return;
+    }
     const firstFilledPlayerId = sanitizedPlayers[0]?.id ?? firstBankerPlayerId;
     const openingBankerId = playerIds.has(firstBankerPlayerId) ? firstBankerPlayerId : firstFilledPlayerId;
 
@@ -506,9 +534,9 @@ export default function NewRoundPage() {
               value={firstBankerPlayerId}
               onChange={(event) => setFirstBankerPlayerId(event.target.value)}
             >
-              {players.map((player, index) => (
+              {bankerEligiblePlayers.map((player) => (
                 <option key={player.id} value={player.id}>
-                  {player.name.trim() || `Player ${index + 1}`}
+                  {player.name.trim() || `Player ${players.findIndex((item) => item.id === player.id) + 1}`}
                 </option>
               ))}
             </select>
@@ -525,7 +553,7 @@ export default function NewRoundPage() {
                   {group.players.map((player, groupIndex) => {
                     const absoluteIndex = (group.groupNumber - 1) * effectiveGroupSize + groupIndex;
                     return (
-                      <div key={player.id} className="grid gap-3 rounded-xl bg-slate-50 p-3 sm:grid-cols-[1fr_1fr_100px]">
+                      <div key={player.id} className="grid gap-3 rounded-xl bg-slate-50 p-3 sm:grid-cols-[1fr_1fr_100px_90px]">
                         <div>
                           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                             Saved Golfer
@@ -563,6 +591,20 @@ export default function NewRoundPage() {
                             onChange={(value) => updatePlayer(player.id, 'handicap', String(value))}
                             placeholder="0"
                           />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Banker
+                          </label>
+                          <label className="flex h-[50px] items-center justify-center rounded-xl border border-slate-300 bg-white font-semibold">
+                            <input
+                              type="checkbox"
+                              className="mr-2 h-4 w-4"
+                              checked={player.bankerParticipant !== false}
+                              onChange={() => togglePlayerBanker(player.id)}
+                            />
+                            Play
+                          </label>
                         </div>
                       </div>
                     );

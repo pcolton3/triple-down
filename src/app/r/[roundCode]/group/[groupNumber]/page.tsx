@@ -56,6 +56,7 @@ function formatScore(value: number | null | undefined) {
 
 function strokeSummary(item: {
   playerName: string;
+  bankerParticipant: boolean;
   playerGetsStroke: boolean;
   bankerGetsStroke: boolean;
   playerGrossScore: number | null;
@@ -63,6 +64,10 @@ function strokeSummary(item: {
   bankerGrossScore: number | null;
   bankerNetScore: number | null;
 }) {
+  if (!item.bankerParticipant) {
+    return `${item.playerName}: gross ${formatScore(item.playerGrossScore)}. Not playing Banker.`;
+  }
+
   const strokeText = item.playerGetsStroke
     ? `${item.playerName} got 1 stroke`
     : item.bankerGetsStroke
@@ -165,6 +170,7 @@ export default function GroupScoringPage() {
   const groupPlayers = effectiveGroupPlayerIds
     .map((playerId) => roundPlayers.find((player) => player.id === playerId))
     .filter((player): player is typeof round.players[number] => Boolean(player));
+  const bankerPlayers = groupPlayers.filter((player) => player.bankerParticipant !== false);
   const currentHoleNumber = group?.currentHole ?? round.currentHole;
   const targetHoleNumber = editHoleNumber ?? currentHoleNumber;
   const hole =
@@ -402,7 +408,7 @@ export default function GroupScoringPage() {
               disabled={!canEdit}
               onChange={(event) => setBanker(event.target.value, groupNumber, targetHoleNumber)}
             >
-              {groupPlayers.map((player) => (
+              {bankerPlayers.map((player) => (
                 <option key={player.id} value={player.id}>
                   {player.name}
                 </option>
@@ -457,6 +463,7 @@ export default function GroupScoringPage() {
         {hole.matchups.map((matchup) => {
           const player = groupPlayers.find((item) => item.id === matchup.playerId) ?? round.players[0];
           const summaryItem = matchupSummaryByPlayerId[player.id];
+          const playsBanker = matchup.bankerParticipant !== false;
           return (
             <div key={player.id} className="rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
               <div className="mb-3 flex items-start justify-between gap-3">
@@ -465,16 +472,18 @@ export default function GroupScoringPage() {
                     {player.name}
                     {summaryItem?.playerGetsStroke ? ' *' : ''}
                   </h3>
-                  <p className="text-sm text-slate-500">vs {banker.name}</p>
+                  <p className="text-sm text-slate-500">{playsBanker ? `vs ${banker.name}` : 'Score only, not playing Banker'}</p>
                 </div>
-                <Button variant="secondary" disabled={!canEdit} onClick={() => togglePlayerPress(player.id, groupNumber, targetHoleNumber)}>
-                  {matchup.pressed ? `Undo ${pressAction}` : pressAction}
-                </Button>
+                {playsBanker ? (
+                  <Button variant="secondary" disabled={!canEdit} onClick={() => togglePlayerPress(player.id, groupNumber, targetHoleNumber)}>
+                    {matchup.pressed ? `Undo ${pressAction}` : pressAction}
+                  </Button>
+                ) : null}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Bet</label>
-                  <NumberField value={matchup.baseWager} disabled={!canEdit} onChange={(value) => setWager(player.id, value ?? 0, groupNumber, targetHoleNumber)} placeholder="Bet" blankWhenZero />
+                  <NumberField value={playsBanker ? matchup.baseWager : null} disabled={!canEdit || !playsBanker} onChange={(value) => setWager(player.id, value ?? 0, groupNumber, targetHoleNumber)} placeholder={playsBanker ? 'Bet' : 'N/A'} blankWhenZero />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Gross</label>
@@ -482,7 +491,9 @@ export default function GroupScoringPage() {
                 </div>
               </div>
               <p className="mt-3 text-sm text-slate-500">
-                Net {summaryItem?.playerNetScore ?? '-'} vs Banker {summaryItem?.bankerNetScore ?? '-'}
+                {playsBanker
+                  ? `Net ${summaryItem?.playerNetScore ?? '-'} vs Banker ${summaryItem?.bankerNetScore ?? '-'}`
+                  : `Gross score counts for leaderboard and side games.`}
               </p>
             </div>
           );
@@ -497,7 +508,7 @@ export default function GroupScoringPage() {
               <div className="flex items-center justify-between gap-3">
                 <p className="font-semibold">
                   {item.playerName}
-                  {item.playerGetsStroke ? ' *' : ''}
+                  {item.playerGetsStroke && item.bankerParticipant ? ' *' : ''}
                 </p>
                 <p className="text-sm font-semibold">{item.payoutText}</p>
               </div>

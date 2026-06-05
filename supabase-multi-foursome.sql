@@ -4,6 +4,12 @@ alter table public.round_holes
 alter table public.round_matchups
   add column if not exists group_number integer not null default 1;
 
+alter table public.round_players
+  add column if not exists banker_participant boolean not null default true;
+
+alter table public.round_matchups
+  add column if not exists banker_participant boolean not null default true;
+
 alter table public.round_ctp_results
   add column if not exists group_number integer not null default 1;
 

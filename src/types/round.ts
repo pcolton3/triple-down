@@ -2,6 +2,7 @@ export type Player = {
   id: string;
   name: string;
   handicap: number;
+  bankerParticipant?: boolean;
 };
 
 export type MatchupDraft = {
@@ -9,6 +10,7 @@ export type MatchupDraft = {
   baseWager: number;
   pressed: boolean;
   grossScore: number | null;
+  bankerParticipant?: boolean;
 };
 
 export type HoleState = {

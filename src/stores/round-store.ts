@@ -6,12 +6,13 @@ import { settleBankerHole } from '@/domain/banker/settle-banker-hole';
 import { isGrossBirdieOrBetter } from '@/domain/banker/birdie';
 import { buildLedgerEntries, type LedgerEntry } from '@/domain/banker/ledger';
 import type { BankerMatchupResult } from '@/domain/banker/types';
-import type { CreateRoundInput, HoleConfig, HoleState, RoundState } from '@/types/round';
+import type { CreateRoundInput, HoleConfig, HoleState, Player, RoundState } from '@/types/round';
 import { buildGroupsForPlayers } from '@/lib/groups/group-utils';
 
 type MatchupSummary = {
   playerId: string;
   playerName: string;
+  bankerParticipant: boolean;
   playerGrossScore: number | null;
   bankerGrossScore: number | null;
   playerNetScore: number | null;
@@ -134,10 +135,10 @@ type RoundStore = {
 };
 
 const defaultPlayers = [
-  { id: 'p1', name: 'Player 1', handicap: 8 },
-  { id: 'p2', name: 'Player 2', handicap: 10 },
-  { id: 'p3', name: 'Player 3', handicap: 12 },
-  { id: 'p4', name: 'Player 4', handicap: 9 },
+  { id: 'p1', name: 'Player 1', handicap: 8, bankerParticipant: true },
+  { id: 'p2', name: 'Player 2', handicap: 10, bankerParticipant: true },
+  { id: 'p3', name: 'Player 3', handicap: 12, bankerParticipant: true },
+  { id: 'p4', name: 'Player 4', handicap: 9, bankerParticipant: true },
 ];
 
 function createHole(
@@ -147,7 +148,8 @@ function createHole(
   handicapIndex: number,
   bankerPlayerId: string,
   playerIds: string[],
-  defaultBet: number
+  defaultBet: number,
+  players: Player[] = []
 ): HoleState {
   return {
     groupNumber,
@@ -166,6 +168,7 @@ function createHole(
         baseWager: defaultBet,
         pressed: false,
         grossScore: null,
+        bankerParticipant: players.find((player) => player.id === playerId)?.bankerParticipant !== false,
       })),
   };
 }
@@ -176,7 +179,8 @@ function createDefaultHoles(
   playerIds: string[],
   defaultBet: number,
   holesConfig?: HoleConfig[],
-  groupNumber = 1
+  groupNumber = 1,
+  players: Player[] = []
 ) {
   const fallback = holesConfig && holesConfig.length === totalHoles
     ? holesConfig
@@ -187,7 +191,7 @@ function createDefaultHoles(
       }));
 
   return fallback.map((hole) =>
-    createHole(groupNumber, hole.holeNumber, hole.par, hole.handicapIndex, bankerPlayerId, playerIds, defaultBet)
+    createHole(groupNumber, hole.holeNumber, hole.par, hole.handicapIndex, bankerPlayerId, playerIds, defaultBet, players)
   );
 }
 
@@ -209,7 +213,7 @@ function createDefaultRound(): RoundState {
     gameSettings: { skinsPot: 0, lowNetPot: 0, ctpPot: 0 },
     players: defaultPlayers,
     multiFoursome: { enabled: false, ...multiFoursome },
-    holes: createDefaultHoles(totalHoles, firstBankerPlayerId, defaultPlayers.map((p) => p.id), defaultBet),
+    holes: createDefaultHoles(totalHoles, firstBankerPlayerId, defaultPlayers.map((p) => p.id), defaultBet, undefined, 1, defaultPlayers),
   };
 }
 
@@ -240,6 +244,10 @@ function getGroupPlayerIds(round: RoundState, groupNumber: number) {
   return round.players.map((player) => player.id);
 }
 
+function getBankerParticipantIds(players: Player[], playerIds: string[]) {
+  return playerIds.filter((playerId) => players.find((player) => player.id === playerId)?.bankerParticipant !== false);
+}
+
 function ensureMultiFoursomeRound(round: RoundState): RoundState {
   const multiFoursome = round.multiFoursome ?? { enabled: round.players.length > 4, ...buildGroupsForPlayers(round.players) };
   const groupSize = multiFoursome.groupSize ?? 4;
@@ -260,11 +268,11 @@ function ensureMultiFoursomeRound(round: RoundState): RoundState {
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((assignment) => assignment.playerId);
     const templateHoles = round.holes.filter((hole) => (hole.groupNumber ?? 1) === 1);
-    const bankerId = groupPlayerIds[0] ?? round.players[0]?.id ?? 'p1';
+    const bankerId = getBankerParticipantIds(round.players, groupPlayerIds)[0] ?? groupPlayerIds[0] ?? round.players[0]?.id ?? 'p1';
 
     holes.push(
       ...templateHoles.map((hole) =>
-        createHole(group.groupNumber, hole.holeNumber, hole.par, hole.handicapIndex, bankerId, groupPlayerIds, round.defaultBet)
+        createHole(group.groupNumber, hole.holeNumber, hole.par, hole.handicapIndex, bankerId, groupPlayerIds, round.defaultBet, round.players)
       )
     );
   });
@@ -375,7 +383,7 @@ function getHoleResults(round: RoundState, hole: HoleState): BankerMatchupResult
   const banker = round.players.find((player) => player.id === hole.bankerPlayerId);
   if (!banker || hole.bankerGrossScore == null) return [];
 
-  const matchupInputs = hole.matchups.map((m) => {
+  const matchupInputs = hole.matchups.filter((m) => m.bankerParticipant !== false).map((m) => {
     const player = round.players.find((p) => p.id === m.playerId);
     const netScores = getMatchupNetScores(
       round,
@@ -431,16 +439,22 @@ function buildNextHole(round: RoundState, groupNumber: number, nextHoleNumber: n
     ...round,
     holes: round.holes.map((item) => {
       if ((item.groupNumber ?? 1) !== groupNumber || item.holeNumber !== nextHoleNumber || item.isSaved) return item;
-      const bankerId = item.bankerPlayerId;
+      const groupPlayerIds = getGroupPlayerIds(round, groupNumber);
+      const bankerParticipantIds = getBankerParticipantIds(round.players, groupPlayerIds);
+      const bankerId = bankerParticipantIds.includes(item.bankerPlayerId)
+        ? item.bankerPlayerId
+        : bankerParticipantIds[0] ?? groupPlayerIds[0] ?? item.bankerPlayerId;
       return {
         ...item,
-        matchups: getGroupPlayerIds(round, groupNumber)
+        bankerPlayerId: bankerId,
+        matchups: groupPlayerIds
           .filter((playerId) => playerId !== bankerId)
           .map((playerId) => ({
             playerId,
             baseWager: item.matchups.find((m) => m.playerId === playerId)?.baseWager ?? round.defaultBet,
             pressed: false,
             grossScore: null,
+            bankerParticipant: round.players.find((player) => player.id === playerId)?.bankerParticipant !== false,
           })),
         bankerPressed: false,
         bankerGrossScore: null,
@@ -468,6 +482,7 @@ function buildCurrentHoleSummary(round: RoundState, hole: HoleState): CurrentHol
     bankerPressed: hole.bankerPressed,
     pressLabel: hole.par === 3 ? 'Triple' : 'Double',
     bankerGetsStrokeFromNames: hole.matchups
+      .filter((matchup) => matchup.bankerParticipant !== false)
       .map((matchup) => {
         const player = round.players.find((p) => p.id === matchup.playerId);
         const netScores = getMatchupNetScores(
@@ -504,7 +519,10 @@ function buildCurrentHoleSummary(round: RoundState, hole: HoleState): CurrentHol
       let payoutText = 'Awaiting complete scores';
       let resultLabel = 'Awaiting complete scores';
 
-      if (result?.result === 'push') {
+      if (matchup.bankerParticipant === false) {
+        payoutText = 'Score only';
+        resultLabel = 'Not playing Banker';
+      } else if (result?.result === 'push') {
         payoutText = 'Push ($0)';
         resultLabel = 'Push';
       } else if (result?.result === 'player_wins') {
@@ -518,6 +536,7 @@ function buildCurrentHoleSummary(round: RoundState, hole: HoleState): CurrentHol
       return {
         playerId: matchup.playerId,
         playerName: player?.name ?? 'Player',
+        bankerParticipant: matchup.bankerParticipant !== false,
         playerGrossScore: matchup.grossScore,
         bankerGrossScore: hole.bankerGrossScore,
         playerNetScore: netScores.playerNetScore,
@@ -528,7 +547,7 @@ function buildCurrentHoleSummary(round: RoundState, hole: HoleState): CurrentHol
         playerPressed: matchup.pressed,
         bankerPressed: hole.bankerPressed,
         amount,
-        reason: result?.reason ?? 'Awaiting complete scores',
+        reason: matchup.bankerParticipant === false ? 'Not playing Banker' : result?.reason ?? 'Awaiting complete scores',
         modifiers,
         totalMultiplier,
         resultLabel,
@@ -545,7 +564,7 @@ function buildSettleUp(round: RoundState, ledger: LedgerEntry[]): SettleUpItem[]
     : [1];
 
   groupNumbers.forEach((groupNumber) => {
-    const groupPlayerIds = new Set(getGroupPlayerIds(round, groupNumber));
+    const groupPlayerIds = new Set(getBankerParticipantIds(round.players, getGroupPlayerIds(round, groupNumber)));
     const groupLedger = ledger.filter(
       (entry) => groupPlayerIds.has(entry.fromPlayerId) && groupPlayerIds.has(entry.toPlayerId)
     );
@@ -942,9 +961,10 @@ export const useRoundStore = create<RoundStore>()(
               .filter((item) => item.groupNumber === group.groupNumber)
               .sort((a, b) => a.sortOrder - b.sortOrder)
               .map((item) => item.playerId);
-            const bankerId = groupPlayerIds.includes(input.firstBankerPlayerId)
+            const bankerParticipantIds = getBankerParticipantIds(input.players, groupPlayerIds);
+            const bankerId = bankerParticipantIds.includes(input.firstBankerPlayerId)
               ? input.firstBankerPlayerId
-              : groupPlayerIds[0] ?? input.firstBankerPlayerId;
+              : bankerParticipantIds[0] ?? groupPlayerIds[0] ?? input.firstBankerPlayerId;
 
             return createDefaultHoles(
               totalHoles,
@@ -952,7 +972,8 @@ export const useRoundStore = create<RoundStore>()(
               groupPlayerIds,
               input.defaultBet,
               input.holesConfig,
-              group.groupNumber
+              group.groupNumber,
+              input.players
             );
           });
 
@@ -1005,7 +1026,8 @@ export const useRoundStore = create<RoundStore>()(
                 hole.handicapIndex,
                 playerId,
                 getGroupPlayerIds(state.round, groupNumber),
-                state.round.defaultBet
+                state.round.defaultBet,
+                state.round.players
               ),
             holeNumber
           );
@@ -1140,7 +1162,7 @@ export const useRoundStore = create<RoundStore>()(
 
       getGroupBankerTotals: (groupNumber = 1) => {
         const { round } = get();
-        const groupPlayerIds = new Set(getGroupPlayerIds(round, groupNumber));
+        const groupPlayerIds = new Set(getBankerParticipantIds(round.players, getGroupPlayerIds(round, groupNumber)));
         const groupLedger = recalcLedger(round).filter(
           (entry) => groupPlayerIds.has(entry.fromPlayerId) && groupPlayerIds.has(entry.toPlayerId)
         );
