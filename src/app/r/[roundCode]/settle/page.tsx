@@ -1,11 +1,13 @@
 'use client';
 
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { useRoundStore } from '@/stores/round-store';
 import { formatCurrency } from '@/lib/utils/currency';
 import { postHandicapScores } from '@/lib/realtime/saved-golfers';
 import { calculateScoreDifferential } from '@/lib/handicap/whs';
+import { loadSharedRoundByCode, sharedRoundBundleToRoundState } from '@/lib/realtime/shared-rounds';
 
 function formatPosition(amount: number) {
   if (amount > 0) return `Up ${formatCurrency(amount)}`;
@@ -43,8 +45,10 @@ function ScoreTable({
 }
 
 export default function SettlePage() {
+  const params = useParams<{ roundCode: string }>();
   const {
     round,
+    hydrateRound,
     getRunningTotals,
     getSettleUp,
     getSkinsSummary,
@@ -65,6 +69,7 @@ export default function SettlePage() {
   const [pcc, setPcc] = useState(String(round.gameSettings.pcc ?? 0));
   const [adjustedScores, setAdjustedScores] = useState<Record<string, string>>({});
   const [handicapPostStatus, setHandicapPostStatus] = useState('');
+  const routeRoundCode = params.roundCode?.toUpperCase() || round.roundCode;
   const bankerSettlementGroups = settlements.reduce<Array<{ groupNumber: number; items: typeof settlements }>>(
     (groups, item) => {
       const group = groups.find((entry) => entry.groupNumber === item.groupNumber);
@@ -94,6 +99,24 @@ export default function SettlePage() {
       }),
     [adjustedScores, courseRating, grossScores, pcc, slopeRating]
   );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRound() {
+      if (!routeRoundCode) return;
+      const bundle = await loadSharedRoundByCode(routeRoundCode);
+      if (!cancelled && bundle) {
+        hydrateRound(sharedRoundBundleToRoundState(bundle));
+      }
+    }
+
+    void loadRound();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrateRound, routeRoundCode]);
 
   useEffect(() => {
     setAdjustedScores((current) => {
@@ -181,8 +204,8 @@ export default function SettlePage() {
           </p>
         </div>
         <div className="flex gap-4 text-sm font-semibold text-[#2f8df3]">
-          <Link href={`/r/${round.roundCode}/history`}>History</Link>
-          <Link href={`/r/${round.roundCode}`}>Back to Round</Link>
+          <Link href={`/r/${routeRoundCode}/history`}>History</Link>
+          <Link href={`/r/${routeRoundCode}`}>Back to Round</Link>
         </div>
       </div>
 
