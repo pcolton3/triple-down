@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRoundStore } from '@/stores/round-store';
 import { formatCurrency } from '@/lib/utils/currency';
+import type { HoleState, Player, RoundState } from '@/types/round';
 
 function formatAmount(value: number) {
   if (value > 0) return `Won ${formatCurrency(value)}`;
@@ -35,6 +36,115 @@ function ScoreTable({
   );
 }
 
+function getPlayerGrossForHole(hole: HoleState, playerId: string) {
+  if (!hole.isSaved) return null;
+  if (hole.bankerPlayerId === playerId) return hole.bankerGrossScore;
+  return hole.matchups.find((matchup) => matchup.playerId === playerId)?.grossScore ?? null;
+}
+
+function getScorecardHoles(round: RoundState) {
+  const byHoleNumber = new Map<number, HoleState>();
+  round.holes.forEach((hole) => {
+    if (!byHoleNumber.has(hole.holeNumber)) {
+      byHoleNumber.set(hole.holeNumber, hole);
+    }
+  });
+  return [...byHoleNumber.values()].sort((a, b) => a.holeNumber - b.holeNumber);
+}
+
+function getPlayerHoleScore(round: RoundState, playerId: string, holeNumber: number) {
+  return (
+    round.holes
+      .filter((hole) => hole.holeNumber === holeNumber)
+      .map((hole) => getPlayerGrossForHole(hole, playerId))
+      .find((score) => score != null) ?? null
+  );
+}
+
+function sumScores(scores: Array<number | null>) {
+  const entered = scores.filter((score): score is number => score != null);
+  return entered.length > 0 ? entered.reduce((sum, score) => sum + score, 0) : null;
+}
+
+function ScorecardTable({ round, players }: { round: RoundState; players: Player[] }) {
+  const holes = getScorecardHoles(round);
+  const frontHoles = holes.filter((hole) => hole.holeNumber <= 9);
+  const backHoles = holes.filter((hole) => hole.holeNumber > 9);
+  const parOut = frontHoles.reduce((sum, hole) => sum + hole.par, 0);
+  const parIn = backHoles.reduce((sum, hole) => sum + hole.par, 0);
+
+  return (
+    <div className="overflow-x-auto rounded-xl border border-slate-200">
+      <table className="min-w-[980px] border-collapse text-sm">
+        <thead>
+          <tr className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <th className="sticky left-0 z-10 w-44 bg-slate-50 px-3 py-2 text-left">Player</th>
+            {frontHoles.map((hole) => (
+              <th key={hole.holeNumber} className="w-11 px-2 py-2 text-right tabular-nums">{hole.holeNumber}</th>
+            ))}
+            <th className="w-14 px-2 py-2 text-right tabular-nums">Out</th>
+            {backHoles.map((hole) => (
+              <th key={hole.holeNumber} className="w-11 px-2 py-2 text-right tabular-nums">{hole.holeNumber}</th>
+            ))}
+            <th className="w-14 px-2 py-2 text-right tabular-nums">In</th>
+            <th className="w-16 px-2 py-2 text-right tabular-nums">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="border-t border-slate-200 bg-white text-slate-500">
+            <th className="sticky left-0 z-10 bg-white px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Par</th>
+            {frontHoles.map((hole) => (
+              <td key={hole.holeNumber} className="px-2 py-2 text-right tabular-nums">{hole.par}</td>
+            ))}
+            <td className="px-2 py-2 text-right font-semibold tabular-nums">{parOut || '-'}</td>
+            {backHoles.map((hole) => (
+              <td key={hole.holeNumber} className="px-2 py-2 text-right tabular-nums">{hole.par}</td>
+            ))}
+            <td className="px-2 py-2 text-right font-semibold tabular-nums">{parIn || '-'}</td>
+            <td className="px-2 py-2 text-right font-semibold tabular-nums">{parOut + parIn || '-'}</td>
+          </tr>
+          <tr className="border-t border-slate-200 bg-slate-50 text-slate-500">
+            <th className="sticky left-0 z-10 bg-slate-50 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Hole HCP</th>
+            {frontHoles.map((hole) => (
+              <td key={hole.holeNumber} className="px-2 py-2 text-right tabular-nums">{hole.handicapIndex}</td>
+            ))}
+            <td className="px-2 py-2 text-right tabular-nums">-</td>
+            {backHoles.map((hole) => (
+              <td key={hole.holeNumber} className="px-2 py-2 text-right tabular-nums">{hole.handicapIndex}</td>
+            ))}
+            <td className="px-2 py-2 text-right tabular-nums">-</td>
+            <td className="px-2 py-2 text-right tabular-nums">-</td>
+          </tr>
+          {players.map((player) => {
+            const frontScores = frontHoles.map((hole) => getPlayerHoleScore(round, player.id, hole.holeNumber));
+            const backScores = backHoles.map((hole) => getPlayerHoleScore(round, player.id, hole.holeNumber));
+            const outTotal = sumScores(frontScores);
+            const inTotal = sumScores(backScores);
+            const total = sumScores([...frontScores, ...backScores]);
+
+            return (
+              <tr key={player.id} className="border-t border-slate-200 odd:bg-white even:bg-slate-50/50">
+                <th className="sticky left-0 z-10 max-w-44 bg-inherit px-3 py-2 text-left font-semibold">
+                  <span className="block truncate">{player.name}</span>
+                </th>
+                {frontScores.map((score, index) => (
+                  <td key={`${player.id}-front-${index}`} className="px-2 py-2 text-right tabular-nums">{score ?? '-'}</td>
+                ))}
+                <td className="px-2 py-2 text-right font-semibold tabular-nums">{outTotal ?? '-'}</td>
+                {backScores.map((score, index) => (
+                  <td key={`${player.id}-back-${index}`} className="px-2 py-2 text-right tabular-nums">{score ?? '-'}</td>
+                ))}
+                <td className="px-2 py-2 text-right font-semibold tabular-nums">{inTotal ?? '-'}</td>
+                <td className="px-2 py-2 text-right font-bold tabular-nums">{total ?? '-'}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function HistoryPage() {
   const { round, getHoleHistory, getGrossTotals, getSkinsSummary, getLowNetSummary, getCtpSummary } = useRoundStore();
   const history = getHoleHistory();
@@ -56,6 +166,11 @@ export default function HistoryPage() {
           Back to Round
         </Link>
       </div>
+
+      <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
+        <h2 className="mb-3 text-lg font-bold">Scorecard</h2>
+        <ScorecardTable round={round} players={round.players} />
+      </section>
 
       <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
         <h2 className="mb-3 text-lg font-bold">Total Scoring</h2>
