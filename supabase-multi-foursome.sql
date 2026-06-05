@@ -133,12 +133,34 @@ create table if not exists public.saved_golfers (
   name text not null,
   normalized_name text not null,
   handicap numeric not null default 0,
+  posted_rounds integer not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (normalized_name)
 );
 
+alter table public.saved_golfers
+  add column if not exists posted_rounds integer not null default 0;
+
+create table if not exists public.saved_golfer_scores (
+  id uuid primary key default gen_random_uuid(),
+  golfer_id uuid not null references public.saved_golfers(id) on delete cascade,
+  round_code text not null,
+  player_key text not null,
+  course_name text not null,
+  adjusted_gross_score numeric not null,
+  course_rating numeric not null,
+  slope_rating numeric not null,
+  pcc numeric not null default 0,
+  score_differential numeric not null,
+  played_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (golfer_id, round_code, player_key)
+);
+
 alter table public.saved_golfers enable row level security;
+alter table public.saved_golfer_scores enable row level security;
 
 do $$
 begin
@@ -175,4 +197,40 @@ begin
       using (true)
       with check (true);
   end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'saved_golfer_scores'
+      and policyname = 'saved_golfer_scores_public_read'
+  ) then
+    create policy saved_golfer_scores_public_read
+      on public.saved_golfer_scores for select
+      using (true);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'saved_golfer_scores'
+      and policyname = 'saved_golfer_scores_public_insert'
+  ) then
+    create policy saved_golfer_scores_public_insert
+      on public.saved_golfer_scores for insert
+      with check (true);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'saved_golfer_scores'
+      and policyname = 'saved_golfer_scores_public_update'
+  ) then
+    create policy saved_golfer_scores_public_update
+      on public.saved_golfer_scores for update
+      using (true)
+      with check (true);
+  end if;
 end $$;
+
+notify pgrst, 'reload schema';

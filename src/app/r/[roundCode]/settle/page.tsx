@@ -1,8 +1,11 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 import { useRoundStore } from '@/stores/round-store';
 import { formatCurrency } from '@/lib/utils/currency';
+import { postHandicapScores } from '@/lib/realtime/saved-golfers';
+import { calculateScoreDifferential } from '@/lib/handicap/whs';
 
 function formatPosition(amount: number) {
   if (amount > 0) return `Up ${formatCurrency(amount)}`;
@@ -57,6 +60,11 @@ export default function SettlePage() {
   const grossScores = getGrossTotals().sort(
     (a, b) => a.grossTotal - b.grossTotal || b.holesCounted - a.holesCounted || a.playerName.localeCompare(b.playerName)
   );
+  const [courseRating, setCourseRating] = useState('');
+  const [slopeRating, setSlopeRating] = useState('');
+  const [pcc, setPcc] = useState('0');
+  const [adjustedScores, setAdjustedScores] = useState<Record<string, string>>({});
+  const [handicapPostStatus, setHandicapPostStatus] = useState('');
   const bankerSettlementGroups = settlements.reduce<Array<{ groupNumber: number; items: typeof settlements }>>(
     (groups, item) => {
       const group = groups.find((entry) => entry.groupNumber === item.groupNumber);
@@ -72,6 +80,32 @@ export default function SettlePage() {
 
   const holesSaved = round.holes.filter((hole) => hole.isSaved).length;
   const roundComplete = holesSaved >= round.totalHoles * Math.max(1, round.multiFoursome?.groups.length ?? 1);
+  const handicapPostRows = useMemo(
+    () =>
+      grossScores.map((score) => {
+        const adjustedGrossScore = Number(adjustedScores[score.playerId] ?? score.grossTotal);
+        const differential = calculateScoreDifferential({
+          adjustedGrossScore,
+          courseRating: Number(courseRating),
+          slopeRating: Number(slopeRating),
+          pcc: Number(pcc) || 0,
+        });
+        return { ...score, adjustedGrossScore, differential };
+      }),
+    [adjustedScores, courseRating, grossScores, pcc, slopeRating]
+  );
+
+  useEffect(() => {
+    setAdjustedScores((current) => {
+      const next = { ...current };
+      grossScores.forEach((score) => {
+        if (next[score.playerId] == null) {
+          next[score.playerId] = String(score.grossTotal);
+        }
+      });
+      return next;
+    });
+  }, [grossScores]);
 
   const skinWinnerRows = skinsSummary.payouts
     .filter((item) => item.skins > 0)
@@ -95,6 +129,34 @@ export default function SettlePage() {
 
   const lowNetWinnerRows = lowNetSummary.payouts.filter((item) => item.amount > 0);
 
+  async function handlePostHandicapScores() {
+    try {
+      setHandicapPostStatus('Posting handicap scores...');
+      const updates = await postHandicapScores({
+        roundCode: round.roundCode,
+        courseName: round.courseName,
+        courseRating: Number(courseRating),
+        slopeRating: Number(slopeRating),
+        pcc: Number(pcc) || 0,
+        scores: handicapPostRows
+          .filter((score) => score.holesCounted >= round.totalHoles)
+          .map((score) => ({
+            playerKey: score.playerId,
+            playerName: score.playerName,
+            adjustedGrossScore: score.adjustedGrossScore,
+          })),
+      });
+      const updatedCount = updates.filter((item) => item.handicap != null).length;
+      const pendingCount = updates.length - updatedCount;
+      setHandicapPostStatus(
+        `Posted ${updates.length} score${updates.length === 1 ? '' : 's'}. ${updatedCount} handicap index${updatedCount === 1 ? '' : 'es'} updated${pendingCount ? `; ${pendingCount} need at least 3 posted rounds.` : '.'}`
+      );
+    } catch (error) {
+      console.error('Unable to post handicap scores.', error);
+      setHandicapPostStatus(error instanceof Error ? error.message : 'Unable to post handicap scores.');
+    }
+  }
+
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
       <div className="mb-6 flex items-center justify-between gap-4">
@@ -115,6 +177,86 @@ export default function SettlePage() {
       <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
         <h2 className="mb-3 text-xl font-bold">Final Scoring</h2>
         <ScoreTable rows={grossScores} />
+      </section>
+
+      <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
+        <div className="mb-4">
+          <h2 className="text-xl font-bold">Post Handicap Scores</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Enter the course rating and slope, adjust any posting scores, then save these to golfer profiles.
+          </p>
+          {handicapPostStatus ? <p className="mt-2 text-sm text-slate-600">{handicapPostStatus}</p> : null}
+        </div>
+
+        <div className="mb-4 grid gap-3 sm:grid-cols-3">
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Course Rating</label>
+            <input
+              type="number"
+              inputMode="decimal"
+              className="w-full rounded-xl border border-slate-300 px-3 py-3"
+              value={courseRating}
+              placeholder="71.2"
+              onChange={(event) => setCourseRating(event.target.value)}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Slope Rating</label>
+            <input
+              type="number"
+              inputMode="numeric"
+              className="w-full rounded-xl border border-slate-300 px-3 py-3"
+              value={slopeRating}
+              placeholder="128"
+              onChange={(event) => setSlopeRating(event.target.value)}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">PCC</label>
+            <input
+              type="number"
+              inputMode="decimal"
+              className="w-full rounded-xl border border-slate-300 px-3 py-3"
+              value={pcc}
+              placeholder="0"
+              onChange={(event) => setPcc(event.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-xl border border-slate-200">
+          <div className="grid grid-cols-[1fr_90px_110px_110px] bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <div>Player</div>
+            <div className="text-right">Gross</div>
+            <div className="text-right">Adjusted</div>
+            <div className="text-right">Differential</div>
+          </div>
+          {handicapPostRows.map((score) => (
+            <div key={score.playerId} className="grid grid-cols-[1fr_90px_110px_110px] border-t border-slate-200 px-3 py-3 text-sm">
+              <div className="truncate font-medium">{score.playerName}</div>
+              <div className="text-right font-semibold tabular-nums">{score.grossTotal}</div>
+              <input
+                type="number"
+                inputMode="numeric"
+                className="ml-auto w-20 rounded-lg border border-slate-300 px-2 py-1 text-right font-semibold tabular-nums"
+                value={adjustedScores[score.playerId] ?? String(score.grossTotal)}
+                onChange={(event) => setAdjustedScores((current) => ({ ...current, [score.playerId]: event.target.value }))}
+              />
+              <div className="text-right font-semibold tabular-nums">{score.differential ?? '-'}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            className="rounded-xl bg-[#2f8df3] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+            disabled={!roundComplete || !Number(courseRating) || !Number(slopeRating)}
+            onClick={() => void handlePostHandicapScores()}
+          >
+            Post Handicap Scores
+          </button>
+        </div>
       </section>
 
       <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">

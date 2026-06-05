@@ -557,7 +557,7 @@ export default function NewRoundPage() {
                             <option value="">Select golfer</option>
                             {savedGolfers.map((golfer) => (
                               <option key={golfer.id} value={golfer.id}>
-                                {golfer.name} ({golfer.handicap})
+                                {golfer.name} ({golfer.handicap}{golfer.postedRounds ? `, ${golfer.postedRounds} posted` : ''})
                               </option>
                             ))}
                           </select>
