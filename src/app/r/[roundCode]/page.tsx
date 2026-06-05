@@ -55,10 +55,12 @@ function ScoreTable({
 
 export default function EventLeaderboardPage() {
   const params = useParams<{ roundCode: string }>();
-  const { round, hydrateRound, simulateFullEvent, getRunningTotals, getGrossTotals, getSkinsSummary, getCtpSummary } = useRoundStore();
+  const { round, hydrateRound, setPlayerHandicap, getRunningTotals, getGrossTotals, getSkinsSummary, getCtpSummary } = useRoundStore();
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
   const [loadStatus, setLoadStatus] = useState<'idle' | 'loading' | 'not_found' | 'ready'>('idle');
-  const [simulateStatus, setSimulateStatus] = useState('');
+  const [handicapDrafts, setHandicapDrafts] = useState<Record<string, string>>({});
+  const [handicapStatus, setHandicapStatus] = useState('');
+  const [isEditingHandicaps, setIsEditingHandicaps] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,7 +93,7 @@ export default function EventLeaderboardPage() {
       if (refreshTimer) window.clearInterval(refreshTimer);
     };
   }, [hydrateRound, params.roundCode]);
-  const roundPlayers = Array.isArray(round.players) ? round.players : [];
+  const roundPlayers = useMemo(() => (Array.isArray(round.players) ? round.players : []), [round.players]);
   const roundHoles = Array.isArray(round.holes) ? round.holes : [];
   const roundGroups = Array.isArray(round.multiFoursome?.groups) ? round.multiFoursome.groups : [];
   const roundGroupPlayers = Array.isArray(round.multiFoursome?.groupPlayers) ? round.multiFoursome.groupPlayers : [];
@@ -100,6 +102,13 @@ export default function EventLeaderboardPage() {
   const grossTotals = getGrossTotals();
   const skinsSummary = getSkinsSummary();
   const ctpSummary = getCtpSummary();
+
+  useEffect(() => {
+    if (isEditingHandicaps) return;
+    setHandicapDrafts(
+      Object.fromEntries(roundPlayers.map((player) => [player.id, String(player.handicap ?? 0)]))
+    );
+  }, [isEditingHandicaps, roundPlayers]);
 
   const fallbackGroups = Array.from({ length: Math.max(1, Math.ceil(roundPlayers.length / groupSize)) }, (_, index) => ({
     groupNumber: index + 1,
@@ -141,14 +150,22 @@ export default function EventLeaderboardPage() {
     setCopiedLink(label);
   }
 
-  async function handleSimulateEvent() {
+  async function handleSaveHandicaps() {
     try {
-      setSimulateStatus('Simulating event...');
-      simulateFullEvent();
+      setHandicapStatus('Saving handicaps...');
+      roundPlayers.forEach((player) => {
+        const value = Number(handicapDrafts[player.id]);
+        setPlayerHandicap(player.id, Number.isFinite(value) ? value : 0);
+      });
       await createSharedRoundFromLocalRound(useRoundStore.getState().round);
-      setSimulateStatus('Simulated 18 holes for every group.');
+      const bundle = await loadSharedRoundByCode(round.roundCode);
+      if (bundle) {
+        hydrateRound(sharedRoundBundleToRoundState(bundle));
+      }
+      setIsEditingHandicaps(false);
+      setHandicapStatus('Handicaps updated.');
     } catch (error) {
-      setSimulateStatus(error instanceof Error ? error.message : 'Unable to save simulated event.');
+      setHandicapStatus(error instanceof Error ? error.message : 'Unable to save handicaps.');
     }
   }
 
@@ -193,17 +210,6 @@ export default function EventLeaderboardPage() {
         <Card className="text-sm text-slate-600">No round was found for code {params.roundCode}.</Card>
       ) : null}
 
-      <Card className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-xl font-bold">Test Tools</h2>
-          <p className="text-sm text-slate-500">Fill all groups with simulated gross scores and event-wide CTP winners.</p>
-          {simulateStatus ? <p className="mt-2 text-sm text-slate-600">{simulateStatus}</p> : null}
-        </div>
-        <Button type="button" onClick={() => void handleSimulateEvent()}>
-          Simulate Full Event
-        </Button>
-      </Card>
-
       <Card>
         <div className="mb-3">
           <h2 className="text-xl font-bold">Choose Your Group</h2>
@@ -235,6 +241,37 @@ export default function EventLeaderboardPage() {
               </Link>
             );
           })}
+        </div>
+      </Card>
+
+      <Card>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="text-xl font-bold">Handicaps</h2>
+            <p className="text-sm text-slate-500">Correct a starting handicap and save to recalculate net scores and Banker strokes.</p>
+            {handicapStatus ? <p className="mt-2 text-sm text-slate-600">{handicapStatus}</p> : null}
+          </div>
+          <Button type="button" onClick={() => void handleSaveHandicaps()}>
+            Save Handicaps
+          </Button>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {roundPlayers.map((player) => (
+            <label key={player.id} className="block rounded-xl bg-slate-50 px-3 py-3">
+              <span className="block truncate text-xs font-semibold uppercase tracking-wide text-slate-500">{player.name}</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min="0"
+                className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold tabular-nums text-slate-900 outline-none focus:border-[#2f8df3] focus:ring-2 focus:ring-[#2f8df3]/20"
+                value={handicapDrafts[player.id] ?? String(player.handicap ?? 0)}
+                onChange={(event) => {
+                  setIsEditingHandicaps(true);
+                  setHandicapDrafts((current) => ({ ...current, [player.id]: event.target.value }));
+                }}
+              />
+            </label>
+          ))}
         </div>
       </Card>
 

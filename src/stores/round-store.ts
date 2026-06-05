@@ -112,6 +112,7 @@ type RoundStore = {
   hydrateRound: (round: RoundState) => void;
   simulateFullEvent: () => void;
   resetRound: () => void;
+  setPlayerHandicap: (playerId: string, handicap: number) => void;
   setBanker: (playerId: string, groupNumber?: number, holeNumber?: number) => void;
   setPar: (par: 3 | 4 | 5, groupNumber?: number, holeNumber?: number) => void;
   setHoleHandicap: (handicapIndex: number, groupNumber?: number, holeNumber?: number) => void;
@@ -1012,6 +1013,18 @@ export const useRoundStore = create<RoundStore>()(
         }),
 
       resetRound: () => set({ round: createDefaultRound(), ledger: [] }),
+
+      setPlayerHandicap: (playerId, handicap) =>
+        set((state) => {
+          const normalized = Number.isFinite(handicap) ? Math.max(0, Math.floor(handicap)) : 0;
+          const round = {
+            ...state.round,
+            players: state.round.players.map((player) =>
+              player.id === playerId ? { ...player, handicap: normalized } : player
+            ),
+          };
+          return { round, ledger: recalcLedger(round) };
+        }),
 
       setBanker: (playerId, groupNumber = 1, holeNumber) =>
         set((state) => {

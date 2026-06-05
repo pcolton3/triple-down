@@ -126,6 +126,8 @@ begin
   end if;
 end $$;
 
+notify pgrst, 'reload schema';
+
 create table if not exists public.saved_golfers (
   id uuid primary key default gen_random_uuid(),
   name text not null,
