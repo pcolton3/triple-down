@@ -6,14 +6,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Card } from '@/components/shared/card';
 import { Button } from '@/components/shared/button';
 import { useRoundStore } from '@/stores/round-store';
-import { formatCurrency } from '@/lib/utils/currency';
 import { createSharedRoundFromLocalRound, loadSharedRoundByCode, sharedRoundBundleToRoundState } from '@/lib/realtime/shared-rounds';
-
-function formatPosition(amount: number) {
-  if (amount > 0) return `Up ${formatCurrency(amount)}`;
-  if (amount < 0) return `Down ${formatCurrency(Math.abs(amount))}`;
-  return 'Even';
-}
+import type { HoleState, Player, RoundState } from '@/types/round';
 
 function ScoreTable({
   rows,
@@ -23,29 +17,38 @@ function ScoreTable({
     playerName: string;
     grossTotal: number;
     netTotal: number;
+    holesCounted: number;
     naturalBirdies: number;
     naturalEagles: number;
+    skins: number;
+    ctpWins: number;
   }>;
 }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200">
-      <div className="min-w-[520px]">
-        <div className="grid grid-cols-[minmax(180px,1fr)_80px_80px_80px_80px] bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <div className="min-w-[760px]">
+        <div className="grid grid-cols-[minmax(180px,1fr)_70px_70px_70px_80px_80px_70px_70px] bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
           <div className="truncate">Player</div>
+          <div className="text-right tabular-nums">Holes</div>
           <div className="text-right tabular-nums">Gross</div>
           <div className="text-right tabular-nums">Net</div>
           <div className="text-right tabular-nums">Birdies</div>
           <div className="text-right tabular-nums">Eagles</div>
+          <div className="text-right tabular-nums">Skins</div>
+          <div className="text-right tabular-nums">CTP</div>
         </div>
         {rows.map((item, index) => (
-          <div key={item.playerId} className="grid grid-cols-[minmax(180px,1fr)_80px_80px_80px_80px] border-t border-slate-200 px-3 py-3 text-sm">
+          <div key={item.playerId} className="grid grid-cols-[minmax(180px,1fr)_70px_70px_70px_80px_80px_70px_70px] border-t border-slate-200 px-3 py-3 text-sm">
             <div className="truncate font-medium">
               {index + 1}. {item.playerName}
             </div>
+            <div className="text-right font-semibold tabular-nums">{item.holesCounted}</div>
             <div className="text-right font-semibold tabular-nums">{item.grossTotal}</div>
             <div className="text-right font-semibold tabular-nums">{item.netTotal}</div>
             <div className="text-right font-semibold tabular-nums">{item.naturalBirdies}</div>
             <div className="text-right font-semibold tabular-nums">{item.naturalEagles}</div>
+            <div className="text-right font-semibold tabular-nums">{item.skins}</div>
+            <div className="text-right font-semibold tabular-nums">{item.ctpWins}</div>
           </div>
         ))}
       </div>
@@ -53,9 +56,118 @@ function ScoreTable({
   );
 }
 
+function getPlayerGrossForHole(hole: HoleState, playerId: string) {
+  if (!hole.isSaved) return null;
+  if (hole.bankerPlayerId === playerId) return hole.bankerGrossScore;
+  return hole.matchups.find((matchup) => matchup.playerId === playerId)?.grossScore ?? null;
+}
+
+function getScorecardHoles(round: RoundState) {
+  const byHoleNumber = new Map<number, HoleState>();
+  round.holes.forEach((hole) => {
+    if (!byHoleNumber.has(hole.holeNumber)) {
+      byHoleNumber.set(hole.holeNumber, hole);
+    }
+  });
+  return [...byHoleNumber.values()].sort((a, b) => a.holeNumber - b.holeNumber);
+}
+
+function getPlayerHoleScore(round: RoundState, playerId: string, holeNumber: number) {
+  return (
+    round.holes
+      .filter((hole) => hole.holeNumber === holeNumber)
+      .map((hole) => getPlayerGrossForHole(hole, playerId))
+      .find((score) => score != null) ?? null
+  );
+}
+
+function sumScores(scores: Array<number | null>) {
+  const entered = scores.filter((score): score is number => score != null);
+  return entered.length > 0 ? entered.reduce((sum, score) => sum + score, 0) : null;
+}
+
+function ScorecardTable({ round, players }: { round: RoundState; players: Player[] }) {
+  const holes = getScorecardHoles(round);
+  const frontHoles = holes.filter((hole) => hole.holeNumber <= 9);
+  const backHoles = holes.filter((hole) => hole.holeNumber > 9);
+  const parOut = frontHoles.reduce((sum, hole) => sum + hole.par, 0);
+  const parIn = backHoles.reduce((sum, hole) => sum + hole.par, 0);
+
+  return (
+    <div className="overflow-x-auto rounded-xl border border-slate-200">
+      <table className="min-w-[980px] border-collapse text-sm">
+        <thead>
+          <tr className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <th className="sticky left-0 z-10 w-44 bg-slate-50 px-3 py-2 text-left">Player</th>
+            {frontHoles.map((hole) => (
+              <th key={hole.holeNumber} className="w-11 px-2 py-2 text-right tabular-nums">{hole.holeNumber}</th>
+            ))}
+            <th className="w-14 px-2 py-2 text-right tabular-nums">Out</th>
+            {backHoles.map((hole) => (
+              <th key={hole.holeNumber} className="w-11 px-2 py-2 text-right tabular-nums">{hole.holeNumber}</th>
+            ))}
+            <th className="w-14 px-2 py-2 text-right tabular-nums">In</th>
+            <th className="w-16 px-2 py-2 text-right tabular-nums">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="border-t border-slate-200 bg-white text-slate-500">
+            <th className="sticky left-0 z-10 bg-white px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Par</th>
+            {frontHoles.map((hole) => (
+              <td key={hole.holeNumber} className="px-2 py-2 text-right tabular-nums">{hole.par}</td>
+            ))}
+            <td className="px-2 py-2 text-right font-semibold tabular-nums">{parOut || '-'}</td>
+            {backHoles.map((hole) => (
+              <td key={hole.holeNumber} className="px-2 py-2 text-right tabular-nums">{hole.par}</td>
+            ))}
+            <td className="px-2 py-2 text-right font-semibold tabular-nums">{parIn || '-'}</td>
+            <td className="px-2 py-2 text-right font-semibold tabular-nums">{parOut + parIn || '-'}</td>
+          </tr>
+          <tr className="border-t border-slate-200 bg-slate-50 text-slate-500">
+            <th className="sticky left-0 z-10 bg-slate-50 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Hole HCP</th>
+            {frontHoles.map((hole) => (
+              <td key={hole.holeNumber} className="px-2 py-2 text-right tabular-nums">{hole.handicapIndex}</td>
+            ))}
+            <td className="px-2 py-2 text-right tabular-nums">-</td>
+            {backHoles.map((hole) => (
+              <td key={hole.holeNumber} className="px-2 py-2 text-right tabular-nums">{hole.handicapIndex}</td>
+            ))}
+            <td className="px-2 py-2 text-right tabular-nums">-</td>
+            <td className="px-2 py-2 text-right tabular-nums">-</td>
+          </tr>
+          {players.map((player) => {
+            const frontScores = frontHoles.map((hole) => getPlayerHoleScore(round, player.id, hole.holeNumber));
+            const backScores = backHoles.map((hole) => getPlayerHoleScore(round, player.id, hole.holeNumber));
+            const outTotal = sumScores(frontScores);
+            const inTotal = sumScores(backScores);
+            const total = sumScores([...frontScores, ...backScores]);
+
+            return (
+              <tr key={player.id} className="border-t border-slate-200 odd:bg-white even:bg-slate-50/50">
+                <th className="sticky left-0 z-10 max-w-44 bg-inherit px-3 py-2 text-left font-semibold">
+                  <span className="block truncate">{player.name}</span>
+                </th>
+                {frontScores.map((score, index) => (
+                  <td key={`${player.id}-front-${index}`} className="px-2 py-2 text-right tabular-nums">{score ?? '-'}</td>
+                ))}
+                <td className="px-2 py-2 text-right font-semibold tabular-nums">{outTotal ?? '-'}</td>
+                {backScores.map((score, index) => (
+                  <td key={`${player.id}-back-${index}`} className="px-2 py-2 text-right tabular-nums">{score ?? '-'}</td>
+                ))}
+                <td className="px-2 py-2 text-right font-semibold tabular-nums">{inTotal ?? '-'}</td>
+                <td className="px-2 py-2 text-right font-bold tabular-nums">{total ?? '-'}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function EventLeaderboardPage() {
   const params = useParams<{ roundCode: string }>();
-  const { round, hydrateRound, setPlayerHandicap, getRunningTotals, getGrossTotals, getSkinsSummary, getCtpSummary } = useRoundStore();
+  const { round, hydrateRound, setPlayerHandicap, getGrossTotals, getSkinsSummary, getCtpSummary } = useRoundStore();
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
   const [loadStatus, setLoadStatus] = useState<'idle' | 'loading' | 'not_found' | 'ready'>('idle');
   const [handicapDrafts, setHandicapDrafts] = useState<Record<string, string>>({});
@@ -98,7 +210,6 @@ export default function EventLeaderboardPage() {
   const roundGroups = Array.isArray(round.multiFoursome?.groups) ? round.multiFoursome.groups : [];
   const roundGroupPlayers = Array.isArray(round.multiFoursome?.groupPlayers) ? round.multiFoursome.groupPlayers : [];
   const groupSize = round.multiFoursome?.groupSize ?? 4;
-  const totals = getRunningTotals();
   const grossTotals = getGrossTotals();
   const skinsSummary = getSkinsSummary();
   const ctpSummary = getCtpSummary();
@@ -128,12 +239,11 @@ export default function EventLeaderboardPage() {
         .map((item) => {
           const skins = skinsSummary.payouts.find((skin) => skin.playerId === item.playerId)?.skins ?? 0;
           const ctpWins = ctpSummary.payouts.find((ctp) => ctp.playerId === item.playerId)?.wins ?? 0;
-          const position = totals.find((total) => total.playerId === item.playerId)?.amount ?? 0;
 
-          return { ...item, skins, ctpWins, position };
+          return { ...item, skins, ctpWins };
         })
         .sort((a, b) => a.netTotal - b.netTotal || a.grossTotal - b.grossTotal || a.playerName.localeCompare(b.playerName)),
-    [ctpSummary.payouts, grossTotals, skinsSummary.payouts, totals]
+    [ctpSummary.payouts, grossTotals, skinsSummary.payouts]
   );
 
   const savedByGroup = groups.map((group) => ({
@@ -247,16 +357,11 @@ export default function EventLeaderboardPage() {
       <Card>
         <h2 className="mb-3 text-xl font-bold">Leaderboard</h2>
         <ScoreTable rows={eventLeaderboard} />
-        <div className="mt-4 grid gap-2 sm:grid-cols-3">
-          {eventLeaderboard.map((item) => (
-            <div key={item.playerId} className="rounded-xl bg-slate-50 px-3 py-3 text-sm">
-              <div className="font-semibold">{item.playerName}</div>
-              <div className="mt-1 text-slate-600">
-                Holes {item.holesCounted} | Skins {item.skins} | CTP {item.ctpWins} | Banker {formatPosition(item.position)}
-              </div>
-            </div>
-          ))}
-        </div>
+      </Card>
+
+      <Card>
+        <h2 className="mb-3 text-xl font-bold">Scorecard</h2>
+        <ScorecardTable round={round} players={roundPlayers} />
       </Card>
 
       <Card>
