@@ -245,6 +245,21 @@ export default function EventLeaderboardPage() {
       </Card>
 
       <Card>
+        <h2 className="mb-3 text-xl font-bold">Leaderboard</h2>
+        <ScoreTable rows={eventLeaderboard} />
+        <div className="mt-4 grid gap-2 sm:grid-cols-3">
+          {eventLeaderboard.map((item) => (
+            <div key={item.playerId} className="rounded-xl bg-slate-50 px-3 py-3 text-sm">
+              <div className="font-semibold">{item.playerName}</div>
+              <div className="mt-1 text-slate-600">
+                Holes {item.holesCounted} | Skins {item.skins} | CTP {item.ctpWins} | Banker {formatPosition(item.position)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card>
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 className="text-xl font-bold">Handicaps</h2>
@@ -271,21 +286,6 @@ export default function EventLeaderboardPage() {
                 }}
               />
             </label>
-          ))}
-        </div>
-      </Card>
-
-      <Card>
-        <h2 className="mb-3 text-xl font-bold">Leaderboard</h2>
-        <ScoreTable rows={eventLeaderboard} />
-        <div className="mt-4 grid gap-2 sm:grid-cols-3">
-          {eventLeaderboard.map((item) => (
-            <div key={item.playerId} className="rounded-xl bg-slate-50 px-3 py-3 text-sm">
-              <div className="font-semibold">{item.playerName}</div>
-              <div className="mt-1 text-slate-600">
-                Holes {item.holesCounted} | Skins {item.skins} | CTP {item.ctpWins} | Banker {formatPosition(item.position)}
-              </div>
-            </div>
           ))}
         </div>
       </Card>
