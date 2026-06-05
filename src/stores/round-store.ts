@@ -136,10 +136,10 @@ type RoundStore = {
 };
 
 const defaultPlayers = [
-  { id: 'p1', name: 'Player 1', handicap: 8, bankerParticipant: true },
-  { id: 'p2', name: 'Player 2', handicap: 10, bankerParticipant: true },
-  { id: 'p3', name: 'Player 3', handicap: 12, bankerParticipant: true },
-  { id: 'p4', name: 'Player 4', handicap: 9, bankerParticipant: true },
+  { id: 'p1', name: 'Player 1', handicap: 8, bankerParticipant: true, skinsParticipant: true, ctpParticipant: true, lowNetParticipant: true },
+  { id: 'p2', name: 'Player 2', handicap: 10, bankerParticipant: true, skinsParticipant: true, ctpParticipant: true, lowNetParticipant: true },
+  { id: 'p3', name: 'Player 3', handicap: 12, bankerParticipant: true, skinsParticipant: true, ctpParticipant: true, lowNetParticipant: true },
+  { id: 'p4', name: 'Player 4', handicap: 9, bankerParticipant: true, skinsParticipant: true, ctpParticipant: true, lowNetParticipant: true },
 ];
 
 function createHole(
@@ -247,6 +247,18 @@ function getGroupPlayerIds(round: RoundState, groupNumber: number) {
 
 function getBankerParticipantIds(players: Player[], playerIds: string[]) {
   return playerIds.filter((playerId) => players.find((player) => player.id === playerId)?.bankerParticipant !== false);
+}
+
+function playerParticipatesInSkins(player?: Player) {
+  return player?.skinsParticipant !== false;
+}
+
+function playerParticipatesInCtp(player?: Player) {
+  return player?.ctpParticipant !== false;
+}
+
+function playerParticipatesInLowNet(player?: Player) {
+  return player?.lowNetParticipant !== false;
 }
 
 function ensureMultiFoursomeRound(round: RoundState): RoundState {
@@ -671,6 +683,7 @@ function buildSkinsSummary(round: RoundState): SkinsSummary {
       const groupHoles = round.holes.filter((hole) => hole.isSaved && hole.holeNumber === holeNumber);
       const scores = groupHoles.flatMap((hole) =>
         round.players
+          .filter(playerParticipatesInSkins)
           .map((player) => ({
             player,
             net: getPlayerNetForHole(round, hole, player.id),
@@ -701,7 +714,7 @@ function buildSkinsSummary(round: RoundState): SkinsSummary {
   const wonHoles = holes.filter((hole) => hole.winnerPlayerId);
   const valuePerSkin = wonHoles.length > 0 ? pot / wonHoles.length : 0;
 
-  const payouts = round.players.map((player) => {
+  const payouts = round.players.filter(playerParticipatesInSkins).map((player) => {
     const skins = wonHoles.filter((hole) => hole.winnerPlayerId === player.id).length;
     return {
       playerId: player.id,
@@ -716,8 +729,11 @@ function buildSkinsSummary(round: RoundState): SkinsSummary {
 
 function buildLowNetSummary(round: RoundState): LowNetSummary {
   const pot = round.gameSettings?.lowNetPot ?? 0;
-  const totals = buildGrossTotals(round).sort((a, b) => a.netTotal - b.netTotal);
-  const payouts = round.players.map((player) => ({
+  const lowNetPlayerIds = new Set(round.players.filter(playerParticipatesInLowNet).map((player) => player.id));
+  const totals = buildGrossTotals(round)
+    .filter((item) => lowNetPlayerIds.has(item.playerId))
+    .sort((a, b) => a.netTotal - b.netTotal);
+  const payouts = round.players.filter(playerParticipatesInLowNet).map((player) => ({
     playerId: player.id,
     playerName: player.name,
     placement: 'Other',
@@ -770,7 +786,10 @@ function buildCtpSummary(round: RoundState): CtpSummary {
   );
   const par3Holes = par3HoleNumbers
     .map((holeNumber) => {
-      const groupHoles = round.holes.filter((hole) => hole.holeNumber === holeNumber && hole.ctpWinnerPlayerId);
+      const groupHoles = round.holes.filter((hole) => {
+        const winner = round.players.find((player) => player.id === hole.ctpWinnerPlayerId);
+        return hole.holeNumber === holeNumber && hole.ctpWinnerPlayerId && playerParticipatesInCtp(winner);
+      });
       const winningPlayerId = groupHoles[groupHoles.length - 1]?.ctpWinnerPlayerId ?? null;
       const winner = round.players.find((player) => player.id === winningPlayerId);
       return {
@@ -783,7 +802,7 @@ function buildCtpSummary(round: RoundState): CtpSummary {
   const won = par3Holes.filter((item) => item.winnerPlayerId);
   const valuePerWin = won.length > 0 ? pot / won.length : 0;
 
-  const payouts = round.players.map((player) => {
+  const payouts = round.players.filter(playerParticipatesInCtp).map((player) => {
     const wins = won.filter((item) => item.winnerPlayerId === player.id).length;
     return {
       playerId: player.id,

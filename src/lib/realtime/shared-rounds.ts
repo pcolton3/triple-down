@@ -24,6 +24,9 @@ type RoundPlayerRow = {
   name: string;
   handicap: number;
   banker_participant: boolean | null;
+  skins_participant: boolean | null;
+  ctp_participant: boolean | null;
+  low_net_participant: boolean | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -213,6 +216,9 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
     name: player.name,
     handicap: player.handicap,
     banker_participant: player.bankerParticipant !== false,
+    skins_participant: player.skinsParticipant !== false,
+    ctp_participant: player.ctpParticipant !== false,
+    low_net_participant: player.lowNetParticipant !== false,
     sort_order: index,
   }));
 
@@ -420,6 +426,9 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
     name: player.name,
     handicap: player.handicap,
     bankerParticipant: player.banker_participant !== false,
+    skinsParticipant: player.skins_participant !== false,
+    ctpParticipant: player.ctp_participant !== false,
+    lowNetParticipant: player.low_net_participant !== false,
   }));
   const games = new Map(bundle.games.map((game) => [game.game_type, game]));
   const handicapSettings = games.get('low_net')?.settings ?? {};

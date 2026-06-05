@@ -14,6 +14,9 @@ type PlayerDraft = {
   name: string;
   handicap: string;
   bankerParticipant: boolean;
+  skinsParticipant: boolean;
+  ctpParticipant: boolean;
+  lowNetParticipant: boolean;
 };
 
 function numberOrZero(value: string) {
@@ -33,6 +36,9 @@ function buildPlayerDrafts(players: Player[]): PlayerDraft[] {
     name: player.name,
     handicap: String(player.handicap ?? 0),
     bankerParticipant: player.bankerParticipant !== false,
+    skinsParticipant: player.skinsParticipant !== false,
+    ctpParticipant: player.ctpParticipant !== false,
+    lowNetParticipant: player.lowNetParticipant !== false,
   }));
 }
 
@@ -111,8 +117,12 @@ export default function EditRoundSetupPage() {
           name: draft.name.trim() || player.name,
           handicap: Math.max(0, numberOrZero(draft.handicap)),
           bankerParticipant: draft.bankerParticipant,
+          skinsParticipant: draft.skinsParticipant,
+          ctpParticipant: draft.ctpParticipant,
+          lowNetParticipant: draft.lowNetParticipant,
         };
       });
+      const nextPlayerById = new Map(nextPlayers.map((player) => [player.id, player]));
 
       const nextRound: RoundState = {
         ...round,
@@ -130,9 +140,13 @@ export default function EditRoundSetupPage() {
         players: nextPlayers,
         holes: round.holes.map((hole) => ({
           ...hole,
+          ctpWinnerPlayerId:
+            hole.ctpWinnerPlayerId && nextPlayerById.get(hole.ctpWinnerPlayerId)?.ctpParticipant === false
+              ? null
+              : hole.ctpWinnerPlayerId,
           matchups: hole.matchups.map((matchup) => ({
             ...matchup,
-            bankerParticipant: nextPlayers.find((player) => player.id === matchup.playerId)?.bankerParticipant !== false,
+            bankerParticipant: nextPlayerById.get(matchup.playerId)?.bankerParticipant !== false,
           })),
         })),
       };
@@ -216,7 +230,7 @@ export default function EditRoundSetupPage() {
         </div>
         <div className="space-y-3">
           {playerDrafts.map((player) => (
-            <div key={player.id} className="grid gap-3 rounded-xl bg-slate-50 p-3 sm:grid-cols-[100px_1fr_110px_120px]">
+            <div key={player.id} className="grid gap-3 rounded-xl bg-slate-50 p-3 sm:grid-cols-[100px_1fr_110px]">
               <div>
                 <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Group</span>
                 <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold">{getGroupLabel(round, player.id)}</div>
@@ -229,12 +243,26 @@ export default function EditRoundSetupPage() {
                 <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">HCP</span>
                 <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={player.handicap} onChange={(event) => updatePlayerDraft(player.id, 'handicap', event.target.value)} />
               </label>
-              <div>
-                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Banker</span>
-                <label className="flex h-[50px] items-center justify-center rounded-xl border border-slate-300 bg-white font-semibold">
-                  <input type="checkbox" className="mr-2 h-4 w-4" checked={player.bankerParticipant} onChange={() => updatePlayerDraft(player.id, 'bankerParticipant', !player.bankerParticipant)} />
-                  Play
-                </label>
+              <div className="sm:col-span-3">
+                <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">Games</span>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+                    <input type="checkbox" className="mr-2 h-4 w-4" checked={player.bankerParticipant} onChange={() => updatePlayerDraft(player.id, 'bankerParticipant', !player.bankerParticipant)} />
+                    Banker
+                  </label>
+                  <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+                    <input type="checkbox" className="mr-2 h-4 w-4" checked={player.skinsParticipant} onChange={() => updatePlayerDraft(player.id, 'skinsParticipant', !player.skinsParticipant)} />
+                    Skins
+                  </label>
+                  <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+                    <input type="checkbox" className="mr-2 h-4 w-4" checked={player.ctpParticipant} onChange={() => updatePlayerDraft(player.id, 'ctpParticipant', !player.ctpParticipant)} />
+                    CTP
+                  </label>
+                  <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+                    <input type="checkbox" className="mr-2 h-4 w-4" checked={player.lowNetParticipant} onChange={() => updatePlayerDraft(player.id, 'lowNetParticipant', !player.lowNetParticipant)} />
+                    Low Net
+                  </label>
+                </div>
               </div>
             </div>
           ))}

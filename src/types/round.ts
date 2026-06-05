@@ -3,6 +3,9 @@ export type Player = {
   name: string;
   handicap: number;
   bankerParticipant?: boolean;
+  skinsParticipant?: boolean;
+  ctpParticipant?: boolean;
+  lowNetParticipant?: boolean;
 };
 
 export type MatchupDraft = {

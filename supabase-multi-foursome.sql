@@ -7,6 +7,15 @@ alter table public.round_matchups
 alter table public.round_players
   add column if not exists banker_participant boolean not null default true;
 
+alter table public.round_players
+  add column if not exists skins_participant boolean not null default true;
+
+alter table public.round_players
+  add column if not exists ctp_participant boolean not null default true;
+
+alter table public.round_players
+  add column if not exists low_net_participant boolean not null default true;
+
 alter table public.round_matchups
   add column if not exists banker_participant boolean not null default true;
 

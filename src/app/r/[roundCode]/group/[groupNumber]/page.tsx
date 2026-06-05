@@ -171,6 +171,7 @@ export default function GroupScoringPage() {
     .map((playerId) => roundPlayers.find((player) => player.id === playerId))
     .filter((player): player is typeof round.players[number] => Boolean(player));
   const bankerPlayers = groupPlayers.filter((player) => player.bankerParticipant !== false);
+  const ctpPlayers = groupPlayers.filter((player) => player.ctpParticipant !== false);
   const isScoreOnlyGroup = bankerPlayers.length === 0;
   const currentHoleNumber = group?.currentHole ?? round.currentHole;
   const targetHoleNumber = editHoleNumber ?? currentHoleNumber;
@@ -459,7 +460,7 @@ export default function GroupScoringPage() {
             onChange={(event) => setCtpWinner(hole.holeNumber, event.target.value || null, groupNumber)}
           >
             <option value="">No Winner</option>
-            {groupPlayers.map((player) => (
+            {ctpPlayers.map((player) => (
               <option key={player.id} value={player.id}>
                 {player.name}
               </option>
@@ -490,7 +491,7 @@ export default function GroupScoringPage() {
                   placeholder="Gross"
                   blankWhenZero
                 />
-                <p className="mt-3 text-sm text-slate-500">Counts for leaderboard, skins, CTP, and low net.</p>
+                <p className="mt-3 text-sm text-slate-500">Counts for leaderboard and any side games this golfer joined.</p>
               </div>
             );
           })
@@ -528,7 +529,7 @@ export default function GroupScoringPage() {
               <p className="mt-3 text-sm text-slate-500">
                 {playsBanker
                   ? `Net ${summaryItem?.playerNetScore ?? '-'} vs Banker ${summaryItem?.bankerNetScore ?? '-'}`
-                  : `Gross score counts for leaderboard and side games.`}
+                  : `Gross score counts for leaderboard and any side games this golfer joined.`}
               </p>
             </div>
           );

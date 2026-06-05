@@ -23,6 +23,9 @@ function buildDefaultPlayers(count = 4) {
     name: '',
     handicap: 0,
     bankerParticipant: true,
+    skinsParticipant: true,
+    ctpParticipant: true,
+    lowNetParticipant: true,
   }));
 }
 
@@ -189,7 +192,15 @@ export default function NewRoundPage() {
 
       const additions = Array.from({ length: normalized - current.length }, (_, index) => {
         const nextNumber = current.length + index + 1;
-        return { id: `p${nextNumber}`, name: '', handicap: 0, bankerParticipant: true };
+        return {
+          id: `p${nextNumber}`,
+          name: '',
+          handicap: 0,
+          bankerParticipant: true,
+          skinsParticipant: true,
+          ctpParticipant: true,
+          lowNetParticipant: true,
+        };
       });
 
       return [...current, ...additions];
@@ -213,6 +224,14 @@ export default function NewRoundPage() {
     setPlayers((current) =>
       current.map((player) =>
         player.id === playerId ? { ...player, bankerParticipant: player.bankerParticipant === false } : player
+      )
+    );
+  }
+
+  function togglePlayerGame(playerId: string, field: 'skinsParticipant' | 'ctpParticipant' | 'lowNetParticipant') {
+    setPlayers((current) =>
+      current.map((player) =>
+        player.id === playerId ? { ...player, [field]: player[field] === false } : player
       )
     );
   }
@@ -592,7 +611,7 @@ export default function NewRoundPage() {
                   {group.players.map((player, groupIndex) => {
                     const absoluteIndex = (group.groupNumber - 1) * effectiveGroupSize + groupIndex;
                     return (
-                      <div key={player.id} className="grid gap-3 rounded-xl bg-slate-50 p-3 sm:grid-cols-[1fr_1fr_100px_90px]">
+                      <div key={player.id} className="grid gap-3 rounded-xl bg-slate-50 p-3 sm:grid-cols-[1fr_1fr_100px]">
                         <div>
                           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                             Saved Golfer
@@ -631,19 +650,48 @@ export default function NewRoundPage() {
                             placeholder="0"
                           />
                         </div>
-                        <div>
-                          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            Banker
-                          </label>
-                          <label className="flex h-[50px] items-center justify-center rounded-xl border border-slate-300 bg-white font-semibold">
-                            <input
-                              type="checkbox"
-                              className="mr-2 h-4 w-4"
-                              checked={player.bankerParticipant !== false}
-                              onChange={() => togglePlayerBanker(player.id)}
-                            />
-                            Play
-                          </label>
+                        <div className="sm:col-span-3">
+                          <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Games
+                          </span>
+                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                            <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+                              <input
+                                type="checkbox"
+                                className="mr-2 h-4 w-4"
+                                checked={player.bankerParticipant !== false}
+                                onChange={() => togglePlayerBanker(player.id)}
+                              />
+                              Banker
+                            </label>
+                            <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+                              <input
+                                type="checkbox"
+                                className="mr-2 h-4 w-4"
+                                checked={player.skinsParticipant !== false}
+                                onChange={() => togglePlayerGame(player.id, 'skinsParticipant')}
+                              />
+                              Skins
+                            </label>
+                            <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+                              <input
+                                type="checkbox"
+                                className="mr-2 h-4 w-4"
+                                checked={player.ctpParticipant !== false}
+                                onChange={() => togglePlayerGame(player.id, 'ctpParticipant')}
+                              />
+                              CTP
+                            </label>
+                            <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+                              <input
+                                type="checkbox"
+                                className="mr-2 h-4 w-4"
+                                checked={player.lowNetParticipant !== false}
+                                onChange={() => togglePlayerGame(player.id, 'lowNetParticipant')}
+                              />
+                              Low Net
+                            </label>
+                          </div>
                         </div>
                       </div>
                     );
