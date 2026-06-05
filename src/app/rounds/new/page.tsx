@@ -330,15 +330,6 @@ export default function NewRoundPage() {
           sortOrder,
         }))
     );
-    const invalidBankerGroup = groups.find((group) => {
-      const filledGroupPlayers = group.players.filter((player) => playerIds.has(player.id));
-      return filledGroupPlayers.length > 0 && !filledGroupPlayers.some((player) => player.bankerParticipant !== false);
-    });
-    if (invalidBankerGroup) {
-      setCreateError(`Group ${invalidBankerGroup.groupNumber} needs at least one golfer playing Banker.`);
-      setIsCreating(false);
-      return;
-    }
     const firstFilledPlayerId = sanitizedPlayers[0]?.id ?? firstBankerPlayerId;
     const openingBankerId = playerIds.has(firstBankerPlayerId) ? firstBankerPlayerId : firstFilledPlayerId;
 

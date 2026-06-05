@@ -171,6 +171,7 @@ export default function GroupScoringPage() {
     .map((playerId) => roundPlayers.find((player) => player.id === playerId))
     .filter((player): player is typeof round.players[number] => Boolean(player));
   const bankerPlayers = groupPlayers.filter((player) => player.bankerParticipant !== false);
+  const isScoreOnlyGroup = bankerPlayers.length === 0;
   const currentHoleNumber = group?.currentHole ?? round.currentHole;
   const targetHoleNumber = editHoleNumber ?? currentHoleNumber;
   const hole =
@@ -400,25 +401,32 @@ export default function GroupScoringPage() {
           </div>
         </div>
         <div className="mb-3">
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Banker</label>
-            <select
-              className="w-full rounded-xl border border-slate-300 px-3 py-3 font-semibold"
-              value={hole.bankerPlayerId}
-              disabled={!canEdit}
-              onChange={(event) => setBanker(event.target.value, groupNumber, targetHoleNumber)}
-            >
-              {bankerPlayers.map((player) => (
-                <option key={player.id} value={player.id}>
-                  {player.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {isScoreOnlyGroup ? (
+            <div className="rounded-xl bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-600">
+              Score-only group. These scores count for leaderboard and side games.
+            </div>
+          ) : (
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Banker</label>
+              <select
+                className="w-full rounded-xl border border-slate-300 px-3 py-3 font-semibold"
+                value={hole.bankerPlayerId}
+                disabled={!canEdit}
+                onChange={(event) => setBanker(event.target.value, groupNumber, targetHoleNumber)}
+              >
+                {bankerPlayers.map((player) => (
+                  <option key={player.id} value={player.id}>
+                    {player.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
         <p className="text-sm text-slate-500">{groupPlayers.map((player) => player.name).join(', ')}</p>
       </section>
 
+      {!isScoreOnlyGroup ? (
       <section className="rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
@@ -439,6 +447,7 @@ export default function GroupScoringPage() {
         </div>
         <NumberField value={hole.bankerGrossScore} disabled={!canEdit} onChange={(value) => setBankerGrossScore(value, groupNumber, targetHoleNumber)} placeholder="Gross" blankWhenZero />
       </section>
+      ) : null}
 
       {hole.par === 3 ? (
         <section className="rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
@@ -460,7 +469,33 @@ export default function GroupScoringPage() {
       ) : null}
 
       <section className="space-y-3">
-        {hole.matchups.map((matchup) => {
+        {isScoreOnlyGroup ? (
+          groupPlayers.map((player) => {
+            const matchup = hole.matchups.find((item) => item.playerId === player.id);
+            const isStoredAsBanker = player.id === hole.bankerPlayerId;
+            const grossScore = isStoredAsBanker ? hole.bankerGrossScore : matchup?.grossScore ?? null;
+
+            return (
+              <div key={player.id} className="rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
+                <h3 className="mb-3 text-lg font-bold">{player.name}</h3>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Gross</label>
+                <NumberField
+                  value={grossScore}
+                  disabled={!canEdit}
+                  onChange={(value) =>
+                    isStoredAsBanker
+                      ? setBankerGrossScore(value, groupNumber, targetHoleNumber)
+                      : setPlayerGrossScore(player.id, value, groupNumber, targetHoleNumber)
+                  }
+                  placeholder="Gross"
+                  blankWhenZero
+                />
+                <p className="mt-3 text-sm text-slate-500">Counts for leaderboard, skins, CTP, and low net.</p>
+              </div>
+            );
+          })
+        ) : (
+        hole.matchups.map((matchup) => {
           const player = groupPlayers.find((item) => item.id === matchup.playerId) ?? round.players[0];
           const summaryItem = matchupSummaryByPlayerId[player.id];
           const playsBanker = matchup.bankerParticipant !== false;
@@ -497,9 +532,11 @@ export default function GroupScoringPage() {
               </p>
             </div>
           );
-        })}
+        })
+        )}
       </section>
 
+      {!isScoreOnlyGroup ? (
       <section className="rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
         <h3 className="mb-3 text-lg font-bold">Current Hole Summary</h3>
         <div className="space-y-2">
@@ -521,7 +558,9 @@ export default function GroupScoringPage() {
           ))}
         </div>
       </section>
+      ) : null}
 
+      {!isScoreOnlyGroup ? (
       <section className="rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
         <h3 className="mb-3 text-lg font-bold">Banker Running Total</h3>
         <div className="space-y-2">
@@ -539,6 +578,7 @@ export default function GroupScoringPage() {
           ))}
         </div>
       </section>
+      ) : null}
 
       {message ? <p className="rounded-xl bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">{message}</p> : null}
 
