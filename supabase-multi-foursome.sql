@@ -61,8 +61,21 @@ create table if not exists public.round_group_players (
   unique (round_id, player_key)
 );
 
+create table if not exists public.round_settlement_snapshots (
+  id uuid primary key default gen_random_uuid(),
+  round_id uuid not null references public.rounds(id) on delete cascade,
+  round_code text not null,
+  snapshot jsonb not null,
+  finalized_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (round_id),
+  unique (round_code)
+);
+
 alter table public.round_groups enable row level security;
 alter table public.round_group_players enable row level security;
+alter table public.round_settlement_snapshots enable row level security;
 
 do $$
 begin
@@ -130,6 +143,40 @@ begin
   ) then
     create policy round_group_players_public_update
       on public.round_group_players for update
+      using (true)
+      with check (true);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'round_settlement_snapshots'
+      and policyname = 'round_settlement_snapshots_public_read'
+  ) then
+    create policy round_settlement_snapshots_public_read
+      on public.round_settlement_snapshots for select
+      using (true);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'round_settlement_snapshots'
+      and policyname = 'round_settlement_snapshots_public_insert'
+  ) then
+    create policy round_settlement_snapshots_public_insert
+      on public.round_settlement_snapshots for insert
+      with check (true);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'round_settlement_snapshots'
+      and policyname = 'round_settlement_snapshots_public_update'
+  ) then
+    create policy round_settlement_snapshots_public_update
+      on public.round_settlement_snapshots for update
       using (true)
       with check (true);
   end if;

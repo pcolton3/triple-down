@@ -159,6 +159,36 @@ export type SharedRoundBundle = {
   groupPlayers: RoundGroupPlayerRow[];
 };
 
+export type SettlementSnapshot = {
+  roundCode: string;
+  roundTitle: string;
+  courseName: string;
+  finalizedAt: string;
+  finalScoring: Array<{ playerId: string; playerName: string; grossTotal: number; netTotal: number }>;
+  skins: Array<{ playerId: string; playerName: string; amount: number; skins: number; holes: number[] }>;
+  ctp: Array<{ playerId: string; playerName: string; amount: number; wins: number; holes: number[] }>;
+  lowNet: Array<{ playerId: string; playerName: string; amount: number; placement: string }>;
+  bankerPositions: Array<{ playerId: string; name: string; amount: number }>;
+  bankerSettlements: Array<{
+    groupNumber: number;
+    fromPlayerId: string;
+    fromPlayerName: string;
+    toPlayerId: string;
+    toPlayerName: string;
+    amount: number;
+  }>;
+};
+
+type SettlementSnapshotRow = {
+  id: string;
+  round_id: string;
+  round_code: string;
+  snapshot: SettlementSnapshot;
+  finalized_at: string;
+  created_at: string;
+  updated_at: string;
+};
+
 function formatSupabaseError(error: unknown, fallback: string) {
   if (!error || typeof error !== 'object') return fallback;
   const details = error as { message?: string; details?: string; hint?: string; code?: string };
@@ -453,6 +483,44 @@ export async function loadSharedRoundByCode(roundCode: string): Promise<SharedRo
   if (!round) return null;
 
   return loadSharedRoundById((round as RoundRow).id);
+}
+
+export async function loadSettlementSnapshot(roundCode: string): Promise<SettlementSnapshot | null> {
+  const { data, error } = await supabase
+    .from('round_settlement_snapshots')
+    .select('*')
+    .eq('round_code', roundCode)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingSchemaError(error)) return null;
+    throw new Error(formatSupabaseError(error, 'Unable to load settlement snapshot.'));
+  }
+
+  return data ? (data as SettlementSnapshotRow).snapshot : null;
+}
+
+export async function saveSettlementSnapshot(params: {
+  roundId: string;
+  roundCode: string;
+  snapshot: SettlementSnapshot;
+}) {
+  const { data, error } = await supabase
+    .from('round_settlement_snapshots')
+    .upsert(
+      {
+        round_id: params.roundId,
+        round_code: params.roundCode,
+        snapshot: params.snapshot,
+        finalized_at: params.snapshot.finalizedAt,
+      },
+      { onConflict: 'round_id' }
+    )
+    .select('*')
+    .single();
+
+  if (error) throw new Error(formatSupabaseError(error, 'Unable to save settlement snapshot.'));
+  return (data as SettlementSnapshotRow).snapshot;
 }
 
 export async function loadSharedRoundById(roundId: string): Promise<SharedRoundBundle> {

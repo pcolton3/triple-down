@@ -6,7 +6,13 @@ import { useRoundStore } from '@/stores/round-store';
 import { formatCurrency } from '@/lib/utils/currency';
 import { postHandicapScores } from '@/lib/realtime/saved-golfers';
 import { calculateScoreDifferential } from '@/lib/handicap/whs';
-import { loadSharedRoundByCode, sharedRoundBundleToRoundState } from '@/lib/realtime/shared-rounds';
+import {
+  loadSettlementSnapshot,
+  loadSharedRoundByCode,
+  saveSettlementSnapshot,
+  sharedRoundBundleToRoundState,
+  type SettlementSnapshot,
+} from '@/lib/realtime/shared-rounds';
 
 function formatPosition(amount: number) {
   if (amount > 0) return `Up ${formatCurrency(amount)}`;
@@ -68,6 +74,8 @@ export default function SettlePage() {
   const [pcc, setPcc] = useState(String(round.gameSettings.pcc ?? 0));
   const [adjustedScores, setAdjustedScores] = useState<Record<string, string>>({});
   const [handicapPostStatus, setHandicapPostStatus] = useState('');
+  const [settlementSnapshot, setSettlementSnapshot] = useState<SettlementSnapshot | null>(null);
+  const [snapshotStatus, setSnapshotStatus] = useState('');
   const routeRoundCode = params.roundCode?.toUpperCase() || round.roundCode;
   const bankerSettlementGroups = settlements.reduce<Array<{ groupNumber: number; items: typeof settlements }>>(
     (groups, item) => {
@@ -104,10 +112,14 @@ export default function SettlePage() {
 
     async function loadRound() {
       if (!routeRoundCode) return;
-      const bundle = await loadSharedRoundByCode(routeRoundCode);
+      const [bundle, snapshot] = await Promise.all([
+        loadSharedRoundByCode(routeRoundCode),
+        loadSettlementSnapshot(routeRoundCode),
+      ]);
       if (!cancelled && bundle) {
         hydrateRound(sharedRoundBundleToRoundState(bundle));
       }
+      if (!cancelled) setSettlementSnapshot(snapshot);
     }
 
     void loadRound();
@@ -163,6 +175,64 @@ export default function SettlePage() {
 
   const lowNetWinnerRows = lowNetSummary.payouts.filter((item) => item.amount > 0);
 
+  function buildSnapshot(): SettlementSnapshot {
+    return {
+      roundCode: routeRoundCode,
+      roundTitle: round.title,
+      courseName: round.courseName,
+      finalizedAt: new Date().toISOString(),
+      finalScoring: grossScores.map((score) => ({
+        playerId: score.playerId,
+        playerName: score.playerName,
+        grossTotal: score.grossTotal,
+        netTotal: score.netTotal,
+      })),
+      skins: skinWinnerRows.map((item) => ({
+        playerId: item.playerId,
+        playerName: item.playerName,
+        amount: item.amount,
+        skins: item.skins,
+        holes: item.holes,
+      })),
+      ctp: ctpWinnerRows.map((item) => ({
+        playerId: item.playerId,
+        playerName: item.playerName,
+        amount: item.amount,
+        wins: item.wins,
+        holes: item.holes,
+      })),
+      lowNet: lowNetWinnerRows.map((item) => ({
+        playerId: item.playerId,
+        playerName: item.playerName,
+        amount: item.amount,
+        placement: item.placement,
+      })),
+      bankerPositions: totals.map((total) => ({
+        playerId: total.playerId,
+        name: total.name,
+        amount: total.amount,
+      })),
+      bankerSettlements: settlements,
+    };
+  }
+
+  async function handleFinalizeSettlement() {
+    try {
+      setSnapshotStatus('Saving final settlement...');
+      const snapshot = buildSnapshot();
+      const saved = await saveSettlementSnapshot({
+        roundId: round.id,
+        roundCode: routeRoundCode,
+        snapshot,
+      });
+      setSettlementSnapshot(saved);
+      setSnapshotStatus('Final settlement saved.');
+    } catch (error) {
+      console.error('Unable to save settlement snapshot.', error);
+      setSnapshotStatus(error instanceof Error ? error.message : 'Unable to save final settlement.');
+    }
+  }
+
   async function handlePostHandicapScores() {
     try {
       setHandicapPostStatus('Posting handicap scores...');
@@ -207,6 +277,111 @@ export default function SettlePage() {
           <a href={`/r/${routeRoundCode}`}>Back to Round</a>
         </div>
       </div>
+
+      {settlementSnapshot ? (
+        <>
+          <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
+            <h2 className="text-xl font-bold">Final Settlement Saved</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Finalized {new Date(settlementSnapshot.finalizedAt).toLocaleString()} for {settlementSnapshot.roundTitle} at {settlementSnapshot.courseName}.
+            </p>
+          </section>
+
+          <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
+            <h2 className="mb-3 text-xl font-bold">Final Scoring</h2>
+            <ScoreTable rows={settlementSnapshot.finalScoring} />
+          </section>
+
+          <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
+            <h2 className="mb-3 text-xl font-bold">Payouts</h2>
+
+            <div className="mb-4">
+              <h3 className="mb-2 font-semibold">Skins</h3>
+              <div className="space-y-2">
+                {settlementSnapshot.skins.length === 0 ? (
+                  <div className="rounded-xl bg-slate-50 px-3 py-3 text-slate-500">No skins winners.</div>
+                ) : (
+                  settlementSnapshot.skins.map((item) => (
+                    <div key={item.playerId} className="rounded-xl bg-slate-50 px-3 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="font-medium">{item.playerName} wins {formatCurrency(item.amount)} skins</span>
+                        <span className="font-bold">{item.skins} skin{item.skins === 1 ? '' : 's'}</span>
+                      </div>
+                      <p className="mt-1 text-sm text-slate-500">Skin holes: {formatHoles(item.holes)}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <h3 className="mb-2 font-semibold">Closest to the Pin</h3>
+              <div className="space-y-2">
+                {settlementSnapshot.ctp.length === 0 ? (
+                  <div className="rounded-xl bg-slate-50 px-3 py-3 text-slate-500">No CTP winners.</div>
+                ) : (
+                  settlementSnapshot.ctp.map((item) => (
+                    <div key={item.playerId} className="rounded-xl bg-slate-50 px-3 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="font-medium">{item.playerName} wins {formatCurrency(item.amount)} CTP</span>
+                        <span className="font-bold">{item.wins} win{item.wins === 1 ? '' : 's'}</span>
+                      </div>
+                      <p className="mt-1 text-sm text-slate-500">CTP holes: {formatHoles(item.holes)}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="mb-2 font-semibold">Low Net</h3>
+              <div className="space-y-2">
+                {settlementSnapshot.lowNet.length === 0 ? (
+                  <div className="rounded-xl bg-slate-50 px-3 py-3 text-slate-500">No low net payouts.</div>
+                ) : (
+                  settlementSnapshot.lowNet.map((item) => (
+                    <div key={item.playerId} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
+                      <span>{item.playerName} wins {formatCurrency(item.amount)} low net ({item.placement})</span>
+                      <span className="font-bold">{formatCurrency(item.amount)}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </section>
+
+          <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
+            <h2 className="mb-3 text-lg font-bold">Banker Final Positions</h2>
+            <div className="space-y-2">
+              {settlementSnapshot.bankerPositions.map((total) => (
+                <div key={total.playerId} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
+                  <span className="font-medium">{total.name}</span>
+                  <span className="font-bold">{formatPosition(total.amount)}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
+            <h2 className="mb-3 text-lg font-bold">Who Pays Whom - Banker Only</h2>
+            {settlementSnapshot.bankerSettlements.length === 0 ? (
+              <div className="rounded-xl bg-slate-50 px-3 py-4 text-slate-500">Nobody owes anything.</div>
+            ) : (
+              <div className="space-y-2">
+                {settlementSnapshot.bankerSettlements.map((item, index) => (
+                  <div key={`${item.groupNumber}-${item.fromPlayerId}-${item.toPlayerId}-${index}`} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
+                    <span className="font-medium">
+                      Group {item.groupNumber}: {item.fromPlayerName} pays {item.toPlayerName}
+                    </span>
+                    <span className="font-bold">{formatCurrency(item.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </>
+      ) : (
+        <>
 
       <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
         <h2 className="mb-3 text-xl font-bold">Final Scoring</h2>
@@ -389,6 +564,28 @@ export default function SettlePage() {
           </div>
         )}
       </section>
+
+      <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-xl font-bold">Final Settlement Snapshot</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Save the final settle-up page once every group is complete.
+            </p>
+            {snapshotStatus ? <p className="mt-2 text-sm text-slate-600">{snapshotStatus}</p> : null}
+          </div>
+          <button
+            type="button"
+            className="rounded-xl bg-[#2f8df3] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+            disabled={!roundComplete || round.id.startsWith('round-')}
+            onClick={() => void handleFinalizeSettlement()}
+          >
+            Finalize Settlement
+          </button>
+        </div>
+      </section>
+        </>
+      )}
     </main>
   );
 }
