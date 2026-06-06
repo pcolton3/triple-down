@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
-import { createSharedRoundFromLocalRound, loadSharedRoundByCode, sharedRoundBundleToRoundState } from '@/lib/realtime/shared-rounds';
+import { loadSharedRoundByCode, sharedRoundBundleToRoundState, updateSharedRoundSetup } from '@/lib/realtime/shared-rounds';
 import { useRoundStore } from '@/stores/round-store';
 import type { Player, RoundState } from '@/types/round';
 
@@ -152,7 +152,7 @@ export default function EditRoundSetupPage() {
       };
 
       hydrateRound(nextRound);
-      await createSharedRoundFromLocalRound(nextRound);
+      await updateSharedRoundSetup(nextRound);
       const bundle = await loadSharedRoundByCode(routeRoundCode);
       if (bundle) {
         hydrateRound(sharedRoundBundleToRoundState(bundle));

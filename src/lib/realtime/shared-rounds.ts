@@ -346,6 +346,102 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
   return typedRoundRow;
 }
 
+export async function updateSharedRoundSetup(round: RoundState) {
+  if (round.id.startsWith('round-')) {
+    await createSharedRoundFromLocalRound(round);
+    return;
+  }
+
+  const { error: roundError } = await supabase
+    .from('rounds')
+    .update({
+      title: round.title,
+      course_name: round.courseName,
+      selected_course_id: round.selectedCourseId,
+      default_bet: round.defaultBet,
+    })
+    .eq('id', round.id);
+
+  if (roundError) throw new Error(formatSupabaseError(roundError, 'Unable to save round setup.'));
+
+  const playerRows = round.players.map((player, index) => ({
+    round_id: round.id,
+    player_key: player.id,
+    name: player.name,
+    handicap: player.handicap,
+    banker_participant: player.bankerParticipant !== false,
+    skins_participant: player.skinsParticipant !== false,
+    ctp_participant: player.ctpParticipant !== false,
+    low_net_participant: player.lowNetParticipant !== false,
+    sort_order: index,
+  }));
+
+  const { error: playersError } = await supabase
+    .from('round_players')
+    .upsert(playerRows, { onConflict: 'round_id,player_key' });
+
+  if (playersError) throw new Error(formatSupabaseError(playersError, 'Unable to save player setup.'));
+
+  await Promise.all(
+    round.players.map(async (player) => {
+      const { error } = await supabase
+        .from('round_matchups')
+        .update({ banker_participant: player.bankerParticipant !== false })
+        .eq('round_id', round.id)
+        .eq('player_key', player.id);
+
+      if (error) throw new Error(formatSupabaseError(error, 'Unable to save Banker participation.'));
+    })
+  );
+
+  const ctpOptOutIds = round.players.filter((player) => player.ctpParticipant === false).map((player) => player.id);
+  if (ctpOptOutIds.length > 0) {
+    const { error: ctpError } = await supabase
+      .from('round_ctp_results')
+      .update({ winner_player_key: null })
+      .eq('round_id', round.id)
+      .in('winner_player_key', ctpOptOutIds);
+
+    if (ctpError) throw new Error(formatSupabaseError(ctpError, 'Unable to clear ineligible CTP winners.'));
+  }
+
+  const { error: gamesError } = await supabase
+    .from('round_games')
+    .upsert(
+      [
+        { round_id: round.id, game_type: 'banker', pot_amount: 0, enabled: true, settings: {} },
+        {
+          round_id: round.id,
+          game_type: 'skins',
+          pot_amount: round.gameSettings.skinsPot,
+          enabled: round.gameSettings.skinsPot > 0,
+          settings: {},
+        },
+        {
+          round_id: round.id,
+          game_type: 'low_net',
+          pot_amount: round.gameSettings.lowNetPot,
+          enabled: round.gameSettings.lowNetPot > 0,
+          settings: {
+            courseRating: round.gameSettings.courseRating ?? null,
+            slopeRating: round.gameSettings.slopeRating ?? null,
+            pcc: round.gameSettings.pcc ?? 0,
+          },
+        },
+        {
+          round_id: round.id,
+          game_type: 'ctp',
+          pot_amount: round.gameSettings.ctpPot,
+          enabled: round.gameSettings.ctpPot > 0,
+          settings: {},
+        },
+      ],
+      { onConflict: 'round_id,game_type' }
+    );
+
+  if (gamesError) throw new Error(formatSupabaseError(gamesError, 'Unable to save game setup.'));
+}
+
 export async function loadSharedRoundByCode(roundCode: string): Promise<SharedRoundBundle | null> {
   const { data: round, error: roundError } = await supabase
     .from('rounds')
@@ -610,6 +706,22 @@ export async function updateSharedHole(params: {
   const { error } = await supabase
     .from('round_holes')
     .update(payload)
+    .eq('round_id', params.roundId)
+    .eq('group_number', params.groupNumber ?? 1)
+    .eq('hole_number', params.holeNumber);
+
+  if (error) throw error;
+}
+
+export async function updateSharedCtpResult(params: {
+  roundId: string;
+  groupNumber?: number;
+  holeNumber: number;
+  winnerPlayerKey: string | null;
+}) {
+  const { error } = await supabase
+    .from('round_ctp_results')
+    .update({ winner_player_key: params.winnerPlayerKey })
     .eq('round_id', params.roundId)
     .eq('group_number', params.groupNumber ?? 1)
     .eq('hole_number', params.holeNumber);

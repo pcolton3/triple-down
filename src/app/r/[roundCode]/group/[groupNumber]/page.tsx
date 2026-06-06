@@ -2,12 +2,19 @@
 
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/shared/button';
 import { useRoundStore } from '@/stores/round-store';
 import { formatCurrency } from '@/lib/utils/currency';
-import { createSharedRoundFromLocalRound, loadSharedRoundByCode, sharedRoundBundleToRoundState } from '@/lib/realtime/shared-rounds';
-import { claimGroupScorekeeper, userCanEditGroup } from '@/lib/realtime/group-rounds';
+import {
+  createSharedRoundFromLocalRound,
+  loadSharedRoundByCode,
+  sharedRoundBundleToRoundState,
+  updateSharedCtpResult,
+  updateSharedHole,
+  updateSharedMatchup,
+} from '@/lib/realtime/shared-rounds';
+import { claimGroupScorekeeper, updateGroupCurrentHole, userCanEditGroup } from '@/lib/realtime/group-rounds';
 
 function formatUnknownError(error: unknown, fallback: string) {
   if (error instanceof Error) return error.message;
@@ -109,14 +116,15 @@ export default function GroupScoringPage() {
   const [loadError, setLoadError] = useState('');
   const [scorekeeperName, setScorekeeperName] = useState('');
   const [claimStatus, setClaimStatus] = useState('');
+  const autosaveTimer = useRef<number | null>(null);
+  const lastAutosaveKey = useRef('');
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadRound() {
       const requestedCode = params.roundCode?.toUpperCase();
-      const hasUsableRound = Array.isArray(round.holes) && round.holes.length > 0;
-      if (!requestedCode || (round.roundCode === requestedCode && !round.id.startsWith('round-') && hasUsableRound)) return;
+      if (!requestedCode) return;
 
       try {
         setLoadStatus('loading');
@@ -143,7 +151,7 @@ export default function GroupScoringPage() {
     return () => {
       cancelled = true;
     };
-  }, [hydrateRound, params.roundCode, round.holes, round.id, round.roundCode]);
+  }, [hydrateRound, params.roundCode]);
 
   const roundPlayers = Array.isArray(round.players) ? round.players : [];
   const roundHoles = Array.isArray(round.holes) ? round.holes : [];
@@ -224,15 +232,57 @@ export default function GroupScoringPage() {
     }
   }
 
-  async function persistRound() {
-    await createSharedRoundFromLocalRound(useRoundStore.getState().round);
-    await refreshRound();
-  }
+  const persistHoleSnapshot = useCallback(async (holeNumber: number, currentHole?: number) => {
+    const latestRound = useRoundStore.getState().round;
+    const target = latestRound.holes.find((item) => (item.groupNumber ?? 1) === groupNumber && item.holeNumber === holeNumber);
+    if (!target || latestRound.id.startsWith('round-')) return;
+
+    await updateSharedHole({
+      roundId: latestRound.id,
+      groupNumber,
+      holeNumber: target.holeNumber,
+      bankerPlayerKey: target.bankerPlayerId,
+      bankerGrossScore: target.bankerGrossScore,
+      bankerPressed: target.bankerPressed,
+      isSaved: target.isSaved,
+    });
+
+    await Promise.all(
+      target.matchups.map((matchup) =>
+        updateSharedMatchup({
+          roundId: latestRound.id,
+          groupNumber,
+          holeNumber: target.holeNumber,
+          playerKey: matchup.playerId,
+          baseWager: matchup.baseWager,
+          pressed: matchup.pressed,
+          grossScore: matchup.grossScore,
+        })
+      )
+    );
+
+    if (target.par === 3) {
+      await updateSharedCtpResult({
+        roundId: latestRound.id,
+        groupNumber,
+        holeNumber: target.holeNumber,
+        winnerPlayerKey: target.ctpWinnerPlayerId ?? null,
+      });
+    }
+
+    if (currentHole != null) {
+      await updateGroupCurrentHole({ roundId: latestRound.id, groupNumber, currentHole });
+    }
+  }, [groupNumber]);
 
   async function handleUpdate() {
     if (!canEdit) return;
+    if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current);
     const result = updateHole(groupNumber, targetHoleNumber);
-    if (result.ok) await persistRound();
+    if (result.ok) {
+      await persistHoleSnapshot(targetHoleNumber);
+      await refreshRound();
+    }
     setMessage(
       result.message ??
         (result.ok
@@ -245,13 +295,18 @@ export default function GroupScoringPage() {
 
   async function handleNext() {
     if (!canEdit) return;
+    if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current);
+    const completedHoleNumber = hole.holeNumber;
     const result = nextHole(groupNumber);
     if (result.ok && !isFinalHole) window.scrollTo({ top: 0, behavior: 'smooth' });
-    if (result.ok) await persistRound();
+    if (result.ok) {
+      await persistHoleSnapshot(completedHoleNumber, isFinalHole ? completedHoleNumber : completedHoleNumber + 1);
+    }
     if (result.ok && isFinalHole) {
       router.push(`/r/${round.roundCode}`);
       return;
     }
+    if (result.ok) await refreshRound();
     setMessage(result.message ?? (result.ok ? `Moved to Hole ${hole.holeNumber + 1}.` : 'Unable to move to the next hole.'));
   }
 
@@ -260,6 +315,41 @@ export default function GroupScoringPage() {
     await navigator.clipboard?.writeText(`${origin}/r/${round.roundCode}`);
     setCopiedEventLink(true);
   }
+
+  useEffect(() => {
+    if (!canEdit || !hole || round.id.startsWith('round-')) return;
+    const autosaveKey = JSON.stringify({
+      roundId: round.id,
+      groupNumber,
+      holeNumber: hole.holeNumber,
+      bankerPlayerId: hole.bankerPlayerId,
+      bankerGrossScore: hole.bankerGrossScore,
+      bankerPressed: hole.bankerPressed,
+      isSaved: hole.isSaved,
+      ctpWinnerPlayerId: hole.ctpWinnerPlayerId,
+      matchups: hole.matchups.map((matchup) => ({
+        playerId: matchup.playerId,
+        baseWager: matchup.baseWager,
+        pressed: matchup.pressed,
+        grossScore: matchup.grossScore,
+      })),
+    });
+
+    if (lastAutosaveKey.current === autosaveKey) return;
+    lastAutosaveKey.current = autosaveKey;
+
+    if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current);
+    autosaveTimer.current = window.setTimeout(() => {
+      void persistHoleSnapshot(hole.holeNumber).catch((error) => {
+        console.error('Unable to autosave hole.', error);
+        setMessage(formatUnknownError(error, 'Unable to autosave this hole.'));
+      });
+    }, 700);
+
+    return () => {
+      if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current);
+    };
+  }, [canEdit, groupNumber, hole, persistHoleSnapshot, round.id]);
 
   if (!hole || !banker) {
     const title =
@@ -584,13 +674,15 @@ export default function GroupScoringPage() {
       {message ? <p className="rounded-xl bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">{message}</p> : null}
 
       <div className="flex gap-3">
-        <Button className="flex-1" variant="secondary" disabled={!canEdit} onClick={() => void handleUpdate()}>
-          {isEditingPastHole ? 'Save Correction' : 'Update'}
-        </Button>
         {isEditingPastHole ? (
+          <>
+          <Button className="flex-1" disabled={!canEdit} onClick={() => void handleUpdate()}>
+            Save Correction
+          </Button>
           <Link className="flex-1 rounded-xl border border-[#2f8df3] px-4 py-3 text-center font-semibold text-[#2f8df3]" href={`/r/${round.roundCode}/history`}>
             Back to History
           </Link>
+          </>
         ) : (
           <Button className="flex-1" disabled={!canEdit} onClick={() => void handleNext()}>
             {isFinalHole ? 'Finish Group' : 'Next'}

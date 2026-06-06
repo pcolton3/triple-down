@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { useRoundStore } from '@/stores/round-store';
@@ -204,8 +203,8 @@ export default function SettlePage() {
           </p>
         </div>
         <div className="flex gap-4 text-sm font-semibold text-[#2f8df3]">
-          <Link href={`/r/${routeRoundCode}/history`}>History</Link>
-          <Link href={`/r/${routeRoundCode}`}>Back to Round</Link>
+          <a href={`/r/${routeRoundCode}/history`}>History</a>
+          <a href={`/r/${routeRoundCode}`}>Back to Round</a>
         </div>
       </div>
 
