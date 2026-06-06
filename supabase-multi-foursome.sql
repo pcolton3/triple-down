@@ -19,6 +19,20 @@ alter table public.round_players
 alter table public.round_matchups
   add column if not exists banker_participant boolean not null default true;
 
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'round_matchups'
+      and policyname = 'round_matchups_public_delete'
+  ) then
+    create policy round_matchups_public_delete
+      on public.round_matchups for delete
+      using (true);
+  end if;
+end $$;
+
 alter table public.round_ctp_results
   add column if not exists group_number integer not null default 1;
 

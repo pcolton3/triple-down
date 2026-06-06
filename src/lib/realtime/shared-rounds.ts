@@ -599,10 +599,23 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
   const ctpByGroupHole = new Map(
     bundle.ctpResults.map((ctp) => [`${ctp.group_number ?? 1}:${ctp.hole_number}`, ctp.winner_player_key])
   );
+  const groupNumberById = new Map(bundle.groups.map((group) => [group.id, group.group_number]));
 
   const holes: HoleState[] = bundle.holes.map((hole) => {
     const groupNumber = hole.group_number ?? 1;
-    const holeMatchups = bundle.matchups.filter((matchup) => matchup.round_hole_id === hole.id);
+    const holeMatchupsByPlayerKey = new Map(
+      bundle.matchups
+        .filter((matchup) => matchup.round_hole_id === hole.id && matchup.player_key !== hole.banker_player_key)
+        .map((matchup) => [matchup.player_key, matchup])
+    );
+    const groupPlayerKeys = bundle.groupPlayers
+      .filter((assignment) => groupNumberById.get(assignment.round_group_id) === groupNumber)
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((assignment) => assignment.player_key);
+    const matchupPlayerKeys =
+      groupPlayerKeys.length > 0
+        ? groupPlayerKeys.filter((playerKey) => playerKey !== hole.banker_player_key)
+        : Array.from(holeMatchupsByPlayerKey.keys());
 
     return {
       groupNumber,
@@ -614,13 +627,17 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
       bankerPressed: hole.banker_pressed,
       isSaved: hole.is_saved,
       ctpWinnerPlayerId: ctpByGroupHole.get(`${groupNumber}:${hole.hole_number}`) ?? null,
-      matchups: holeMatchups.map((matchup) => ({
-        playerId: matchup.player_key,
-        baseWager: matchup.base_wager,
-        pressed: matchup.pressed,
-        grossScore: matchup.gross_score,
-        bankerParticipant: matchup.banker_participant !== false,
-      })),
+      matchups: matchupPlayerKeys.map((playerKey) => {
+        const matchup = holeMatchupsByPlayerKey.get(playerKey);
+        const player = players.find((item) => item.id === playerKey);
+        return {
+          playerId: playerKey,
+          baseWager: matchup?.base_wager ?? bundle.round.default_bet,
+          pressed: matchup?.pressed ?? false,
+          grossScore: matchup?.gross_score ?? null,
+          bankerParticipant: matchup?.banker_participant ?? (player?.bankerParticipant !== false),
+        };
+      }),
     };
   });
 
@@ -637,7 +654,6 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
     scorekeeperDeviceId: null,
     currentHole: bundle.round.current_hole,
   }));
-  const groupNumberById = new Map(bundle.groups.map((group) => [group.id, group.group_number]));
 
   return {
     id: bundle.round.id,
@@ -820,6 +836,63 @@ export async function updateSharedMatchup(params: {
     .eq('player_key', params.playerKey);
 
   if (error) throw error;
+}
+
+export async function replaceSharedHoleMatchups(params: {
+  roundId: string;
+  groupNumber?: number;
+  holeNumber: number;
+  matchups: HoleState['matchups'];
+}) {
+  const { data: hole, error: holeError } = await supabase
+    .from('round_holes')
+    .select('id')
+    .eq('round_id', params.roundId)
+    .eq('group_number', params.groupNumber ?? 1)
+    .eq('hole_number', params.holeNumber)
+    .single();
+
+  if (holeError) throw holeError;
+
+  const rows = params.matchups.map((matchup) => ({
+    round_id: params.roundId,
+    round_hole_id: hole.id,
+    group_number: params.groupNumber ?? 1,
+    hole_number: params.holeNumber,
+    player_key: matchup.playerId,
+    base_wager: matchup.baseWager,
+    pressed: matchup.pressed,
+    gross_score: matchup.grossScore,
+    banker_participant: matchup.bankerParticipant !== false,
+  }));
+
+  if (rows.length > 0) {
+    const { error: upsertError } = await supabase.from('round_matchups').upsert(rows, { onConflict: 'round_hole_id,player_key' });
+
+    if (upsertError) throw upsertError;
+  }
+
+  const { data: existingRows, error: existingError } = await supabase
+    .from('round_matchups')
+    .select('player_key')
+    .eq('round_hole_id', hole.id);
+
+  if (existingError) throw existingError;
+
+  const expectedPlayerKeys = new Set(params.matchups.map((matchup) => matchup.playerId));
+  const stalePlayerKeys = (existingRows ?? [])
+    .map((row) => row.player_key)
+    .filter((playerKey) => !expectedPlayerKeys.has(playerKey));
+
+  if (stalePlayerKeys.length > 0) {
+    const { error: deleteError } = await supabase
+      .from('round_matchups')
+      .delete()
+      .eq('round_hole_id', hole.id)
+      .in('player_key', stalePlayerKeys);
+
+    if (deleteError) throw deleteError;
+  }
 }
 
 function getDeviceId() {

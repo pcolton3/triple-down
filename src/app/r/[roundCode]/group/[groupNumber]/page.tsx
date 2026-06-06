@@ -9,10 +9,10 @@ import { formatCurrency } from '@/lib/utils/currency';
 import {
   createSharedRoundFromLocalRound,
   loadSharedRoundByCode,
+  replaceSharedHoleMatchups,
   sharedRoundBundleToRoundState,
   updateSharedCtpResult,
   updateSharedHole,
-  updateSharedMatchup,
 } from '@/lib/realtime/shared-rounds';
 import { claimGroupScorekeeper, updateGroupCurrentHole, userCanEditGroup } from '@/lib/realtime/group-rounds';
 
@@ -107,7 +107,7 @@ export default function GroupScoringPage() {
     updateHole,
     nextHole,
     getCurrentHoleSummary,
-    getGroupBankerTotals,
+    getGroupBankerPreviewTotals,
     setCtpWinner,
   } = useRoundStore();
   const [message, setMessage] = useState('');
@@ -247,19 +247,12 @@ export default function GroupScoringPage() {
       isSaved: target.isSaved,
     });
 
-    await Promise.all(
-      target.matchups.map((matchup) =>
-        updateSharedMatchup({
-          roundId: latestRound.id,
-          groupNumber,
-          holeNumber: target.holeNumber,
-          playerKey: matchup.playerId,
-          baseWager: matchup.baseWager,
-          pressed: matchup.pressed,
-          grossScore: matchup.grossScore,
-        })
-      )
-    );
+    await replaceSharedHoleMatchups({
+      roundId: latestRound.id,
+      groupNumber,
+      holeNumber: target.holeNumber,
+      matchups: target.matchups,
+    });
 
     if (target.par === 3) {
       await updateSharedCtpResult({
@@ -392,7 +385,7 @@ export default function GroupScoringPage() {
 
   const summary = getCurrentHoleSummary(groupNumber, targetHoleNumber);
   const matchupSummaryByPlayerId = Object.fromEntries(summary.matchups.map((item) => [item.playerId, item]));
-  const bankerRunningTotals = getGroupBankerTotals(groupNumber).sort((a, b) => b.amount - a.amount);
+  const bankerRunningTotals = getGroupBankerPreviewTotals(groupNumber, targetHoleNumber).sort((a, b) => b.amount - a.amount);
   const bankerHasPop = summary.bankerGetsStrokeFromNames.length > 0;
 
   return (

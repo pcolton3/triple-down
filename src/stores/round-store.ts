@@ -125,6 +125,7 @@ type RoundStore = {
   nextHole: (groupNumber?: number) => { ok: boolean; message?: string };
   getRunningTotals: () => Array<{ playerId: string; name: string; amount: number }>;
   getGroupBankerTotals: (groupNumber?: number) => Array<{ playerId: string; name: string; amount: number }>;
+  getGroupBankerPreviewTotals: (groupNumber?: number, holeNumber?: number) => Array<{ playerId: string; name: string; amount: number }>;
   getHoleHistory: () => HoleHistoryItem[];
   getCurrentHoleSummary: (groupNumber?: number, holeNumber?: number) => CurrentHoleSummary;
   getSettleUp: () => SettleUpItem[];
@@ -1201,6 +1202,25 @@ export const useRoundStore = create<RoundStore>()(
         const groupLedger = recalcLedger(round).filter(
           (entry) => groupPlayerIds.has(entry.fromPlayerId) && groupPlayerIds.has(entry.toPlayerId)
         );
+        return buildRunningTotalsFromLedger(round, groupLedger)
+          .filter((item) => groupPlayerIds.has(item.playerId))
+          .map((item) => ({
+            playerId: item.playerId,
+            name: item.playerName,
+            amount: item.amount,
+          }));
+      },
+
+      getGroupBankerPreviewTotals: (groupNumber = 1, holeNumber) => {
+        const { round } = get();
+        const groupPlayerIds = new Set(getBankerParticipantIds(round.players, getGroupPlayerIds(round, groupNumber)));
+        const targetHole = getGroupHole(round, groupNumber, holeNumber);
+        const previewLedger =
+          targetHole && !targetHole.isSaved ? buildLedgerEntries(targetHole.bankerPlayerId, getHoleResults(round, targetHole)) : [];
+        const groupLedger = [...recalcLedger(round), ...previewLedger].filter(
+          (entry) => groupPlayerIds.has(entry.fromPlayerId) && groupPlayerIds.has(entry.toPlayerId)
+        );
+
         return buildRunningTotalsFromLedger(round, groupLedger)
           .filter((item) => groupPlayerIds.has(item.playerId))
           .map((item) => ({
