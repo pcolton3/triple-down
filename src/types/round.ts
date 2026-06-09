@@ -54,6 +54,7 @@ export type RoundGameSettings = {
   eaglePot?: number;
   courseRating?: number | null;
   slopeRating?: number | null;
+  teeColor?: string | null;
   pcc?: number | null;
 };
 

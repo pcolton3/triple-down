@@ -10,6 +10,7 @@ import { useRoundStore } from '@/stores/round-store';
 import { getCourseDetails, getNearbyCourses, searchCourses } from '@/lib/course-search';
 import { createSharedRoundFromLocalRound } from '@/lib/realtime/shared-rounds';
 import { loadSavedGolfers, saveGolfersForLater, type SavedGolfer } from '@/lib/realtime/saved-golfers';
+import { loadSavedCourseTees, saveCourseTee, savedCourseKey, type SavedCourseTee } from '@/lib/realtime/saved-course-tees';
 import type { CourseRecord } from '@/types/course';
 import type { HoleConfig } from '@/types/round';
 
@@ -77,6 +78,9 @@ export default function NewRoundPage() {
   const [eaglePot, setEaglePot] = useState(0);
   const [courseRating, setCourseRating] = useState('');
   const [slopeRating, setSlopeRating] = useState('');
+  const [teeColor, setTeeColor] = useState('');
+  const [savedCourseTees, setSavedCourseTees] = useState<SavedCourseTee[]>([]);
+  const [savedCourseTeesStatus, setSavedCourseTeesStatus] = useState('');
   const [pcc, setPcc] = useState('0');
   const [playerCount, setPlayerCount] = useState(4);
   const [players, setPlayers] = useState(buildDefaultPlayers(4));
@@ -289,6 +293,33 @@ export default function NewRoundPage() {
     );
   }
 
+  async function loadTeesForCourse(courseId: string | null | undefined, name: string) {
+    const key = savedCourseKey(courseId, name);
+    if (!key) {
+      setSavedCourseTees([]);
+      setSavedCourseTeesStatus('');
+      return;
+    }
+
+    try {
+      const tees = await loadSavedCourseTees(key);
+      setSavedCourseTees(tees);
+      setSavedCourseTeesStatus(tees.length > 0 ? `${tees.length} saved tee setup${tees.length === 1 ? '' : 's'} available.` : '');
+    } catch (error) {
+      console.error('Unable to load saved course tees.', error);
+      setSavedCourseTees([]);
+      setSavedCourseTeesStatus('Saved tee setups are unavailable right now.');
+    }
+  }
+
+  function applySavedCourseTee(teeId: string) {
+    const savedTee = savedCourseTees.find((tee) => tee.id === teeId);
+    if (!savedTee) return;
+    setTeeColor(savedTee.teeColor);
+    setCourseRating(String(savedTee.courseRating));
+    setSlopeRating(String(savedTee.slopeRating));
+  }
+
   async function handleCourseSearch(value: string) {
     setCourseQuery(value);
     if (value.trim().length < 2) {
@@ -310,6 +341,7 @@ export default function NewRoundPage() {
     setCourseName(resultCourse.name);
     setCourseQuery(resultCourse.name);
     setCourseResults([]);
+    void loadTeesForCourse(resultCourse.id, resultCourse.name);
 
     if (resultCourse.holes.length > 0) {
       setManualHoles(resultCourse.holes.map((hole) => ({ ...hole })));
@@ -330,6 +362,7 @@ export default function NewRoundPage() {
 
       setSelectedCourse(mergedCourse);
       setCourseName(mergedCourse.name);
+      void loadTeesForCourse(mergedCourse.id, mergedCourse.name);
 
       if (mergedCourse.holes.length > 0) {
         setManualHoles(mergedCourse.holes.map((hole) => ({ ...hole })));
@@ -357,6 +390,11 @@ export default function NewRoundPage() {
     setSelectedCourse(null);
     setCourseName('');
     setCourseQuery('');
+    setTeeColor('');
+    setCourseRating('');
+    setSlopeRating('');
+    setSavedCourseTees([]);
+    setSavedCourseTeesStatus('');
     setManualHoles(
       Array.from({ length: 18 }, (_, index) => ({ holeNumber: index + 1, par: 4, handicapIndex: index + 1 }))
     );
@@ -418,6 +456,7 @@ export default function NewRoundPage() {
         eaglePot: Number.isFinite(eaglePot) ? Math.max(0, eaglePot) : 0,
         courseRating: courseRating.trim() ? Number(courseRating) || null : null,
         slopeRating: slopeRating.trim() ? Number(slopeRating) || null : null,
+        teeColor: teeColor.trim() || null,
         pcc: pcc.trim() ? Number(pcc) || 0 : 0,
       },
       players: sanitizedPlayers,
@@ -439,6 +478,13 @@ export default function NewRoundPage() {
     }
 
     try {
+      await saveCourseTee({
+        courseKey: savedCourseKey(selectedCourse?.id ?? null, courseName.trim() || selectedCourse?.name || 'Golf Course'),
+        courseName: courseName.trim() || selectedCourse?.name || 'Golf Course',
+        teeColor: teeColor.trim(),
+        courseRating: Number(courseRating),
+        slopeRating: Number(slopeRating),
+      });
       await saveGolfersForLater(
         players
           .filter((player) => player.name.trim().length > 0)
@@ -523,6 +569,7 @@ export default function NewRoundPage() {
               className="w-full rounded-xl border border-slate-300 px-3 py-3"
               value={courseName}
               onChange={(event) => setCourseName(event.target.value)}
+              onBlur={() => void loadTeesForCourse(selectedCourse?.id ?? null, courseName)}
               placeholder="Manual course name"
             />
           </div>
@@ -532,7 +579,34 @@ export default function NewRoundPage() {
             <p className="mb-3 text-sm text-slate-500">
               Optional USGA/WHS posting values. These prefill the handicap posting section after the round.
             </p>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {savedCourseTeesStatus ? <p className="mb-3 text-xs text-slate-500">{savedCourseTeesStatus}</p> : null}
+            {savedCourseTees.length > 0 ? (
+              <div className="mb-4">
+                <label className="mb-1 block text-sm font-medium">Saved Tee Setup</label>
+                <select
+                  className="w-full rounded-xl border border-slate-300 px-3 py-3"
+                  value=""
+                  onChange={(event) => applySavedCourseTee(event.target.value)}
+                >
+                  <option value="">Select saved tees</option>
+                  {savedCourseTees.map((tee) => (
+                    <option key={tee.id} value={tee.id}>
+                      {tee.teeColor} - {tee.courseRating} / {tee.slopeRating}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Tee Color</label>
+                <input
+                  className="w-full rounded-xl border border-slate-300 px-3 py-3"
+                  value={teeColor}
+                  placeholder="Blue"
+                  onChange={(event) => setTeeColor(event.target.value)}
+                />
+              </div>
               <div>
                 <label className="mb-1 block text-sm font-medium">Course Rating</label>
                 <input

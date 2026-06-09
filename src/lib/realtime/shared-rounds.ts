@@ -351,6 +351,7 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
           settings: {
             courseRating: round.gameSettings.courseRating ?? null,
             slopeRating: round.gameSettings.slopeRating ?? null,
+            teeColor: round.gameSettings.teeColor ?? null,
             pcc: round.gameSettings.pcc ?? 0,
           },
         },
@@ -495,6 +496,7 @@ export async function updateSharedRoundSetup(round: RoundState) {
           settings: {
             courseRating: round.gameSettings.courseRating ?? null,
             slopeRating: round.gameSettings.slopeRating ?? null,
+            teeColor: round.gameSettings.teeColor ?? null,
             pcc: round.gameSettings.pcc ?? 0,
           },
         },
@@ -760,6 +762,7 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
       eaglePot: games.get('eagle_pot')?.pot_amount ?? 0,
       courseRating: typeof handicapSettings.courseRating === 'number' ? handicapSettings.courseRating : null,
       slopeRating: typeof handicapSettings.slopeRating === 'number' ? handicapSettings.slopeRating : null,
+      teeColor: typeof handicapSettings.teeColor === 'string' ? handicapSettings.teeColor : null,
       pcc: typeof handicapSettings.pcc === 'number' ? handicapSettings.pcc : 0,
     },
     multiFoursome: {

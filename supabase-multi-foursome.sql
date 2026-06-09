@@ -246,8 +246,21 @@ create table if not exists public.saved_golfer_scores (
   unique (golfer_id, round_code, player_key)
 );
 
+create table if not exists public.saved_course_tees (
+  id uuid primary key default gen_random_uuid(),
+  course_key text not null,
+  course_name text not null,
+  tee_color text not null,
+  course_rating numeric not null,
+  slope_rating numeric not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (course_key, tee_color)
+);
+
 alter table public.saved_golfers enable row level security;
 alter table public.saved_golfer_scores enable row level security;
+alter table public.saved_course_tees enable row level security;
 
 do $$
 begin
@@ -315,6 +328,40 @@ begin
   ) then
     create policy saved_golfer_scores_public_update
       on public.saved_golfer_scores for update
+      using (true)
+      with check (true);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'saved_course_tees'
+      and policyname = 'saved_course_tees_public_read'
+  ) then
+    create policy saved_course_tees_public_read
+      on public.saved_course_tees for select
+      using (true);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'saved_course_tees'
+      and policyname = 'saved_course_tees_public_insert'
+  ) then
+    create policy saved_course_tees_public_insert
+      on public.saved_course_tees for insert
+      with check (true);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'saved_course_tees'
+      and policyname = 'saved_course_tees_public_update'
+  ) then
+    create policy saved_course_tees_public_update
+      on public.saved_course_tees for update
       using (true)
       with check (true);
   end if;

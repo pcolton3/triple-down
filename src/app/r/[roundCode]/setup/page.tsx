@@ -6,6 +6,7 @@ import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from
 import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
 import { loadSharedRoundByCode, sharedRoundBundleToRoundState, updateSharedRoundSetup } from '@/lib/realtime/shared-rounds';
+import { saveCourseTee, savedCourseKey } from '@/lib/realtime/saved-course-tees';
 import { useRoundStore } from '@/stores/round-store';
 import type { Player, RoundState } from '@/types/round';
 
@@ -73,6 +74,7 @@ export default function EditRoundSetupPage() {
   const [eaglePot, setEaglePot] = useState(String(round.gameSettings.eaglePot ?? 0));
   const [courseRating, setCourseRating] = useState(round.gameSettings.courseRating == null ? '' : String(round.gameSettings.courseRating));
   const [slopeRating, setSlopeRating] = useState(round.gameSettings.slopeRating == null ? '' : String(round.gameSettings.slopeRating));
+  const [teeColor, setTeeColor] = useState(round.gameSettings.teeColor ?? '');
   const [pcc, setPcc] = useState(String(round.gameSettings.pcc ?? 0));
   const [playerDrafts, setPlayerDrafts] = useState<PlayerDraft[]>(buildPlayerDrafts(round.players));
   const [gamesOpen, setGamesOpen] = useState(false);
@@ -144,6 +146,7 @@ export default function EditRoundSetupPage() {
     setEaglePot(String(round.gameSettings.eaglePot ?? 0));
     setCourseRating(round.gameSettings.courseRating == null ? '' : String(round.gameSettings.courseRating));
     setSlopeRating(round.gameSettings.slopeRating == null ? '' : String(round.gameSettings.slopeRating));
+    setTeeColor(round.gameSettings.teeColor ?? '');
     setPcc(String(round.gameSettings.pcc ?? 0));
     setPlayerDrafts(buildPlayerDrafts(round.players));
   }, [round]);
@@ -197,6 +200,7 @@ export default function EditRoundSetupPage() {
           eaglePot: Math.max(0, numberOrZero(eaglePot)),
           courseRating: numberOrNull(courseRating),
           slopeRating: numberOrNull(slopeRating),
+          teeColor: teeColor.trim() || null,
           pcc: numberOrZero(pcc),
         },
         players: nextPlayers,
@@ -215,6 +219,13 @@ export default function EditRoundSetupPage() {
 
       hydrateRound(nextRound);
       await updateSharedRoundSetup(nextRound);
+      await saveCourseTee({
+        courseKey: savedCourseKey(nextRound.selectedCourseId ?? null, nextRound.courseName),
+        courseName: nextRound.courseName,
+        teeColor: teeColor.trim(),
+        courseRating: Number(courseRating),
+        slopeRating: Number(slopeRating),
+      });
       const bundle = await loadSharedRoundByCode(routeRoundCode);
       if (bundle) {
         hydrateRound(sharedRoundBundleToRoundState(bundle));
@@ -332,6 +343,10 @@ export default function EditRoundSetupPage() {
             <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={eaglePot} onChange={(event) => setEaglePot(event.target.value)} />
           </label>
           ) : null}
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Tee Color</span>
+            <input className="w-full rounded-xl border border-slate-300 px-3 py-3" value={teeColor} onChange={(event) => setTeeColor(event.target.value)} />
+          </label>
           <label className="block">
             <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Course Rating</span>
             <input type="number" inputMode="decimal" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={courseRating} onChange={(event) => setCourseRating(event.target.value)} />
