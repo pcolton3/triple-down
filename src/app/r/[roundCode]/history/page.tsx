@@ -286,42 +286,67 @@ export default function HistoryPage() {
         return;
       }
 
-      for (const update of updates) {
-        const targetHole = getGroupHoleForPlayer(round, update.playerId, update.holeNumber);
-        if (!targetHole || round.id.startsWith('round-')) continue;
+      if (round.id.startsWith('round-')) {
+        throw new Error('This round has not been saved to Supabase yet.');
+      }
 
-        const groupNumber = targetHole.groupNumber ?? getPlayerGroupNumber(round, update.playerId);
-        if (targetHole.bankerPlayerId === update.playerId) {
-          await updateSharedHole({
-            roundId: round.id,
-            groupNumber,
-            holeNumber: targetHole.holeNumber,
-            bankerGrossScore: update.score,
-            isSaved: targetHole.isSaved,
-          });
-        } else {
-          const groupPlayerIds = getPlayerGroupIds(round, groupNumber);
-          const nextMatchups = groupPlayerIds
-            .filter((playerId) => playerId !== targetHole.bankerPlayerId)
-            .map((playerId) => {
-              const existing = targetHole.matchups.find((matchup) => matchup.playerId === playerId);
-              const player = round.players.find((item) => item.id === playerId);
-              return {
-                playerId,
-                baseWager: existing?.baseWager ?? round.defaultBet,
-                pressed: existing?.pressed ?? false,
-                grossScore: playerId === update.playerId ? update.score : existing?.grossScore ?? null,
-                bankerParticipant: existing?.bankerParticipant ?? player?.bankerParticipant !== false,
-              };
-            });
-
-          await replaceSharedHoleMatchups({
-            roundId: round.id,
-            groupNumber,
-            holeNumber: targetHole.holeNumber,
-            matchups: nextMatchups,
-          });
+      const updatesByHole = new Map<
+        string,
+        {
+          targetHole: HoleState;
+          groupNumber: number;
+          playerScores: Map<string, number | null>;
         }
+      >();
+
+      updates.forEach((update) => {
+        const targetHole = getGroupHoleForPlayer(round, update.playerId, update.holeNumber);
+        if (!targetHole) return;
+        const groupNumber = targetHole.groupNumber ?? getPlayerGroupNumber(round, update.playerId);
+        const key = `${groupNumber}:${targetHole.holeNumber}`;
+        const existing = updatesByHole.get(key) ?? {
+          targetHole,
+          groupNumber,
+          playerScores: new Map<string, number | null>(),
+        };
+        existing.playerScores.set(update.playerId, update.score);
+        updatesByHole.set(key, existing);
+      });
+
+      for (const updateGroup of updatesByHole.values()) {
+        const { targetHole, groupNumber, playerScores } = updateGroup;
+        const bankerScore = playerScores.has(targetHole.bankerPlayerId)
+          ? playerScores.get(targetHole.bankerPlayerId) ?? null
+          : targetHole.bankerGrossScore;
+        const groupPlayerIds = getPlayerGroupIds(round, groupNumber);
+        const nextMatchups = groupPlayerIds
+          .filter((playerId) => playerId !== targetHole.bankerPlayerId)
+          .map((playerId) => {
+            const existing = targetHole.matchups.find((matchup) => matchup.playerId === playerId);
+            const player = round.players.find((item) => item.id === playerId);
+            return {
+              playerId,
+              baseWager: existing?.baseWager ?? round.defaultBet,
+              pressed: existing?.pressed ?? false,
+              grossScore: playerScores.has(playerId) ? playerScores.get(playerId) ?? null : existing?.grossScore ?? null,
+              bankerParticipant: existing?.bankerParticipant ?? player?.bankerParticipant !== false,
+            };
+          });
+
+        await updateSharedHole({
+          roundId: round.id,
+          groupNumber,
+          holeNumber: targetHole.holeNumber,
+          bankerGrossScore: bankerScore,
+          isSaved: true,
+        });
+
+        await replaceSharedHoleMatchups({
+          roundId: round.id,
+          groupNumber,
+          holeNumber: targetHole.holeNumber,
+          matchups: nextMatchups,
+        });
       }
 
       const bundle = await loadSharedRoundByCode(routeRoundCode);
