@@ -212,7 +212,18 @@ function createDefaultRound(): RoundState {
     currentHole: 1,
     totalHoles,
     defaultBet,
-    gameSettings: { skinsPot: 0, lowNetPot: 0, ctpPot: 0, courseRating: null, slopeRating: null, pcc: 0 },
+    gameSettings: {
+      bankerEnabled: true,
+      skinsEnabled: false,
+      lowNetEnabled: false,
+      ctpEnabled: false,
+      skinsPot: 0,
+      lowNetPot: 0,
+      ctpPot: 0,
+      courseRating: null,
+      slopeRating: null,
+      pcc: 0,
+    },
     players: defaultPlayers,
     multiFoursome: { enabled: false, ...multiFoursome },
     holes: createDefaultHoles(totalHoles, firstBankerPlayerId, defaultPlayers.map((p) => p.id), defaultBet, undefined, 1, defaultPlayers),
@@ -260,6 +271,22 @@ function playerParticipatesInCtp(player?: Player) {
 
 function playerParticipatesInLowNet(player?: Player) {
   return player?.lowNetParticipant !== false;
+}
+
+function bankerEnabled(round: RoundState) {
+  return round.gameSettings?.bankerEnabled !== false;
+}
+
+function skinsEnabled(round: RoundState) {
+  return round.gameSettings?.skinsEnabled === true;
+}
+
+function lowNetEnabled(round: RoundState) {
+  return round.gameSettings?.lowNetEnabled === true;
+}
+
+function ctpEnabled(round: RoundState) {
+  return round.gameSettings?.ctpEnabled === true;
 }
 
 function ensureMultiFoursomeRound(round: RoundState): RoundState {
@@ -441,6 +468,7 @@ function getHoleResults(round: RoundState, hole: HoleState): BankerMatchupResult
 }
 
 function recalcLedger(round: RoundState): LedgerEntry[] {
+  if (!bankerEnabled(round)) return [];
   return round.holes.flatMap((hole) => {
     if (!hole.isSaved) return [];
     return buildLedgerEntries(hole.bankerPlayerId, getHoleResults(round, hole));
@@ -676,6 +704,7 @@ function buildGrossTotals(round: RoundState): GrossTotalItem[] {
 
 function buildSkinsSummary(round: RoundState): SkinsSummary {
   const pot = round.gameSettings?.skinsPot ?? 0;
+  if (!skinsEnabled(round)) return { pot, skinsWon: 0, valuePerSkin: 0, holes: [], payouts: [] };
   const holeNumbers = Array.from(new Set(round.holes.filter((hole) => hole.isSaved).map((hole) => hole.holeNumber))).sort(
     (a, b) => a - b
   );
@@ -730,6 +759,7 @@ function buildSkinsSummary(round: RoundState): SkinsSummary {
 
 function buildLowNetSummary(round: RoundState): LowNetSummary {
   const pot = round.gameSettings?.lowNetPot ?? 0;
+  if (!lowNetEnabled(round)) return { pot, totals: [], payouts: [] };
   const lowNetPlayerIds = new Set(round.players.filter(playerParticipatesInLowNet).map((player) => player.id));
   const totals = buildGrossTotals(round)
     .filter((item) => lowNetPlayerIds.has(item.playerId))
@@ -782,6 +812,7 @@ function buildLowNetSummary(round: RoundState): LowNetSummary {
 
 function buildCtpSummary(round: RoundState): CtpSummary {
   const pot = round.gameSettings?.ctpPot ?? 0;
+  if (!ctpEnabled(round)) return { pot, par3Holes: [], payouts: [] };
   const par3HoleNumbers = Array.from(new Set(round.holes.filter((hole) => hole.par === 3).map((hole) => hole.holeNumber))).sort(
     (a, b) => a - b
   );
@@ -1010,6 +1041,10 @@ export const useRoundStore = create<RoundStore>()(
               totalHoles,
               defaultBet: input.defaultBet,
               gameSettings: {
+                bankerEnabled: input.gameSettings?.bankerEnabled ?? true,
+                skinsEnabled: input.gameSettings?.skinsEnabled ?? false,
+                lowNetEnabled: input.gameSettings?.lowNetEnabled ?? false,
+                ctpEnabled: input.gameSettings?.ctpEnabled ?? false,
                 skinsPot: input.gameSettings?.skinsPot ?? 0,
                 lowNetPot: input.gameSettings?.lowNetPot ?? 0,
                 ctpPot: input.gameSettings?.ctpPot ?? 0,
@@ -1213,6 +1248,7 @@ export const useRoundStore = create<RoundStore>()(
 
       getGroupBankerPreviewTotals: (groupNumber = 1, holeNumber) => {
         const { round } = get();
+        if (!bankerEnabled(round)) return [];
         const groupPlayerIds = new Set(getBankerParticipantIds(round.players, getGroupPlayerIds(round, groupNumber)));
         const targetHole = getGroupHole(round, groupNumber, holeNumber);
         const previewLedger =

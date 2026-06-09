@@ -58,6 +58,10 @@ export default function NewRoundPage() {
   const [roundCode, setRoundCode] = useState('');
   const [title, setTitle] = useState('Triple');
   const [courseName, setCourseName] = useState('');
+  const [bankerEnabled, setBankerEnabled] = useState(true);
+  const [skinsEnabled, setSkinsEnabled] = useState(false);
+  const [lowNetEnabled, setLowNetEnabled] = useState(false);
+  const [ctpEnabled, setCtpEnabled] = useState(false);
   const [defaultBet, setDefaultBet] = useState(5);
   const [skinsPot, setSkinsPot] = useState(0);
   const [lowNetPot, setLowNetPot] = useState(0);
@@ -364,6 +368,10 @@ export default function NewRoundPage() {
       selectedCourseId: selectedCourse?.id ?? null,
       defaultBet: Number.isFinite(defaultBet) ? Math.max(0, defaultBet) : 0,
       gameSettings: {
+        bankerEnabled,
+        skinsEnabled,
+        lowNetEnabled,
+        ctpEnabled,
         skinsPot: Number.isFinite(skinsPot) ? Math.max(0, skinsPot) : 0,
         lowNetPot: Number.isFinite(lowNetPot) ? Math.max(0, lowNetPot) : 0,
         ctpPot: Number.isFinite(ctpPot) ? Math.max(0, ctpPot) : 0,
@@ -521,10 +529,12 @@ export default function NewRoundPage() {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
+            {bankerEnabled ? (
             <div>
               <label className="mb-1 block text-sm font-medium">Default Banker Bet</label>
               <NumberField value={defaultBet} onChange={setDefaultBet} placeholder="Bet" />
             </div>
+            ) : null}
             <div>
               <label className="mb-1 block text-sm font-medium">Holes</label>
               <input
@@ -539,25 +549,70 @@ export default function NewRoundPage() {
 
         <Card className="space-y-4">
           <div>
-            <h2 className="text-xl font-bold">Side Games</h2>
+            <h2 className="text-xl font-bold">Games</h2>
             <p className="text-sm text-slate-500">
-              Enter the total pot for each optional event-wide game. Leave at 0 to turn that game off.
+              Choose which games are active for this round. Skins and CTP are separate games.
             </p>
           </div>
 
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+              <input
+                type="checkbox"
+                className="mr-2 h-4 w-4"
+                checked={bankerEnabled}
+                onChange={() => setBankerEnabled((value) => !value)}
+              />
+              Banker
+            </label>
+            <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+              <input
+                type="checkbox"
+                className="mr-2 h-4 w-4"
+                checked={skinsEnabled}
+                onChange={() => setSkinsEnabled((value) => !value)}
+              />
+              Skins
+            </label>
+            <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+              <input
+                type="checkbox"
+                className="mr-2 h-4 w-4"
+                checked={ctpEnabled}
+                onChange={() => setCtpEnabled((value) => !value)}
+              />
+              CTP
+            </label>
+            <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+              <input
+                type="checkbox"
+                className="mr-2 h-4 w-4"
+                checked={lowNetEnabled}
+                onChange={() => setLowNetEnabled((value) => !value)}
+              />
+              Low Net
+            </label>
+          </div>
+
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {skinsEnabled ? (
             <div>
               <label className="mb-1 block text-sm font-medium">Skins Pot</label>
               <NumberField value={skinsPot} onChange={setSkinsPot} placeholder="0" />
             </div>
+            ) : null}
+            {lowNetEnabled ? (
             <div>
               <label className="mb-1 block text-sm font-medium">Low Net Pot</label>
               <NumberField value={lowNetPot} onChange={setLowNetPot} placeholder="0" />
             </div>
+            ) : null}
+            {ctpEnabled ? (
             <div>
               <label className="mb-1 block text-sm font-medium">CTP Pot</label>
               <NumberField value={ctpPot} onChange={setCtpPot} placeholder="0" />
             </div>
+            ) : null}
           </div>
         </Card>
 
@@ -585,6 +640,7 @@ export default function NewRoundPage() {
             </select>
           </div>
 
+          {bankerEnabled ? (
           <div className="mb-4">
             <label className="mb-1 block text-sm font-medium">Opening Banker</label>
             <select
@@ -602,6 +658,7 @@ export default function NewRoundPage() {
               Each group starts with the first listed golfer in that group unless this player belongs to the group.
             </p>
           </div>
+          ) : null}
 
           <div className="space-y-4">
             {groups.map((group) => (
@@ -651,10 +708,11 @@ export default function NewRoundPage() {
                           />
                         </div>
                         <div className="sm:col-span-3">
-                          <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            Games
+                            <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Game Participation
                           </span>
                           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                            {bankerEnabled ? (
                             <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
                               <input
                                 type="checkbox"
@@ -664,6 +722,8 @@ export default function NewRoundPage() {
                               />
                               Banker
                             </label>
+                            ) : null}
+                            {skinsEnabled ? (
                             <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
                               <input
                                 type="checkbox"
@@ -673,6 +733,8 @@ export default function NewRoundPage() {
                               />
                               Skins
                             </label>
+                            ) : null}
+                            {ctpEnabled ? (
                             <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
                               <input
                                 type="checkbox"
@@ -682,6 +744,8 @@ export default function NewRoundPage() {
                               />
                               CTP
                             </label>
+                            ) : null}
+                            {lowNetEnabled ? (
                             <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
                               <input
                                 type="checkbox"
@@ -691,6 +755,7 @@ export default function NewRoundPage() {
                               />
                               Low Net
                             </label>
+                            ) : null}
                           </div>
                         </div>
                       </div>

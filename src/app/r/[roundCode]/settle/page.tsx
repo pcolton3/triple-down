@@ -66,6 +66,11 @@ export default function SettlePage() {
   const skinsSummary = getSkinsSummary();
   const lowNetSummary = getLowNetSummary();
   const ctpSummary = getCtpSummary();
+  const bankerGameEnabled = round.gameSettings?.bankerEnabled !== false;
+  const skinsGameEnabled = round.gameSettings?.skinsEnabled === true;
+  const ctpGameEnabled = round.gameSettings?.ctpEnabled === true;
+  const lowNetGameEnabled = round.gameSettings?.lowNetEnabled === true;
+  const payoutGameEnabled = skinsGameEnabled || ctpGameEnabled || lowNetGameEnabled;
   const grossScores = getGrossTotals().sort(
     (a, b) => a.grossTotal - b.grossTotal || b.holesCounted - a.holesCounted || a.playerName.localeCompare(b.playerName)
   );
@@ -207,12 +212,12 @@ export default function SettlePage() {
         amount: item.amount,
         placement: item.placement,
       })),
-      bankerPositions: totals.map((total) => ({
+      bankerPositions: bankerGameEnabled ? totals.map((total) => ({
         playerId: total.playerId,
         name: total.name,
         amount: total.amount,
-      })),
-      bankerSettlements: settlements,
+      })) : [],
+      bankerSettlements: bankerGameEnabled ? settlements : [],
     };
   }
 
@@ -468,9 +473,11 @@ export default function SettlePage() {
         </div>
       </section>
 
+      {payoutGameEnabled ? (
       <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
         <h2 className="mb-3 text-xl font-bold">Payouts</h2>
 
+        {skinsGameEnabled ? (
         <div className="mb-4">
           <h3 className="mb-2 font-semibold">Skins</h3>
           <div className="space-y-2">
@@ -489,7 +496,9 @@ export default function SettlePage() {
             )}
           </div>
         </div>
+        ) : null}
 
+        {ctpGameEnabled ? (
         <div className="mb-4">
           <h3 className="mb-2 font-semibold">Closest to the Pin</h3>
           <div className="space-y-2">
@@ -508,7 +517,9 @@ export default function SettlePage() {
             )}
           </div>
         </div>
+        ) : null}
 
+        {lowNetGameEnabled ? (
         <div>
           <h3 className="mb-2 font-semibold">Low Net</h3>
           <div className="space-y-2">
@@ -524,8 +535,11 @@ export default function SettlePage() {
             )}
           </div>
         </div>
+        ) : null}
       </section>
+      ) : null}
 
+      {bankerGameEnabled ? (
       <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
         <h2 className="mb-3 text-lg font-bold">Banker Final Positions</h2>
         <div className="space-y-2">
@@ -537,7 +551,9 @@ export default function SettlePage() {
           ))}
         </div>
       </section>
+      ) : null}
 
+      {bankerGameEnabled ? (
       <section className="rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
         <h2 className="mb-3 text-lg font-bold">Who Pays Whom - Banker Only</h2>
         {bankerSettlementGroups.length === 0 ? (
@@ -564,6 +580,7 @@ export default function SettlePage() {
           </div>
         )}
       </section>
+      ) : null}
 
       <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

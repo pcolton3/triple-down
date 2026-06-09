@@ -178,9 +178,11 @@ export default function GroupScoringPage() {
   const groupPlayers = effectiveGroupPlayerIds
     .map((playerId) => roundPlayers.find((player) => player.id === playerId))
     .filter((player): player is typeof round.players[number] => Boolean(player));
+  const bankerGameEnabled = round.gameSettings?.bankerEnabled !== false;
+  const ctpGameEnabled = round.gameSettings?.ctpEnabled === true;
   const bankerPlayers = groupPlayers.filter((player) => player.bankerParticipant !== false);
   const ctpPlayers = groupPlayers.filter((player) => player.ctpParticipant !== false);
-  const isScoreOnlyGroup = bankerPlayers.length === 0;
+  const isScoreOnlyGroup = !bankerGameEnabled || bankerPlayers.length === 0;
   const currentHoleNumber = group?.currentHole ?? round.currentHole;
   const targetHoleNumber = editHoleNumber ?? currentHoleNumber;
   const hole =
@@ -533,7 +535,7 @@ export default function GroupScoringPage() {
       </section>
       ) : null}
 
-      {hole.par === 3 ? (
+      {ctpGameEnabled && hole.par === 3 ? (
         <section className="rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
           <h2 className="mb-2 text-lg font-bold">Closest to the Pin</h2>
           <select

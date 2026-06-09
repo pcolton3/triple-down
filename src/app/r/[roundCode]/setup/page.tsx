@@ -55,6 +55,10 @@ export default function EditRoundSetupPage() {
   const [saveStatus, setSaveStatus] = useState('');
   const [title, setTitle] = useState(round.title);
   const [courseName, setCourseName] = useState(round.courseName);
+  const [bankerEnabled, setBankerEnabled] = useState(round.gameSettings.bankerEnabled !== false);
+  const [skinsEnabled, setSkinsEnabled] = useState(round.gameSettings.skinsEnabled === true);
+  const [lowNetEnabled, setLowNetEnabled] = useState(round.gameSettings.lowNetEnabled === true);
+  const [ctpEnabled, setCtpEnabled] = useState(round.gameSettings.ctpEnabled === true);
   const [skinsPot, setSkinsPot] = useState(String(round.gameSettings.skinsPot ?? 0));
   const [lowNetPot, setLowNetPot] = useState(String(round.gameSettings.lowNetPot ?? 0));
   const [ctpPot, setCtpPot] = useState(String(round.gameSettings.ctpPot ?? 0));
@@ -90,6 +94,10 @@ export default function EditRoundSetupPage() {
   useEffect(() => {
     setTitle(round.title);
     setCourseName(round.courseName);
+    setBankerEnabled(round.gameSettings.bankerEnabled !== false);
+    setSkinsEnabled(round.gameSettings.skinsEnabled === true);
+    setLowNetEnabled(round.gameSettings.lowNetEnabled === true);
+    setCtpEnabled(round.gameSettings.ctpEnabled === true);
     setSkinsPot(String(round.gameSettings.skinsPot ?? 0));
     setLowNetPot(String(round.gameSettings.lowNetPot ?? 0));
     setCtpPot(String(round.gameSettings.ctpPot ?? 0));
@@ -130,6 +138,10 @@ export default function EditRoundSetupPage() {
         courseName: courseName.trim() || round.courseName,
         gameSettings: {
           ...round.gameSettings,
+          bankerEnabled,
+          skinsEnabled,
+          lowNetEnabled,
+          ctpEnabled,
           skinsPot: Math.max(0, numberOrZero(skinsPot)),
           lowNetPot: Math.max(0, numberOrZero(lowNetPot)),
           ctpPot: Math.max(0, numberOrZero(ctpPot)),
@@ -194,20 +206,44 @@ export default function EditRoundSetupPage() {
       </Card>
 
       <Card className="space-y-4">
-        <h2 className="text-xl font-bold">Pots and Handicap Posting</h2>
+        <h2 className="text-xl font-bold">Games, Pots, and Handicap Posting</h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+            <input type="checkbox" className="mr-2 h-4 w-4" checked={bankerEnabled} onChange={() => setBankerEnabled((value) => !value)} />
+            Banker
+          </label>
+          <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+            <input type="checkbox" className="mr-2 h-4 w-4" checked={skinsEnabled} onChange={() => setSkinsEnabled((value) => !value)} />
+            Skins
+          </label>
+          <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+            <input type="checkbox" className="mr-2 h-4 w-4" checked={ctpEnabled} onChange={() => setCtpEnabled((value) => !value)} />
+            CTP
+          </label>
+          <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+            <input type="checkbox" className="mr-2 h-4 w-4" checked={lowNetEnabled} onChange={() => setLowNetEnabled((value) => !value)} />
+            Low Net
+          </label>
+        </div>
         <div className="grid gap-3 sm:grid-cols-3">
+          {skinsEnabled ? (
           <label className="block">
             <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Skins Pot</span>
             <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={skinsPot} onChange={(event) => setSkinsPot(event.target.value)} />
           </label>
+          ) : null}
+          {lowNetEnabled ? (
           <label className="block">
             <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Low Net Pot</span>
             <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={lowNetPot} onChange={(event) => setLowNetPot(event.target.value)} />
           </label>
+          ) : null}
+          {ctpEnabled ? (
           <label className="block">
             <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">CTP Pot</span>
             <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={ctpPot} onChange={(event) => setCtpPot(event.target.value)} />
           </label>
+          ) : null}
           <label className="block">
             <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Course Rating</span>
             <input type="number" inputMode="decimal" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={courseRating} onChange={(event) => setCourseRating(event.target.value)} />
@@ -246,22 +282,30 @@ export default function EditRoundSetupPage() {
               <div className="sm:col-span-3">
                 <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">Games</span>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {bankerEnabled ? (
                   <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
                     <input type="checkbox" className="mr-2 h-4 w-4" checked={player.bankerParticipant} onChange={() => updatePlayerDraft(player.id, 'bankerParticipant', !player.bankerParticipant)} />
                     Banker
                   </label>
+                  ) : null}
+                  {skinsEnabled ? (
                   <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
                     <input type="checkbox" className="mr-2 h-4 w-4" checked={player.skinsParticipant} onChange={() => updatePlayerDraft(player.id, 'skinsParticipant', !player.skinsParticipant)} />
                     Skins
                   </label>
+                  ) : null}
+                  {ctpEnabled ? (
                   <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
                     <input type="checkbox" className="mr-2 h-4 w-4" checked={player.ctpParticipant} onChange={() => updatePlayerDraft(player.id, 'ctpParticipant', !player.ctpParticipant)} />
                     CTP
                   </label>
+                  ) : null}
+                  {lowNetEnabled ? (
                   <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
                     <input type="checkbox" className="mr-2 h-4 w-4" checked={player.lowNetParticipant} onChange={() => updatePlayerDraft(player.id, 'lowNetParticipant', !player.lowNetParticipant)} />
                     Low Net
                   </label>
+                  ) : null}
                 </div>
               </div>
             </div>

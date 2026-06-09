@@ -330,19 +330,19 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
     .from('round_games')
     .upsert(
       [
-        { round_id: roundId, game_type: 'banker', pot_amount: 0, enabled: true, settings: {} },
+        { round_id: roundId, game_type: 'banker', pot_amount: 0, enabled: round.gameSettings.bankerEnabled !== false, settings: {} },
         {
           round_id: roundId,
           game_type: 'skins',
           pot_amount: round.gameSettings.skinsPot,
-          enabled: round.gameSettings.skinsPot > 0,
+          enabled: round.gameSettings.skinsEnabled === true,
           settings: {},
         },
         {
           round_id: roundId,
           game_type: 'low_net',
           pot_amount: round.gameSettings.lowNetPot,
-          enabled: round.gameSettings.lowNetPot > 0,
+          enabled: round.gameSettings.lowNetEnabled === true,
           settings: {
             courseRating: round.gameSettings.courseRating ?? null,
             slopeRating: round.gameSettings.slopeRating ?? null,
@@ -353,7 +353,7 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
           round_id: roundId,
           game_type: 'ctp',
           pot_amount: round.gameSettings.ctpPot,
-          enabled: round.gameSettings.ctpPot > 0,
+          enabled: round.gameSettings.ctpEnabled === true,
           settings: {},
         },
       ],
@@ -439,19 +439,19 @@ export async function updateSharedRoundSetup(round: RoundState) {
     .from('round_games')
     .upsert(
       [
-        { round_id: round.id, game_type: 'banker', pot_amount: 0, enabled: true, settings: {} },
+        { round_id: round.id, game_type: 'banker', pot_amount: 0, enabled: round.gameSettings.bankerEnabled !== false, settings: {} },
         {
           round_id: round.id,
           game_type: 'skins',
           pot_amount: round.gameSettings.skinsPot,
-          enabled: round.gameSettings.skinsPot > 0,
+          enabled: round.gameSettings.skinsEnabled === true,
           settings: {},
         },
         {
           round_id: round.id,
           game_type: 'low_net',
           pot_amount: round.gameSettings.lowNetPot,
-          enabled: round.gameSettings.lowNetPot > 0,
+          enabled: round.gameSettings.lowNetEnabled === true,
           settings: {
             courseRating: round.gameSettings.courseRating ?? null,
             slopeRating: round.gameSettings.slopeRating ?? null,
@@ -462,7 +462,7 @@ export async function updateSharedRoundSetup(round: RoundState) {
           round_id: round.id,
           game_type: 'ctp',
           pot_amount: round.gameSettings.ctpPot,
-          enabled: round.gameSettings.ctpPot > 0,
+          enabled: round.gameSettings.ctpEnabled === true,
           settings: {},
         },
       ],
@@ -667,6 +667,10 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
     players,
     holes,
     gameSettings: {
+      bankerEnabled: games.get('banker')?.enabled ?? true,
+      skinsEnabled: games.get('skins')?.enabled ?? false,
+      lowNetEnabled: games.get('low_net')?.enabled ?? false,
+      ctpEnabled: games.get('ctp')?.enabled ?? false,
       skinsPot: games.get('skins')?.pot_amount ?? 0,
       lowNetPot: games.get('low_net')?.pot_amount ?? 0,
       ctpPot: games.get('ctp')?.pot_amount ?? 0,

@@ -36,6 +36,10 @@ export type HoleConfig = {
 };
 
 export type RoundGameSettings = {
+  bankerEnabled?: boolean;
+  skinsEnabled?: boolean;
+  lowNetEnabled?: boolean;
+  ctpEnabled?: boolean;
   skinsPot: number;
   lowNetPot: number;
   ctpPot: number;

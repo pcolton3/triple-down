@@ -10,6 +10,8 @@ import type { HoleState, Player, RoundState } from '@/types/round';
 
 function ScoreTable({
   rows,
+  showSkins,
+  showCtp,
 }: {
   rows: Array<{
     playerId: string;
@@ -22,22 +24,28 @@ function ScoreTable({
     skins: number;
     ctpWins: number;
   }>;
+  showSkins: boolean;
+  showCtp: boolean;
 }) {
+  const gameColumnCount = Number(showSkins) + Number(showCtp);
+  const gridTemplateColumns = `minmax(180px,1fr) 70px 70px 70px 80px 80px${showSkins ? ' 70px' : ''}${showCtp ? ' 70px' : ''}`;
+  const minWidth = gameColumnCount === 0 ? 620 : gameColumnCount === 1 ? 690 : 760;
+
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200">
-      <div className="min-w-[760px]">
-        <div className="grid grid-cols-[minmax(180px,1fr)_70px_70px_70px_80px_80px_70px_70px] bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <div style={{ minWidth }}>
+        <div className="grid bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500" style={{ gridTemplateColumns }}>
           <div className="truncate">Player</div>
           <div className="text-right tabular-nums">Holes</div>
           <div className="text-right tabular-nums">Gross</div>
           <div className="text-right tabular-nums">Net</div>
           <div className="text-right tabular-nums">Birdies</div>
           <div className="text-right tabular-nums">Eagles</div>
-          <div className="text-right tabular-nums">Skins</div>
-          <div className="text-right tabular-nums">CTP</div>
+          {showSkins ? <div className="text-right tabular-nums">Skins</div> : null}
+          {showCtp ? <div className="text-right tabular-nums">CTP</div> : null}
         </div>
         {rows.map((item, index) => (
-          <div key={item.playerId} className="grid grid-cols-[minmax(180px,1fr)_70px_70px_70px_80px_80px_70px_70px] border-t border-slate-200 px-3 py-3 text-sm">
+          <div key={item.playerId} className="grid border-t border-slate-200 px-3 py-3 text-sm" style={{ gridTemplateColumns }}>
             <div className="truncate font-medium">
               {index + 1}. {item.playerName}
             </div>
@@ -46,8 +54,8 @@ function ScoreTable({
             <div className="text-right font-semibold tabular-nums">{item.netTotal}</div>
             <div className="text-right font-semibold tabular-nums">{item.naturalBirdies}</div>
             <div className="text-right font-semibold tabular-nums">{item.naturalEagles}</div>
-            <div className="text-right font-semibold tabular-nums">{item.skins}</div>
-            <div className="text-right font-semibold tabular-nums">{item.ctpWins}</div>
+            {showSkins ? <div className="text-right font-semibold tabular-nums">{item.skins}</div> : null}
+            {showCtp ? <div className="text-right font-semibold tabular-nums">{item.ctpWins}</div> : null}
           </div>
         ))}
       </div>
@@ -209,6 +217,8 @@ export default function EventLeaderboardPage() {
   const grossTotals = getGrossTotals();
   const skinsSummary = getSkinsSummary();
   const ctpSummary = getCtpSummary();
+  const skinsGameEnabled = round.gameSettings?.skinsEnabled === true;
+  const ctpGameEnabled = round.gameSettings?.ctpEnabled === true;
 
   const fallbackGroups = Array.from({ length: Math.max(1, Math.ceil(roundPlayers.length / groupSize)) }, (_, index) => ({
     groupNumber: index + 1,
@@ -329,7 +339,7 @@ export default function EventLeaderboardPage() {
 
       <Card>
         <h2 className="mb-3 text-xl font-bold">Leaderboard</h2>
-        <ScoreTable rows={eventLeaderboard} />
+        <ScoreTable rows={eventLeaderboard} showSkins={skinsGameEnabled} showCtp={ctpGameEnabled} />
       </Card>
 
       <Card>

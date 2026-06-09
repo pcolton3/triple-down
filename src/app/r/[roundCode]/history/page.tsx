@@ -154,6 +154,10 @@ export default function HistoryPage() {
   const skinsSummary = getSkinsSummary();
   const lowNetSummary = getLowNetSummary();
   const ctpSummary = getCtpSummary();
+  const skinsGameEnabled = round.gameSettings?.skinsEnabled === true;
+  const ctpGameEnabled = round.gameSettings?.ctpEnabled === true;
+  const lowNetGameEnabled = round.gameSettings?.lowNetEnabled === true;
+  const sideGameEnabled = skinsGameEnabled || ctpGameEnabled || lowNetGameEnabled;
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
@@ -177,9 +181,11 @@ export default function HistoryPage() {
         <ScoreTable rows={grossTotals} />
       </section>
 
+      {sideGameEnabled ? (
       <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
         <h2 className="mb-3 text-lg font-bold">Side Game History</h2>
 
+        {skinsGameEnabled ? (
         <div className="mb-4">
           <h3 className="mb-2 font-semibold">Skins by Hole</h3>
           <div className="space-y-2">
@@ -201,7 +207,9 @@ export default function HistoryPage() {
             )}
           </div>
         </div>
+        ) : null}
 
+        {ctpGameEnabled ? (
         <div className="mb-4">
           <h3 className="mb-2 font-semibold">Closest to the Pin</h3>
           <div className="space-y-2">
@@ -217,7 +225,9 @@ export default function HistoryPage() {
             )}
           </div>
         </div>
+        ) : null}
 
+        {lowNetGameEnabled ? (
         <div>
           <h3 className="mb-2 font-semibold">Low Net Leaderboard</h3>
           <div className="space-y-2">
@@ -229,7 +239,9 @@ export default function HistoryPage() {
             ))}
           </div>
         </div>
+        ) : null}
       </section>
+      ) : null}
 
       <div className="space-y-4">
         {history.length === 0 ? (
