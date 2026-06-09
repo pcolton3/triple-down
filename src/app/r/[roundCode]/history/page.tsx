@@ -235,6 +235,7 @@ export default function HistoryPage() {
   const [editScorecard, setEditScorecard] = useState(false);
   const [scoreDrafts, setScoreDrafts] = useState<Record<string, string>>({});
   const [saveStatus, setSaveStatus] = useState('');
+  const [loadStatus, setLoadStatus] = useState<'idle' | 'loading' | 'ready' | 'not_found'>('idle');
   const history = getHoleHistory();
   const grossTotals = getGrossTotals().sort(
     (a, b) => a.grossTotal - b.grossTotal || b.holesCounted - a.holesCounted || a.playerName.localeCompare(b.playerName)
@@ -247,6 +248,32 @@ export default function HistoryPage() {
   const lowNetGameEnabled = round.gameSettings?.lowNetEnabled === true;
   const sideGameEnabled = skinsGameEnabled || ctpGameEnabled || lowNetGameEnabled;
   const routeRoundCode = params.roundCode?.toUpperCase() || round.roundCode;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRound() {
+      if (!routeRoundCode) return;
+      setLoadStatus('loading');
+      const bundle = await loadSharedRoundByCode(routeRoundCode);
+      if (cancelled) return;
+      if (!bundle) {
+        setLoadStatus('not_found');
+        return;
+      }
+      hydrateRound(sharedRoundBundleToRoundState(bundle));
+      setLoadStatus('ready');
+    }
+
+    void loadRound().catch((error) => {
+      console.error('Unable to load history round.', error);
+      if (!cancelled) setLoadStatus('not_found');
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrateRound, routeRoundCode]);
 
   useEffect(() => {
     const nextDrafts: Record<string, string> = {};
@@ -372,6 +399,8 @@ export default function HistoryPage() {
       </div>
 
       <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
+        {loadStatus === 'loading' ? <p className="mb-3 text-sm text-slate-500">Loading latest round from Supabase...</p> : null}
+        {loadStatus === 'not_found' ? <p className="mb-3 text-sm text-red-600">Unable to load this round from Supabase.</p> : null}
         <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-lg font-bold">Scorecard</h2>
           <div className="flex flex-wrap items-center gap-2">
