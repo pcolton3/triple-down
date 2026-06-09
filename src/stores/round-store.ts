@@ -123,6 +123,23 @@ type StablefordSummary = {
   payouts: Array<{ playerId: string; playerName: string; points: number; amount: number }>;
 };
 
+type BirdiePotSummary = {
+  pot: number;
+  valuePerBirdie: number;
+  payouts: Array<{ playerId: string; playerName: string; birdies: number; amount: number; holes: number[] }>;
+};
+
+type EaglePotSummary = {
+  pot: number;
+  valuePerEagle: number;
+  payouts: Array<{ playerId: string; playerName: string; eagles: number; amount: number; holes: number[] }>;
+};
+
+type HoleInOneSummary = {
+  aceValue: number;
+  payouts: Array<{ playerId: string; playerName: string; amount: number; holes: number[]; aces: number; payerCount: number }>;
+};
+
 type RoundStore = {
   round: RoundState;
   ledger: LedgerEntry[];
@@ -154,6 +171,9 @@ type RoundStore = {
   getCtpSummary: () => CtpSummary;
   getNassauSummary: () => NassauSummary;
   getStablefordSummary: () => StablefordSummary;
+  getBirdiePotSummary: () => BirdiePotSummary;
+  getEaglePotSummary: () => EaglePotSummary;
+  getHoleInOneSummary: () => HoleInOneSummary;
 };
 
 const defaultPlayers = [
@@ -239,11 +259,16 @@ function createDefaultRound(): RoundState {
       ctpEnabled: false,
       nassauEnabled: false,
       stablefordEnabled: false,
+      birdiePotEnabled: false,
+      eaglePotEnabled: false,
+      holeInOneEnabled: false,
       skinsPot: 0,
       lowNetPot: 0,
       ctpPot: 0,
       nassauPot: 0,
       stablefordPot: 0,
+      birdiePot: 0,
+      eaglePot: 0,
       courseRating: null,
       slopeRating: null,
       pcc: 0,
@@ -319,6 +344,18 @@ function nassauEnabled(round: RoundState) {
 
 function stablefordEnabled(round: RoundState) {
   return round.gameSettings?.stablefordEnabled === true;
+}
+
+function birdiePotEnabled(round: RoundState) {
+  return round.gameSettings?.birdiePotEnabled === true;
+}
+
+function eaglePotEnabled(round: RoundState) {
+  return round.gameSettings?.eaglePotEnabled === true;
+}
+
+function holeInOneEnabled(round: RoundState) {
+  return round.gameSettings?.holeInOneEnabled === true;
 }
 
 function ensureMultiFoursomeRound(round: RoundState): RoundState {
@@ -974,6 +1011,94 @@ function buildStablefordSummary(round: RoundState): StablefordSummary {
   };
 }
 
+function buildBirdiePotSummary(round: RoundState): BirdiePotSummary {
+  const pot = round.gameSettings?.birdiePot ?? 0;
+  if (!birdiePotEnabled(round)) return { pot, valuePerBirdie: 0, payouts: [] };
+
+  const birdiesByPlayer = new Map(round.players.map((player) => [
+    player.id,
+    { playerId: player.id, playerName: player.name, birdies: 0, amount: 0, holes: [] as number[] },
+  ]));
+
+  round.holes.forEach((hole) => {
+    if (!hole.isSaved) return;
+    round.players.forEach((player) => {
+      const gross = getPlayerGrossForHole(hole, player.id);
+      if (gross !== hole.par - 1) return;
+      const entry = birdiesByPlayer.get(player.id);
+      if (!entry) return;
+      entry.birdies += 1;
+      entry.holes.push(hole.holeNumber);
+    });
+  });
+
+  const totalBirdies = Array.from(birdiesByPlayer.values()).reduce((sum, item) => sum + item.birdies, 0);
+  const valuePerBirdie = totalBirdies > 0 ? pot / totalBirdies : 0;
+  const payouts = Array.from(birdiesByPlayer.values())
+    .filter((item) => item.birdies > 0)
+    .map((item) => ({ ...item, amount: item.birdies * valuePerBirdie }));
+
+  return { pot, valuePerBirdie, payouts };
+}
+
+function buildEaglePotSummary(round: RoundState): EaglePotSummary {
+  const pot = round.gameSettings?.eaglePot ?? 0;
+  if (!eaglePotEnabled(round)) return { pot, valuePerEagle: 0, payouts: [] };
+
+  const eaglesByPlayer = new Map(round.players.map((player) => [
+    player.id,
+    { playerId: player.id, playerName: player.name, eagles: 0, amount: 0, holes: [] as number[] },
+  ]));
+
+  round.holes.forEach((hole) => {
+    if (!hole.isSaved) return;
+    round.players.forEach((player) => {
+      const gross = getPlayerGrossForHole(hole, player.id);
+      if (gross !== hole.par - 2) return;
+      const entry = eaglesByPlayer.get(player.id);
+      if (!entry) return;
+      entry.eagles += 1;
+      entry.holes.push(hole.holeNumber);
+    });
+  });
+
+  const totalEagles = Array.from(eaglesByPlayer.values()).reduce((sum, item) => sum + item.eagles, 0);
+  const valuePerEagle = totalEagles > 0 ? pot / totalEagles : 0;
+  const payouts = Array.from(eaglesByPlayer.values())
+    .filter((item) => item.eagles > 0)
+    .map((item) => ({ ...item, amount: item.eagles * valuePerEagle }));
+
+  return { pot, valuePerEagle, payouts };
+}
+
+function buildHoleInOneSummary(round: RoundState): HoleInOneSummary {
+  const aceValue = 100;
+  if (!holeInOneEnabled(round)) return { aceValue, payouts: [] };
+
+  const acesByPlayer = new Map(round.players.map((player) => [
+    player.id,
+    { playerId: player.id, playerName: player.name, amount: 0, holes: [] as number[], aces: 0, payerCount: Math.max(0, round.players.length - 1) },
+  ]));
+
+  round.holes.forEach((hole) => {
+    if (!hole.isSaved) return;
+    round.players.forEach((player) => {
+      const gross = getPlayerGrossForHole(hole, player.id);
+      if (gross !== 1) return;
+      const entry = acesByPlayer.get(player.id);
+      if (!entry) return;
+      entry.aces += 1;
+      entry.holes.push(hole.holeNumber);
+      entry.amount += entry.payerCount * aceValue;
+    });
+  });
+
+  return {
+    aceValue,
+    payouts: Array.from(acesByPlayer.values()).filter((item) => item.aces > 0),
+  };
+}
+
 function simulationTargetScore(coursePar: number, handicap: number, playerIndex: number, groupNumber: number) {
   const dayVariance = ((playerIndex * 2 + groupNumber) % 5) - 1;
   return Math.max(coursePar - 4, Math.round(coursePar + Math.max(0, handicap) + dayVariance + 2));
@@ -1174,11 +1299,16 @@ export const useRoundStore = create<RoundStore>()(
                 ctpEnabled: input.gameSettings?.ctpEnabled ?? false,
                 nassauEnabled: input.gameSettings?.nassauEnabled ?? false,
                 stablefordEnabled: input.gameSettings?.stablefordEnabled ?? false,
+                birdiePotEnabled: input.gameSettings?.birdiePotEnabled ?? false,
+                eaglePotEnabled: input.gameSettings?.eaglePotEnabled ?? false,
+                holeInOneEnabled: input.gameSettings?.holeInOneEnabled ?? false,
                 skinsPot: input.gameSettings?.skinsPot ?? 0,
                 lowNetPot: input.gameSettings?.lowNetPot ?? 0,
                 ctpPot: input.gameSettings?.ctpPot ?? 0,
                 nassauPot: input.gameSettings?.nassauPot ?? 0,
                 stablefordPot: input.gameSettings?.stablefordPot ?? 0,
+                birdiePot: input.gameSettings?.birdiePot ?? 0,
+                eaglePot: input.gameSettings?.eaglePot ?? 0,
                 courseRating: input.gameSettings?.courseRating ?? null,
                 slopeRating: input.gameSettings?.slopeRating ?? null,
                 pcc: input.gameSettings?.pcc ?? 0,
@@ -1356,6 +1486,12 @@ export const useRoundStore = create<RoundStore>()(
       getNassauSummary: () => buildNassauSummary(get().round),
 
       getStablefordSummary: () => buildStablefordSummary(get().round),
+
+      getBirdiePotSummary: () => buildBirdiePotSummary(get().round),
+
+      getEaglePotSummary: () => buildEaglePotSummary(get().round),
+
+      getHoleInOneSummary: () => buildHoleInOneSummary(get().round),
 
       getRunningTotals: () => {
         const { round } = get();

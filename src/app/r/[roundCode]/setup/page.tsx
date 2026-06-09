@@ -61,11 +61,16 @@ export default function EditRoundSetupPage() {
   const [ctpEnabled, setCtpEnabled] = useState(round.gameSettings.ctpEnabled === true);
   const [nassauEnabled, setNassauEnabled] = useState(round.gameSettings.nassauEnabled === true);
   const [stablefordEnabled, setStablefordEnabled] = useState(round.gameSettings.stablefordEnabled === true);
+  const [birdiePotEnabled, setBirdiePotEnabled] = useState(round.gameSettings.birdiePotEnabled === true);
+  const [eaglePotEnabled, setEaglePotEnabled] = useState(round.gameSettings.eaglePotEnabled === true);
+  const [holeInOneEnabled, setHoleInOneEnabled] = useState(round.gameSettings.holeInOneEnabled === true);
   const [skinsPot, setSkinsPot] = useState(String(round.gameSettings.skinsPot ?? 0));
   const [lowNetPot, setLowNetPot] = useState(String(round.gameSettings.lowNetPot ?? 0));
   const [ctpPot, setCtpPot] = useState(String(round.gameSettings.ctpPot ?? 0));
   const [nassauPot, setNassauPot] = useState(String(round.gameSettings.nassauPot ?? 0));
   const [stablefordPot, setStablefordPot] = useState(String(round.gameSettings.stablefordPot ?? 0));
+  const [birdiePot, setBirdiePot] = useState(String(round.gameSettings.birdiePot ?? 0));
+  const [eaglePot, setEaglePot] = useState(String(round.gameSettings.eaglePot ?? 0));
   const [courseRating, setCourseRating] = useState(round.gameSettings.courseRating == null ? '' : String(round.gameSettings.courseRating));
   const [slopeRating, setSlopeRating] = useState(round.gameSettings.slopeRating == null ? '' : String(round.gameSettings.slopeRating));
   const [pcc, setPcc] = useState(String(round.gameSettings.pcc ?? 0));
@@ -104,11 +109,16 @@ export default function EditRoundSetupPage() {
     setCtpEnabled(round.gameSettings.ctpEnabled === true);
     setNassauEnabled(round.gameSettings.nassauEnabled === true);
     setStablefordEnabled(round.gameSettings.stablefordEnabled === true);
+    setBirdiePotEnabled(round.gameSettings.birdiePotEnabled === true);
+    setEaglePotEnabled(round.gameSettings.eaglePotEnabled === true);
+    setHoleInOneEnabled(round.gameSettings.holeInOneEnabled === true);
     setSkinsPot(String(round.gameSettings.skinsPot ?? 0));
     setLowNetPot(String(round.gameSettings.lowNetPot ?? 0));
     setCtpPot(String(round.gameSettings.ctpPot ?? 0));
     setNassauPot(String(round.gameSettings.nassauPot ?? 0));
     setStablefordPot(String(round.gameSettings.stablefordPot ?? 0));
+    setBirdiePot(String(round.gameSettings.birdiePot ?? 0));
+    setEaglePot(String(round.gameSettings.eaglePot ?? 0));
     setCourseRating(round.gameSettings.courseRating == null ? '' : String(round.gameSettings.courseRating));
     setSlopeRating(round.gameSettings.slopeRating == null ? '' : String(round.gameSettings.slopeRating));
     setPcc(String(round.gameSettings.pcc ?? 0));
@@ -152,11 +162,16 @@ export default function EditRoundSetupPage() {
           ctpEnabled,
           nassauEnabled,
           stablefordEnabled,
+          birdiePotEnabled,
+          eaglePotEnabled,
+          holeInOneEnabled,
           skinsPot: Math.max(0, numberOrZero(skinsPot)),
           lowNetPot: Math.max(0, numberOrZero(lowNetPot)),
           ctpPot: Math.max(0, numberOrZero(ctpPot)),
           nassauPot: Math.max(0, numberOrZero(nassauPot)),
           stablefordPot: Math.max(0, numberOrZero(stablefordPot)),
+          birdiePot: Math.max(0, numberOrZero(birdiePot)),
+          eaglePot: Math.max(0, numberOrZero(eaglePot)),
           courseRating: numberOrNull(courseRating),
           slopeRating: numberOrNull(slopeRating),
           pcc: numberOrZero(pcc),
@@ -244,6 +259,18 @@ export default function EditRoundSetupPage() {
             <input type="checkbox" className="mr-2 h-4 w-4" checked={stablefordEnabled} onChange={() => setStablefordEnabled((value) => !value)} />
             Stableford
           </label>
+          <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+            <input type="checkbox" className="mr-2 h-4 w-4" checked={birdiePotEnabled} onChange={() => setBirdiePotEnabled((value) => !value)} />
+            Birdie Pot
+          </label>
+          <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+            <input type="checkbox" className="mr-2 h-4 w-4" checked={eaglePotEnabled} onChange={() => setEaglePotEnabled((value) => !value)} />
+            Eagle Pot
+          </label>
+          <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+            <input type="checkbox" className="mr-2 h-4 w-4" checked={holeInOneEnabled} onChange={() => setHoleInOneEnabled((value) => !value)} />
+            Hole-in-One
+          </label>
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
           {skinsEnabled ? (
@@ -274,6 +301,18 @@ export default function EditRoundSetupPage() {
           <label className="block">
             <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Stableford Pot</span>
             <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={stablefordPot} onChange={(event) => setStablefordPot(event.target.value)} />
+          </label>
+          ) : null}
+          {birdiePotEnabled ? (
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Birdie Pot</span>
+            <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={birdiePot} onChange={(event) => setBirdiePot(event.target.value)} />
+          </label>
+          ) : null}
+          {eaglePotEnabled ? (
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Eagle Pot</span>
+            <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={eaglePot} onChange={(event) => setEaglePot(event.target.value)} />
           </label>
           ) : null}
           <label className="block">

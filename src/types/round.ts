@@ -42,11 +42,16 @@ export type RoundGameSettings = {
   ctpEnabled?: boolean;
   nassauEnabled?: boolean;
   stablefordEnabled?: boolean;
+  birdiePotEnabled?: boolean;
+  eaglePotEnabled?: boolean;
+  holeInOneEnabled?: boolean;
   skinsPot: number;
   lowNetPot: number;
   ctpPot: number;
   nassauPot?: number;
   stablefordPot?: number;
+  birdiePot?: number;
+  eaglePot?: number;
   courseRating?: number | null;
   slopeRating?: number | null;
   pcc?: number | null;

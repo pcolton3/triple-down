@@ -64,12 +64,17 @@ export default function NewRoundPage() {
   const [ctpEnabled, setCtpEnabled] = useState(false);
   const [nassauEnabled, setNassauEnabled] = useState(false);
   const [stablefordEnabled, setStablefordEnabled] = useState(false);
+  const [birdiePotEnabled, setBirdiePotEnabled] = useState(false);
+  const [eaglePotEnabled, setEaglePotEnabled] = useState(false);
+  const [holeInOneEnabled, setHoleInOneEnabled] = useState(false);
   const [defaultBet, setDefaultBet] = useState(5);
   const [skinsPot, setSkinsPot] = useState(0);
   const [lowNetPot, setLowNetPot] = useState(0);
   const [ctpPot, setCtpPot] = useState(0);
   const [nassauPot, setNassauPot] = useState(0);
   const [stablefordPot, setStablefordPot] = useState(0);
+  const [birdiePot, setBirdiePot] = useState(0);
+  const [eaglePot, setEaglePot] = useState(0);
   const [courseRating, setCourseRating] = useState('');
   const [slopeRating, setSlopeRating] = useState('');
   const [pcc, setPcc] = useState('0');
@@ -378,11 +383,16 @@ export default function NewRoundPage() {
         ctpEnabled,
         nassauEnabled,
         stablefordEnabled,
+        birdiePotEnabled,
+        eaglePotEnabled,
+        holeInOneEnabled,
         skinsPot: Number.isFinite(skinsPot) ? Math.max(0, skinsPot) : 0,
         lowNetPot: Number.isFinite(lowNetPot) ? Math.max(0, lowNetPot) : 0,
         ctpPot: Number.isFinite(ctpPot) ? Math.max(0, ctpPot) : 0,
         nassauPot: Number.isFinite(nassauPot) ? Math.max(0, nassauPot) : 0,
         stablefordPot: Number.isFinite(stablefordPot) ? Math.max(0, stablefordPot) : 0,
+        birdiePot: Number.isFinite(birdiePot) ? Math.max(0, birdiePot) : 0,
+        eaglePot: Number.isFinite(eaglePot) ? Math.max(0, eaglePot) : 0,
         courseRating: courseRating.trim() ? Number(courseRating) || null : null,
         slopeRating: slopeRating.trim() ? Number(slopeRating) || null : null,
         pcc: pcc.trim() ? Number(pcc) || 0 : 0,
@@ -618,6 +628,33 @@ export default function NewRoundPage() {
               />
               Stableford
             </label>
+            <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+              <input
+                type="checkbox"
+                className="mr-2 h-4 w-4"
+                checked={birdiePotEnabled}
+                onChange={() => setBirdiePotEnabled((value) => !value)}
+              />
+              Birdie Pot
+            </label>
+            <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+              <input
+                type="checkbox"
+                className="mr-2 h-4 w-4"
+                checked={eaglePotEnabled}
+                onChange={() => setEaglePotEnabled((value) => !value)}
+              />
+              Eagle Pot
+            </label>
+            <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+              <input
+                type="checkbox"
+                className="mr-2 h-4 w-4"
+                checked={holeInOneEnabled}
+                onChange={() => setHoleInOneEnabled((value) => !value)}
+              />
+              Hole-in-One
+            </label>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -651,7 +688,22 @@ export default function NewRoundPage() {
               <NumberField value={stablefordPot} onChange={setStablefordPot} placeholder="0" />
             </div>
             ) : null}
+            {birdiePotEnabled ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Birdie Pot</label>
+              <NumberField value={birdiePot} onChange={setBirdiePot} placeholder="0" />
+            </div>
+            ) : null}
+            {eaglePotEnabled ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Eagle Pot</label>
+              <NumberField value={eaglePot} onChange={setEaglePot} placeholder="0" />
+            </div>
+            ) : null}
           </div>
+          {holeInOneEnabled ? (
+            <p className="text-sm text-slate-500">Hole-in-One pays $100 from every other golfer to the player who made it.</p>
+          ) : null}
         </Card>
 
         <Card>

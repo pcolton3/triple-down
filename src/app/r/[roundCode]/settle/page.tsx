@@ -61,6 +61,9 @@ export default function SettlePage() {
     getCtpSummary,
     getNassauSummary,
     getStablefordSummary,
+    getBirdiePotSummary,
+    getEaglePotSummary,
+    getHoleInOneSummary,
     getGrossTotals,
   } = useRoundStore();
   const totals = getRunningTotals().sort((a, b) => b.amount - a.amount);
@@ -70,13 +73,27 @@ export default function SettlePage() {
   const ctpSummary = getCtpSummary();
   const nassauSummary = getNassauSummary();
   const stablefordSummary = getStablefordSummary();
+  const birdiePotSummary = getBirdiePotSummary();
+  const eaglePotSummary = getEaglePotSummary();
+  const holeInOneSummary = getHoleInOneSummary();
   const bankerGameEnabled = round.gameSettings?.bankerEnabled !== false;
   const skinsGameEnabled = round.gameSettings?.skinsEnabled === true;
   const ctpGameEnabled = round.gameSettings?.ctpEnabled === true;
   const lowNetGameEnabled = round.gameSettings?.lowNetEnabled === true;
   const nassauGameEnabled = round.gameSettings?.nassauEnabled === true;
   const stablefordGameEnabled = round.gameSettings?.stablefordEnabled === true;
-  const payoutGameEnabled = skinsGameEnabled || ctpGameEnabled || lowNetGameEnabled || nassauGameEnabled || stablefordGameEnabled;
+  const birdiePotGameEnabled = round.gameSettings?.birdiePotEnabled === true;
+  const eaglePotGameEnabled = round.gameSettings?.eaglePotEnabled === true;
+  const holeInOneGameEnabled = round.gameSettings?.holeInOneEnabled === true;
+  const payoutGameEnabled =
+    skinsGameEnabled ||
+    ctpGameEnabled ||
+    lowNetGameEnabled ||
+    nassauGameEnabled ||
+    stablefordGameEnabled ||
+    birdiePotGameEnabled ||
+    eaglePotGameEnabled ||
+    holeInOneGameEnabled;
   const grossScores = getGrossTotals().sort(
     (a, b) => a.grossTotal - b.grossTotal || b.holesCounted - a.holesCounted || a.playerName.localeCompare(b.playerName)
   );
@@ -187,6 +204,9 @@ export default function SettlePage() {
   const lowNetWinnerRows = lowNetSummary.payouts.filter((item) => item.amount > 0);
   const nassauWinnerRows = nassauSummary.payouts.filter((item) => item.amount > 0);
   const stablefordWinnerRows = stablefordSummary.payouts.filter((item) => item.amount > 0);
+  const birdiePotWinnerRows = birdiePotSummary.payouts.filter((item) => item.amount > 0);
+  const eaglePotWinnerRows = eaglePotSummary.payouts.filter((item) => item.amount > 0);
+  const holeInOneWinnerRows = holeInOneSummary.payouts.filter((item) => item.amount > 0);
 
   function buildSnapshot(): SettlementSnapshot {
     return {
@@ -231,6 +251,28 @@ export default function SettlePage() {
         playerName: item.playerName,
         amount: item.amount,
         points: item.points,
+      })),
+      birdiePot: birdiePotWinnerRows.map((item) => ({
+        playerId: item.playerId,
+        playerName: item.playerName,
+        amount: item.amount,
+        birdies: item.birdies,
+        holes: item.holes,
+      })),
+      eaglePot: eaglePotWinnerRows.map((item) => ({
+        playerId: item.playerId,
+        playerName: item.playerName,
+        amount: item.amount,
+        eagles: item.eagles,
+        holes: item.holes,
+      })),
+      holeInOne: holeInOneWinnerRows.map((item) => ({
+        playerId: item.playerId,
+        playerName: item.playerName,
+        amount: item.amount,
+        aces: item.aces,
+        holes: item.holes,
+        payerCount: item.payerCount,
       })),
       bankerPositions: bankerGameEnabled ? totals.map((total) => ({
         playerId: total.playerId,
@@ -399,6 +441,59 @@ export default function SettlePage() {
                   <div key={item.playerId} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
                     <span>{item.playerName} wins {formatCurrency(item.amount)} Stableford</span>
                     <span className="font-bold">{item.points} pts</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            ) : null}
+
+            {(settlementSnapshot.birdiePot?.length ?? 0) > 0 ? (
+            <div className="mt-4">
+              <h3 className="mb-2 font-semibold">Birdie Pot</h3>
+              <div className="space-y-2">
+                {settlementSnapshot.birdiePot?.map((item) => (
+                  <div key={item.playerId} className="rounded-xl bg-slate-50 px-3 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-medium">{item.playerName} wins {formatCurrency(item.amount)} birdie pot</span>
+                      <span className="font-bold">{item.birdies} birdie{item.birdies === 1 ? '' : 's'}</span>
+                    </div>
+                    <p className="mt-1 text-sm text-slate-500">Birdie holes: {formatHoles(item.holes)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            ) : null}
+
+            {(settlementSnapshot.eaglePot?.length ?? 0) > 0 ? (
+            <div className="mt-4">
+              <h3 className="mb-2 font-semibold">Eagle Pot</h3>
+              <div className="space-y-2">
+                {settlementSnapshot.eaglePot?.map((item) => (
+                  <div key={item.playerId} className="rounded-xl bg-slate-50 px-3 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-medium">{item.playerName} wins {formatCurrency(item.amount)} eagle pot</span>
+                      <span className="font-bold">{item.eagles} eagle{item.eagles === 1 ? '' : 's'}</span>
+                    </div>
+                    <p className="mt-1 text-sm text-slate-500">Eagle holes: {formatHoles(item.holes)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            ) : null}
+
+            {(settlementSnapshot.holeInOne?.length ?? 0) > 0 ? (
+            <div className="mt-4">
+              <h3 className="mb-2 font-semibold">Hole-in-One</h3>
+              <div className="space-y-2">
+                {settlementSnapshot.holeInOne?.map((item) => (
+                  <div key={item.playerId} className="rounded-xl bg-slate-50 px-3 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-medium">{item.playerName} wins {formatCurrency(item.amount)} hole-in-one</span>
+                      <span className="font-bold">{item.aces} ace{item.aces === 1 ? '' : 's'}</span>
+                    </div>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Hole-in-one holes: {formatHoles(item.holes)}. {item.payerCount} golfer{item.payerCount === 1 ? '' : 's'} pay {formatCurrency(100)} each.
+                    </p>
                   </div>
                 ))}
               </div>
@@ -620,6 +715,71 @@ export default function SettlePage() {
                 <div key={item.playerId} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
                   <span>{item.playerName} wins {formatCurrency(item.amount)} Stableford</span>
                   <span className="font-bold">{item.points} pts</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+        ) : null}
+
+        {birdiePotGameEnabled ? (
+        <div className="mt-4">
+          <h3 className="mb-2 font-semibold">Birdie Pot</h3>
+          <div className="space-y-2">
+            {birdiePotWinnerRows.length === 0 ? (
+              <div className="rounded-xl bg-slate-50 px-3 py-3 text-slate-500">No birdies yet.</div>
+            ) : (
+              birdiePotWinnerRows.map((item) => (
+                <div key={item.playerId} className="rounded-xl bg-slate-50 px-3 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium">{item.playerName} wins {formatCurrency(item.amount)} birdie pot</span>
+                    <span className="font-bold">{item.birdies} birdie{item.birdies === 1 ? '' : 's'}</span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-500">Birdie holes: {formatHoles(item.holes)}</p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+        ) : null}
+
+        {eaglePotGameEnabled ? (
+        <div className="mt-4">
+          <h3 className="mb-2 font-semibold">Eagle Pot</h3>
+          <div className="space-y-2">
+            {eaglePotWinnerRows.length === 0 ? (
+              <div className="rounded-xl bg-slate-50 px-3 py-3 text-slate-500">No eagles yet.</div>
+            ) : (
+              eaglePotWinnerRows.map((item) => (
+                <div key={item.playerId} className="rounded-xl bg-slate-50 px-3 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium">{item.playerName} wins {formatCurrency(item.amount)} eagle pot</span>
+                    <span className="font-bold">{item.eagles} eagle{item.eagles === 1 ? '' : 's'}</span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-500">Eagle holes: {formatHoles(item.holes)}</p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+        ) : null}
+
+        {holeInOneGameEnabled ? (
+        <div className="mt-4">
+          <h3 className="mb-2 font-semibold">Hole-in-One</h3>
+          <div className="space-y-2">
+            {holeInOneWinnerRows.length === 0 ? (
+              <div className="rounded-xl bg-slate-50 px-3 py-3 text-slate-500">No holes-in-one yet.</div>
+            ) : (
+              holeInOneWinnerRows.map((item) => (
+                <div key={item.playerId} className="rounded-xl bg-slate-50 px-3 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium">{item.playerName} wins {formatCurrency(item.amount)} hole-in-one</span>
+                    <span className="font-bold">{item.aces} ace{item.aces === 1 ? '' : 's'}</span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Hole-in-one holes: {formatHoles(item.holes)}. {item.payerCount} golfer{item.payerCount === 1 ? '' : 's'} pay {formatCurrency(100)} each.
+                  </p>
                 </div>
               ))
             )}

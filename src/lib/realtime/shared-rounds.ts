@@ -72,7 +72,7 @@ type RoundMatchupRow = {
 type RoundGameRow = {
   id: string;
   round_id: string;
-  game_type: 'banker' | 'skins' | 'low_net' | 'ctp' | 'nassau' | 'stableford';
+  game_type: 'banker' | 'skins' | 'low_net' | 'ctp' | 'nassau' | 'stableford' | 'birdie_pot' | 'eagle_pot' | 'hole_in_one';
   pot_amount: number;
   enabled: boolean;
   settings: Record<string, unknown>;
@@ -170,6 +170,9 @@ export type SettlementSnapshot = {
   lowNet: Array<{ playerId: string; playerName: string; amount: number; placement: string }>;
   nassau?: Array<{ playerId: string; playerName: string; amount: number; wins: string[] }>;
   stableford?: Array<{ playerId: string; playerName: string; amount: number; points: number }>;
+  birdiePot?: Array<{ playerId: string; playerName: string; amount: number; birdies: number; holes: number[] }>;
+  eaglePot?: Array<{ playerId: string; playerName: string; amount: number; eagles: number; holes: number[] }>;
+  holeInOne?: Array<{ playerId: string; playerName: string; amount: number; aces: number; holes: number[]; payerCount: number }>;
   bankerPositions: Array<{ playerId: string; name: string; amount: number }>;
   bankerSettlements: Array<{
     groupNumber: number;
@@ -372,6 +375,27 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
           enabled: round.gameSettings.stablefordEnabled === true,
           settings: {},
         },
+        {
+          round_id: roundId,
+          game_type: 'birdie_pot',
+          pot_amount: round.gameSettings.birdiePot ?? 0,
+          enabled: round.gameSettings.birdiePotEnabled === true,
+          settings: {},
+        },
+        {
+          round_id: roundId,
+          game_type: 'eagle_pot',
+          pot_amount: round.gameSettings.eaglePot ?? 0,
+          enabled: round.gameSettings.eaglePotEnabled === true,
+          settings: {},
+        },
+        {
+          round_id: roundId,
+          game_type: 'hole_in_one',
+          pot_amount: 0,
+          enabled: round.gameSettings.holeInOneEnabled === true,
+          settings: { aceValue: 100 },
+        },
       ],
       { onConflict: 'round_id,game_type' }
     );
@@ -494,6 +518,27 @@ export async function updateSharedRoundSetup(round: RoundState) {
           pot_amount: round.gameSettings.stablefordPot ?? 0,
           enabled: round.gameSettings.stablefordEnabled === true,
           settings: {},
+        },
+        {
+          round_id: round.id,
+          game_type: 'birdie_pot',
+          pot_amount: round.gameSettings.birdiePot ?? 0,
+          enabled: round.gameSettings.birdiePotEnabled === true,
+          settings: {},
+        },
+        {
+          round_id: round.id,
+          game_type: 'eagle_pot',
+          pot_amount: round.gameSettings.eaglePot ?? 0,
+          enabled: round.gameSettings.eaglePotEnabled === true,
+          settings: {},
+        },
+        {
+          round_id: round.id,
+          game_type: 'hole_in_one',
+          pot_amount: 0,
+          enabled: round.gameSettings.holeInOneEnabled === true,
+          settings: { aceValue: 100 },
         },
       ],
       { onConflict: 'round_id,game_type' }
@@ -703,11 +748,16 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
       ctpEnabled: games.get('ctp')?.enabled ?? false,
       nassauEnabled: games.get('nassau')?.enabled ?? false,
       stablefordEnabled: games.get('stableford')?.enabled ?? false,
+      birdiePotEnabled: games.get('birdie_pot')?.enabled ?? false,
+      eaglePotEnabled: games.get('eagle_pot')?.enabled ?? false,
+      holeInOneEnabled: games.get('hole_in_one')?.enabled ?? false,
       skinsPot: games.get('skins')?.pot_amount ?? 0,
       lowNetPot: games.get('low_net')?.pot_amount ?? 0,
       ctpPot: games.get('ctp')?.pot_amount ?? 0,
       nassauPot: games.get('nassau')?.pot_amount ?? 0,
       stablefordPot: games.get('stableford')?.pot_amount ?? 0,
+      birdiePot: games.get('birdie_pot')?.pot_amount ?? 0,
+      eaglePot: games.get('eagle_pot')?.pot_amount ?? 0,
       courseRating: typeof handicapSettings.courseRating === 'number' ? handicapSettings.courseRating : null,
       slopeRating: typeof handicapSettings.slopeRating === 'number' ? handicapSettings.slopeRating : null,
       pcc: typeof handicapSettings.pcc === 'number' ? handicapSettings.pcc : 0,
