@@ -1,8 +1,16 @@
 'use client';
 
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { useRoundStore } from '@/stores/round-store';
 import { formatCurrency } from '@/lib/utils/currency';
+import {
+  loadSharedRoundByCode,
+  replaceSharedHoleMatchups,
+  sharedRoundBundleToRoundState,
+  updateSharedHole,
+} from '@/lib/realtime/shared-rounds';
 import type { HoleState, Player, RoundState } from '@/types/round';
 
 function formatAmount(value: number) {
@@ -66,12 +74,41 @@ function getPlayerGroupNumber(round: RoundState, playerId: string) {
   return assignment?.groupNumber ?? 1;
 }
 
+function getPlayerGroupIds(round: RoundState, groupNumber: number) {
+  const assigned = round.multiFoursome?.groupPlayers
+    .filter((item) => item.groupNumber === groupNumber)
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((item) => item.playerId);
+
+  if (assigned && assigned.length > 0) return assigned;
+
+  const groupSize = round.multiFoursome?.groupSize ?? 4;
+  return round.players.slice((groupNumber - 1) * groupSize, groupNumber * groupSize).map((player) => player.id);
+}
+
+function getGroupHoleForPlayer(round: RoundState, playerId: string, holeNumber: number) {
+  const groupNumber = getPlayerGroupNumber(round, playerId);
+  return round.holes.find((hole) => (hole.groupNumber ?? 1) === groupNumber && hole.holeNumber === holeNumber) ?? null;
+}
+
 function sumScores(scores: Array<number | null>) {
   const entered = scores.filter((score): score is number => score != null);
   return entered.length > 0 ? entered.reduce((sum, score) => sum + score, 0) : null;
 }
 
-function ScorecardTable({ round, players }: { round: RoundState; players: Player[] }) {
+function ScorecardTable({
+  round,
+  players,
+  editMode,
+  scoreDrafts,
+  onDraftChange,
+}: {
+  round: RoundState;
+  players: Player[];
+  editMode: boolean;
+  scoreDrafts: Record<string, string>;
+  onDraftChange: (playerId: string, holeNumber: number, value: string) => void;
+}) {
   const holes = getScorecardHoles(round);
   const frontHoles = holes.filter((hole) => hole.holeNumber <= 9);
   const backHoles = holes.filter((hole) => hole.holeNumber > 9);
@@ -134,30 +171,50 @@ function ScorecardTable({ round, players }: { round: RoundState; players: Player
                 </th>
                 {frontScores.map((score, index) => {
                   const holeNumber = frontHoles[index]?.holeNumber ?? index + 1;
+                  const draftKey = `${player.id}:${holeNumber}`;
                   return (
                     <td key={`${player.id}-front-${index}`} className="px-1 py-1 text-right tabular-nums">
-                      <Link
-                        className="inline-flex min-h-8 min-w-8 items-center justify-end rounded-lg px-2 font-semibold hover:bg-[#eaf3ff] hover:text-[#2f8df3]"
-                        href={`/r/${round.roundCode}/group/${getPlayerGroupNumber(round, player.id)}?hole=${holeNumber}`}
-                        title={`Edit ${player.name} hole ${holeNumber}`}
-                      >
-                        {score ?? '-'}
-                      </Link>
+                      {editMode ? (
+                        <input
+                          className="h-8 w-11 rounded-lg border border-slate-300 px-1 text-right font-semibold tabular-nums"
+                          inputMode="numeric"
+                          value={scoreDrafts[draftKey] ?? ''}
+                          onChange={(event) => onDraftChange(player.id, holeNumber, event.target.value)}
+                        />
+                      ) : (
+                        <Link
+                          className="inline-flex min-h-8 min-w-8 items-center justify-end rounded-lg px-2 font-semibold hover:bg-[#eaf3ff] hover:text-[#2f8df3]"
+                          href={`/r/${round.roundCode}/group/${getPlayerGroupNumber(round, player.id)}?hole=${holeNumber}`}
+                          title={`Edit ${player.name} hole ${holeNumber}`}
+                        >
+                          {score ?? '-'}
+                        </Link>
+                      )}
                     </td>
                   );
                 })}
                 <td className="px-2 py-2 text-right font-semibold tabular-nums">{outTotal ?? '-'}</td>
                 {backScores.map((score, index) => {
                   const holeNumber = backHoles[index]?.holeNumber ?? index + 10;
+                  const draftKey = `${player.id}:${holeNumber}`;
                   return (
                     <td key={`${player.id}-back-${index}`} className="px-1 py-1 text-right tabular-nums">
-                      <Link
-                        className="inline-flex min-h-8 min-w-8 items-center justify-end rounded-lg px-2 font-semibold hover:bg-[#eaf3ff] hover:text-[#2f8df3]"
-                        href={`/r/${round.roundCode}/group/${getPlayerGroupNumber(round, player.id)}?hole=${holeNumber}`}
-                        title={`Edit ${player.name} hole ${holeNumber}`}
-                      >
-                        {score ?? '-'}
-                      </Link>
+                      {editMode ? (
+                        <input
+                          className="h-8 w-11 rounded-lg border border-slate-300 px-1 text-right font-semibold tabular-nums"
+                          inputMode="numeric"
+                          value={scoreDrafts[draftKey] ?? ''}
+                          onChange={(event) => onDraftChange(player.id, holeNumber, event.target.value)}
+                        />
+                      ) : (
+                        <Link
+                          className="inline-flex min-h-8 min-w-8 items-center justify-end rounded-lg px-2 font-semibold hover:bg-[#eaf3ff] hover:text-[#2f8df3]"
+                          href={`/r/${round.roundCode}/group/${getPlayerGroupNumber(round, player.id)}?hole=${holeNumber}`}
+                          title={`Edit ${player.name} hole ${holeNumber}`}
+                        >
+                          {score ?? '-'}
+                        </Link>
+                      )}
                     </td>
                   );
                 })}
@@ -173,7 +230,11 @@ function ScorecardTable({ round, players }: { round: RoundState; players: Player
 }
 
 export default function HistoryPage() {
-  const { round, getHoleHistory, getGrossTotals, getSkinsSummary, getLowNetSummary, getCtpSummary } = useRoundStore();
+  const params = useParams<{ roundCode: string }>();
+  const { round, hydrateRound, getHoleHistory, getGrossTotals, getSkinsSummary, getLowNetSummary, getCtpSummary } = useRoundStore();
+  const [editScorecard, setEditScorecard] = useState(false);
+  const [scoreDrafts, setScoreDrafts] = useState<Record<string, string>>({});
+  const [saveStatus, setSaveStatus] = useState('');
   const history = getHoleHistory();
   const grossTotals = getGrossTotals().sort(
     (a, b) => a.grossTotal - b.grossTotal || b.holesCounted - a.holesCounted || a.playerName.localeCompare(b.playerName)
@@ -185,6 +246,93 @@ export default function HistoryPage() {
   const ctpGameEnabled = round.gameSettings?.ctpEnabled === true;
   const lowNetGameEnabled = round.gameSettings?.lowNetEnabled === true;
   const sideGameEnabled = skinsGameEnabled || ctpGameEnabled || lowNetGameEnabled;
+  const routeRoundCode = params.roundCode?.toUpperCase() || round.roundCode;
+
+  useEffect(() => {
+    const nextDrafts: Record<string, string> = {};
+    round.players.forEach((player) => {
+      for (let holeNumber = 1; holeNumber <= round.totalHoles; holeNumber += 1) {
+        const score = getPlayerHoleScore(round, player.id, holeNumber);
+        nextDrafts[`${player.id}:${holeNumber}`] = score == null ? '' : String(score);
+      }
+    });
+    setScoreDrafts(nextDrafts);
+  }, [round]);
+
+  function updateScoreDraft(playerId: string, holeNumber: number, value: string) {
+    const normalized = value.replace(/[^\d]/g, '').slice(0, 2);
+    setScoreDrafts((current) => ({ ...current, [`${playerId}:${holeNumber}`]: normalized }));
+  }
+
+  async function saveScorecardChanges() {
+    try {
+      setSaveStatus('Saving scorecard...');
+      const updates: Array<{ playerId: string; holeNumber: number; score: number | null }> = [];
+
+      round.players.forEach((player) => {
+        for (let holeNumber = 1; holeNumber <= round.totalHoles; holeNumber += 1) {
+          const draftValue = scoreDrafts[`${player.id}:${holeNumber}`] ?? '';
+          const draftScore = draftValue.trim() === '' ? null : Number(draftValue);
+          const currentScore = getPlayerHoleScore(round, player.id, holeNumber);
+          if (draftScore !== currentScore) {
+            updates.push({ playerId: player.id, holeNumber, score: Number.isFinite(draftScore) ? draftScore : null });
+          }
+        }
+      });
+
+      if (updates.length === 0) {
+        setSaveStatus('No scorecard changes to save.');
+        setEditScorecard(false);
+        return;
+      }
+
+      for (const update of updates) {
+        const targetHole = getGroupHoleForPlayer(round, update.playerId, update.holeNumber);
+        if (!targetHole || round.id.startsWith('round-')) continue;
+
+        const groupNumber = targetHole.groupNumber ?? getPlayerGroupNumber(round, update.playerId);
+        if (targetHole.bankerPlayerId === update.playerId) {
+          await updateSharedHole({
+            roundId: round.id,
+            groupNumber,
+            holeNumber: targetHole.holeNumber,
+            bankerGrossScore: update.score,
+            isSaved: targetHole.isSaved,
+          });
+        } else {
+          const groupPlayerIds = getPlayerGroupIds(round, groupNumber);
+          const nextMatchups = groupPlayerIds
+            .filter((playerId) => playerId !== targetHole.bankerPlayerId)
+            .map((playerId) => {
+              const existing = targetHole.matchups.find((matchup) => matchup.playerId === playerId);
+              const player = round.players.find((item) => item.id === playerId);
+              return {
+                playerId,
+                baseWager: existing?.baseWager ?? round.defaultBet,
+                pressed: existing?.pressed ?? false,
+                grossScore: playerId === update.playerId ? update.score : existing?.grossScore ?? null,
+                bankerParticipant: existing?.bankerParticipant ?? player?.bankerParticipant !== false,
+              };
+            });
+
+          await replaceSharedHoleMatchups({
+            roundId: round.id,
+            groupNumber,
+            holeNumber: targetHole.holeNumber,
+            matchups: nextMatchups,
+          });
+        }
+      }
+
+      const bundle = await loadSharedRoundByCode(routeRoundCode);
+      if (bundle) hydrateRound(sharedRoundBundleToRoundState(bundle));
+      setSaveStatus(`Saved ${updates.length} scorecard change${updates.length === 1 ? '' : 's'}.`);
+      setEditScorecard(false);
+    } catch (error) {
+      console.error('Unable to save scorecard changes.', error);
+      setSaveStatus(error instanceof Error ? error.message : 'Unable to save scorecard changes.');
+    }
+  }
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
@@ -199,8 +347,48 @@ export default function HistoryPage() {
       </div>
 
       <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
-        <h2 className="mb-3 text-lg font-bold">Scorecard</h2>
-        <ScorecardTable round={round} players={round.players} />
+        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-lg font-bold">Scorecard</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            {saveStatus ? <span className="text-sm text-slate-500">{saveStatus}</span> : null}
+            {editScorecard ? (
+              <>
+                <button
+                  type="button"
+                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold"
+                  onClick={() => setEditScorecard(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="rounded-xl bg-[#2f8df3] px-3 py-2 text-sm font-semibold text-white"
+                  onClick={() => void saveScorecardChanges()}
+                >
+                  Save Scorecard
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="rounded-xl border border-[#2f8df3] px-3 py-2 text-sm font-semibold text-[#2f8df3]"
+                onClick={() => {
+                  setSaveStatus('');
+                  setEditScorecard(true);
+                }}
+              >
+                Edit Scorecard
+              </button>
+            )}
+          </div>
+        </div>
+        <ScorecardTable
+          round={round}
+          players={round.players}
+          editMode={editScorecard}
+          scoreDrafts={scoreDrafts}
+          onDraftChange={updateScoreDraft}
+        />
       </section>
 
       <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
