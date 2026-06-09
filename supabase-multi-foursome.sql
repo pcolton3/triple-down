@@ -19,6 +19,23 @@ alter table public.round_players
 alter table public.round_matchups
   add column if not exists banker_participant boolean not null default true;
 
+alter table public.round_games
+  drop constraint if exists round_games_game_type_check;
+
+alter table public.round_games
+  add constraint round_games_game_type_check
+  check (game_type in (
+    'banker',
+    'skins',
+    'low_net',
+    'ctp',
+    'nassau',
+    'stableford',
+    'birdie_pot',
+    'eagle_pot',
+    'hole_in_one'
+  ));
+
 do $$
 begin
   if not exists (

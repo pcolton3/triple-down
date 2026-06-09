@@ -61,6 +61,11 @@ function getPlayerHoleScore(round: RoundState, playerId: string, holeNumber: num
   );
 }
 
+function getPlayerGroupNumber(round: RoundState, playerId: string) {
+  const assignment = round.multiFoursome?.groupPlayers.find((item) => item.playerId === playerId);
+  return assignment?.groupNumber ?? 1;
+}
+
 function sumScores(scores: Array<number | null>) {
   const entered = scores.filter((score): score is number => score != null);
   return entered.length > 0 ? entered.reduce((sum, score) => sum + score, 0) : null;
@@ -127,13 +132,35 @@ function ScorecardTable({ round, players }: { round: RoundState; players: Player
                 <th className="sticky left-0 z-10 max-w-44 bg-inherit px-3 py-2 text-left font-semibold">
                   <span className="block truncate">{player.name}</span>
                 </th>
-                {frontScores.map((score, index) => (
-                  <td key={`${player.id}-front-${index}`} className="px-2 py-2 text-right tabular-nums">{score ?? '-'}</td>
-                ))}
+                {frontScores.map((score, index) => {
+                  const holeNumber = frontHoles[index]?.holeNumber ?? index + 1;
+                  return (
+                    <td key={`${player.id}-front-${index}`} className="px-1 py-1 text-right tabular-nums">
+                      <Link
+                        className="inline-flex min-h-8 min-w-8 items-center justify-end rounded-lg px-2 font-semibold hover:bg-[#eaf3ff] hover:text-[#2f8df3]"
+                        href={`/r/${round.roundCode}/group/${getPlayerGroupNumber(round, player.id)}?hole=${holeNumber}`}
+                        title={`Edit ${player.name} hole ${holeNumber}`}
+                      >
+                        {score ?? '-'}
+                      </Link>
+                    </td>
+                  );
+                })}
                 <td className="px-2 py-2 text-right font-semibold tabular-nums">{outTotal ?? '-'}</td>
-                {backScores.map((score, index) => (
-                  <td key={`${player.id}-back-${index}`} className="px-2 py-2 text-right tabular-nums">{score ?? '-'}</td>
-                ))}
+                {backScores.map((score, index) => {
+                  const holeNumber = backHoles[index]?.holeNumber ?? index + 10;
+                  return (
+                    <td key={`${player.id}-back-${index}`} className="px-1 py-1 text-right tabular-nums">
+                      <Link
+                        className="inline-flex min-h-8 min-w-8 items-center justify-end rounded-lg px-2 font-semibold hover:bg-[#eaf3ff] hover:text-[#2f8df3]"
+                        href={`/r/${round.roundCode}/group/${getPlayerGroupNumber(round, player.id)}?hole=${holeNumber}`}
+                        title={`Edit ${player.name} hole ${holeNumber}`}
+                      >
+                        {score ?? '-'}
+                      </Link>
+                    </td>
+                  );
+                })}
                 <td className="px-2 py-2 text-right font-semibold tabular-nums">{inTotal ?? '-'}</td>
                 <td className="px-2 py-2 text-right font-bold tabular-nums">{total ?? '-'}</td>
               </tr>

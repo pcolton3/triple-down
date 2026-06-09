@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
 import { loadSharedRoundByCode, sharedRoundBundleToRoundState, updateSharedRoundSetup } from '@/lib/realtime/shared-rounds';
@@ -75,8 +75,31 @@ export default function EditRoundSetupPage() {
   const [slopeRating, setSlopeRating] = useState(round.gameSettings.slopeRating == null ? '' : String(round.gameSettings.slopeRating));
   const [pcc, setPcc] = useState(String(round.gameSettings.pcc ?? 0));
   const [playerDrafts, setPlayerDrafts] = useState<PlayerDraft[]>(buildPlayerDrafts(round.players));
+  const [gamesOpen, setGamesOpen] = useState(false);
 
   const groupCount = useMemo(() => round.multiFoursome?.groups.length ?? 1, [round.multiFoursome?.groups.length]);
+  const selectedGameLabels = [
+    bankerEnabled ? 'Banker' : null,
+    skinsEnabled ? 'Skins' : null,
+    ctpEnabled ? 'CTP' : null,
+    lowNetEnabled ? 'Low Net' : null,
+    nassauEnabled ? 'Nassau' : null,
+    stablefordEnabled ? 'Stableford' : null,
+    birdiePotEnabled ? 'Birdie Pot' : null,
+    eaglePotEnabled ? 'Eagle Pot' : null,
+    holeInOneEnabled ? 'Hole-in-One' : null,
+  ].filter(Boolean);
+  const gameOptions: Array<{ label: string; checked: boolean; setChecked: Dispatch<SetStateAction<boolean>> }> = [
+    { label: 'Banker', checked: bankerEnabled, setChecked: setBankerEnabled },
+    { label: 'Skins', checked: skinsEnabled, setChecked: setSkinsEnabled },
+    { label: 'CTP', checked: ctpEnabled, setChecked: setCtpEnabled },
+    { label: 'Low Net', checked: lowNetEnabled, setChecked: setLowNetEnabled },
+    { label: 'Nassau', checked: nassauEnabled, setChecked: setNassauEnabled },
+    { label: 'Stableford', checked: stablefordEnabled, setChecked: setStablefordEnabled },
+    { label: 'Birdie Pot', checked: birdiePotEnabled, setChecked: setBirdiePotEnabled },
+    { label: 'Eagle Pot', checked: eaglePotEnabled, setChecked: setEaglePotEnabled },
+    { label: 'Hole-in-One', checked: holeInOneEnabled, setChecked: setHoleInOneEnabled },
+  ];
 
   useEffect(() => {
     let cancelled = false;
@@ -234,43 +257,37 @@ export default function EditRoundSetupPage() {
 
       <Card className="space-y-4">
         <h2 className="text-xl font-bold">Games, Pots, and Handicap Posting</h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
-            <input type="checkbox" className="mr-2 h-4 w-4" checked={bankerEnabled} onChange={() => setBankerEnabled((value) => !value)} />
-            Banker
-          </label>
-          <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
-            <input type="checkbox" className="mr-2 h-4 w-4" checked={skinsEnabled} onChange={() => setSkinsEnabled((value) => !value)} />
-            Skins
-          </label>
-          <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
-            <input type="checkbox" className="mr-2 h-4 w-4" checked={ctpEnabled} onChange={() => setCtpEnabled((value) => !value)} />
-            CTP
-          </label>
-          <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
-            <input type="checkbox" className="mr-2 h-4 w-4" checked={lowNetEnabled} onChange={() => setLowNetEnabled((value) => !value)} />
-            Low Net
-          </label>
-          <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
-            <input type="checkbox" className="mr-2 h-4 w-4" checked={nassauEnabled} onChange={() => setNassauEnabled((value) => !value)} />
-            Nassau
-          </label>
-          <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
-            <input type="checkbox" className="mr-2 h-4 w-4" checked={stablefordEnabled} onChange={() => setStablefordEnabled((value) => !value)} />
-            Stableford
-          </label>
-          <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
-            <input type="checkbox" className="mr-2 h-4 w-4" checked={birdiePotEnabled} onChange={() => setBirdiePotEnabled((value) => !value)} />
-            Birdie Pot
-          </label>
-          <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
-            <input type="checkbox" className="mr-2 h-4 w-4" checked={eaglePotEnabled} onChange={() => setEaglePotEnabled((value) => !value)} />
-            Eagle Pot
-          </label>
-          <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
-            <input type="checkbox" className="mr-2 h-4 w-4" checked={holeInOneEnabled} onChange={() => setHoleInOneEnabled((value) => !value)} />
-            Hole-in-One
-          </label>
+        <div className="relative">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between rounded-xl border border-slate-300 bg-white px-3 py-3 text-left font-semibold"
+            onClick={() => setGamesOpen((value) => !value)}
+          >
+            <span>{selectedGameLabels.length > 0 ? selectedGameLabels.join(', ') : 'Select games'}</span>
+            <span className="text-slate-500">{gamesOpen ? 'Close' : 'Open'}</span>
+          </button>
+          {gamesOpen ? (
+            <div className="absolute left-0 right-0 z-20 mt-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-lg">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {gameOptions.map((option) => (
+                  <label key={option.label} className="flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold">
+                    <input
+                      type="checkbox"
+                      className="mr-2 h-4 w-4"
+                      checked={option.checked}
+                      onChange={() => option.setChecked((value) => !value)}
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+              <div className="mt-3 flex justify-end">
+                <Button type="button" onClick={() => setGamesOpen(false)}>
+                  Submit
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
           {skinsEnabled ? (
