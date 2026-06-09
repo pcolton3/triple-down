@@ -72,7 +72,7 @@ type RoundMatchupRow = {
 type RoundGameRow = {
   id: string;
   round_id: string;
-  game_type: 'banker' | 'skins' | 'low_net' | 'ctp';
+  game_type: 'banker' | 'skins' | 'low_net' | 'ctp' | 'nassau' | 'stableford';
   pot_amount: number;
   enabled: boolean;
   settings: Record<string, unknown>;
@@ -168,6 +168,8 @@ export type SettlementSnapshot = {
   skins: Array<{ playerId: string; playerName: string; amount: number; skins: number; holes: number[] }>;
   ctp: Array<{ playerId: string; playerName: string; amount: number; wins: number; holes: number[] }>;
   lowNet: Array<{ playerId: string; playerName: string; amount: number; placement: string }>;
+  nassau?: Array<{ playerId: string; playerName: string; amount: number; wins: string[] }>;
+  stableford?: Array<{ playerId: string; playerName: string; amount: number; points: number }>;
   bankerPositions: Array<{ playerId: string; name: string; amount: number }>;
   bankerSettlements: Array<{
     groupNumber: number;
@@ -356,6 +358,20 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
           enabled: round.gameSettings.ctpEnabled === true,
           settings: {},
         },
+        {
+          round_id: roundId,
+          game_type: 'nassau',
+          pot_amount: round.gameSettings.nassauPot ?? 0,
+          enabled: round.gameSettings.nassauEnabled === true,
+          settings: {},
+        },
+        {
+          round_id: roundId,
+          game_type: 'stableford',
+          pot_amount: round.gameSettings.stablefordPot ?? 0,
+          enabled: round.gameSettings.stablefordEnabled === true,
+          settings: {},
+        },
       ],
       { onConflict: 'round_id,game_type' }
     );
@@ -463,6 +479,20 @@ export async function updateSharedRoundSetup(round: RoundState) {
           game_type: 'ctp',
           pot_amount: round.gameSettings.ctpPot,
           enabled: round.gameSettings.ctpEnabled === true,
+          settings: {},
+        },
+        {
+          round_id: round.id,
+          game_type: 'nassau',
+          pot_amount: round.gameSettings.nassauPot ?? 0,
+          enabled: round.gameSettings.nassauEnabled === true,
+          settings: {},
+        },
+        {
+          round_id: round.id,
+          game_type: 'stableford',
+          pot_amount: round.gameSettings.stablefordPot ?? 0,
+          enabled: round.gameSettings.stablefordEnabled === true,
           settings: {},
         },
       ],
@@ -671,9 +701,13 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
       skinsEnabled: games.get('skins')?.enabled ?? false,
       lowNetEnabled: games.get('low_net')?.enabled ?? false,
       ctpEnabled: games.get('ctp')?.enabled ?? false,
+      nassauEnabled: games.get('nassau')?.enabled ?? false,
+      stablefordEnabled: games.get('stableford')?.enabled ?? false,
       skinsPot: games.get('skins')?.pot_amount ?? 0,
       lowNetPot: games.get('low_net')?.pot_amount ?? 0,
       ctpPot: games.get('ctp')?.pot_amount ?? 0,
+      nassauPot: games.get('nassau')?.pot_amount ?? 0,
+      stablefordPot: games.get('stableford')?.pot_amount ?? 0,
       courseRating: typeof handicapSettings.courseRating === 'number' ? handicapSettings.courseRating : null,
       slopeRating: typeof handicapSettings.slopeRating === 'number' ? handicapSettings.slopeRating : null,
       pcc: typeof handicapSettings.pcc === 'number' ? handicapSettings.pcc : 0,

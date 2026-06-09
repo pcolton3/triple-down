@@ -59,6 +59,8 @@ export default function SettlePage() {
     getSkinsSummary,
     getLowNetSummary,
     getCtpSummary,
+    getNassauSummary,
+    getStablefordSummary,
     getGrossTotals,
   } = useRoundStore();
   const totals = getRunningTotals().sort((a, b) => b.amount - a.amount);
@@ -66,11 +68,15 @@ export default function SettlePage() {
   const skinsSummary = getSkinsSummary();
   const lowNetSummary = getLowNetSummary();
   const ctpSummary = getCtpSummary();
+  const nassauSummary = getNassauSummary();
+  const stablefordSummary = getStablefordSummary();
   const bankerGameEnabled = round.gameSettings?.bankerEnabled !== false;
   const skinsGameEnabled = round.gameSettings?.skinsEnabled === true;
   const ctpGameEnabled = round.gameSettings?.ctpEnabled === true;
   const lowNetGameEnabled = round.gameSettings?.lowNetEnabled === true;
-  const payoutGameEnabled = skinsGameEnabled || ctpGameEnabled || lowNetGameEnabled;
+  const nassauGameEnabled = round.gameSettings?.nassauEnabled === true;
+  const stablefordGameEnabled = round.gameSettings?.stablefordEnabled === true;
+  const payoutGameEnabled = skinsGameEnabled || ctpGameEnabled || lowNetGameEnabled || nassauGameEnabled || stablefordGameEnabled;
   const grossScores = getGrossTotals().sort(
     (a, b) => a.grossTotal - b.grossTotal || b.holesCounted - a.holesCounted || a.playerName.localeCompare(b.playerName)
   );
@@ -179,6 +185,8 @@ export default function SettlePage() {
     }));
 
   const lowNetWinnerRows = lowNetSummary.payouts.filter((item) => item.amount > 0);
+  const nassauWinnerRows = nassauSummary.payouts.filter((item) => item.amount > 0);
+  const stablefordWinnerRows = stablefordSummary.payouts.filter((item) => item.amount > 0);
 
   function buildSnapshot(): SettlementSnapshot {
     return {
@@ -211,6 +219,18 @@ export default function SettlePage() {
         playerName: item.playerName,
         amount: item.amount,
         placement: item.placement,
+      })),
+      nassau: nassauWinnerRows.map((item) => ({
+        playerId: item.playerId,
+        playerName: item.playerName,
+        amount: item.amount,
+        wins: item.wins,
+      })),
+      stableford: stablefordWinnerRows.map((item) => ({
+        playerId: item.playerId,
+        playerName: item.playerName,
+        amount: item.amount,
+        points: item.points,
       })),
       bankerPositions: bankerGameEnabled ? totals.map((total) => ({
         playerId: total.playerId,
@@ -353,6 +373,37 @@ export default function SettlePage() {
                 )}
               </div>
             </div>
+
+            {(settlementSnapshot.nassau?.length ?? 0) > 0 ? (
+            <div className="mt-4">
+              <h3 className="mb-2 font-semibold">Nassau</h3>
+              <div className="space-y-2">
+                {settlementSnapshot.nassau?.map((item) => (
+                  <div key={item.playerId} className="rounded-xl bg-slate-50 px-3 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-medium">{item.playerName} wins {formatCurrency(item.amount)} Nassau</span>
+                      <span className="font-bold">{formatCurrency(item.amount)}</span>
+                    </div>
+                    <p className="mt-1 text-sm text-slate-500">Won: {item.wins.join(', ')}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            ) : null}
+
+            {(settlementSnapshot.stableford?.length ?? 0) > 0 ? (
+            <div className="mt-4">
+              <h3 className="mb-2 font-semibold">Stableford</h3>
+              <div className="space-y-2">
+                {settlementSnapshot.stableford?.map((item) => (
+                  <div key={item.playerId} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
+                    <span>{item.playerName} wins {formatCurrency(item.amount)} Stableford</span>
+                    <span className="font-bold">{item.points} pts</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            ) : null}
           </section>
 
           <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
@@ -530,6 +581,45 @@ export default function SettlePage() {
                 <div key={item.playerId} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
                   <span>{item.playerName} wins {formatCurrency(item.amount)} low net ({item.placement})</span>
                   <span className="font-bold">{formatCurrency(item.amount)}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+        ) : null}
+
+        {nassauGameEnabled ? (
+        <div className="mt-4">
+          <h3 className="mb-2 font-semibold">Nassau</h3>
+          <div className="space-y-2">
+            {nassauWinnerRows.length === 0 ? (
+              <div className="rounded-xl bg-slate-50 px-3 py-3 text-slate-500">No Nassau payouts yet.</div>
+            ) : (
+              nassauWinnerRows.map((item) => (
+                <div key={item.playerId} className="rounded-xl bg-slate-50 px-3 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium">{item.playerName} wins {formatCurrency(item.amount)} Nassau</span>
+                    <span className="font-bold">{formatCurrency(item.amount)}</span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-500">Won: {item.wins.join(', ')}</p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+        ) : null}
+
+        {stablefordGameEnabled ? (
+        <div className="mt-4">
+          <h3 className="mb-2 font-semibold">Stableford</h3>
+          <div className="space-y-2">
+            {stablefordWinnerRows.length === 0 ? (
+              <div className="rounded-xl bg-slate-50 px-3 py-3 text-slate-500">No Stableford payouts yet.</div>
+            ) : (
+              stablefordWinnerRows.map((item) => (
+                <div key={item.playerId} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
+                  <span>{item.playerName} wins {formatCurrency(item.amount)} Stableford</span>
+                  <span className="font-bold">{item.points} pts</span>
                 </div>
               ))
             )}

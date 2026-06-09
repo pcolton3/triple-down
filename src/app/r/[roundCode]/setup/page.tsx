@@ -59,9 +59,13 @@ export default function EditRoundSetupPage() {
   const [skinsEnabled, setSkinsEnabled] = useState(round.gameSettings.skinsEnabled === true);
   const [lowNetEnabled, setLowNetEnabled] = useState(round.gameSettings.lowNetEnabled === true);
   const [ctpEnabled, setCtpEnabled] = useState(round.gameSettings.ctpEnabled === true);
+  const [nassauEnabled, setNassauEnabled] = useState(round.gameSettings.nassauEnabled === true);
+  const [stablefordEnabled, setStablefordEnabled] = useState(round.gameSettings.stablefordEnabled === true);
   const [skinsPot, setSkinsPot] = useState(String(round.gameSettings.skinsPot ?? 0));
   const [lowNetPot, setLowNetPot] = useState(String(round.gameSettings.lowNetPot ?? 0));
   const [ctpPot, setCtpPot] = useState(String(round.gameSettings.ctpPot ?? 0));
+  const [nassauPot, setNassauPot] = useState(String(round.gameSettings.nassauPot ?? 0));
+  const [stablefordPot, setStablefordPot] = useState(String(round.gameSettings.stablefordPot ?? 0));
   const [courseRating, setCourseRating] = useState(round.gameSettings.courseRating == null ? '' : String(round.gameSettings.courseRating));
   const [slopeRating, setSlopeRating] = useState(round.gameSettings.slopeRating == null ? '' : String(round.gameSettings.slopeRating));
   const [pcc, setPcc] = useState(String(round.gameSettings.pcc ?? 0));
@@ -98,9 +102,13 @@ export default function EditRoundSetupPage() {
     setSkinsEnabled(round.gameSettings.skinsEnabled === true);
     setLowNetEnabled(round.gameSettings.lowNetEnabled === true);
     setCtpEnabled(round.gameSettings.ctpEnabled === true);
+    setNassauEnabled(round.gameSettings.nassauEnabled === true);
+    setStablefordEnabled(round.gameSettings.stablefordEnabled === true);
     setSkinsPot(String(round.gameSettings.skinsPot ?? 0));
     setLowNetPot(String(round.gameSettings.lowNetPot ?? 0));
     setCtpPot(String(round.gameSettings.ctpPot ?? 0));
+    setNassauPot(String(round.gameSettings.nassauPot ?? 0));
+    setStablefordPot(String(round.gameSettings.stablefordPot ?? 0));
     setCourseRating(round.gameSettings.courseRating == null ? '' : String(round.gameSettings.courseRating));
     setSlopeRating(round.gameSettings.slopeRating == null ? '' : String(round.gameSettings.slopeRating));
     setPcc(String(round.gameSettings.pcc ?? 0));
@@ -142,9 +150,13 @@ export default function EditRoundSetupPage() {
           skinsEnabled,
           lowNetEnabled,
           ctpEnabled,
+          nassauEnabled,
+          stablefordEnabled,
           skinsPot: Math.max(0, numberOrZero(skinsPot)),
           lowNetPot: Math.max(0, numberOrZero(lowNetPot)),
           ctpPot: Math.max(0, numberOrZero(ctpPot)),
+          nassauPot: Math.max(0, numberOrZero(nassauPot)),
+          stablefordPot: Math.max(0, numberOrZero(stablefordPot)),
           courseRating: numberOrNull(courseRating),
           slopeRating: numberOrNull(slopeRating),
           pcc: numberOrZero(pcc),
@@ -224,6 +236,14 @@ export default function EditRoundSetupPage() {
             <input type="checkbox" className="mr-2 h-4 w-4" checked={lowNetEnabled} onChange={() => setLowNetEnabled((value) => !value)} />
             Low Net
           </label>
+          <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+            <input type="checkbox" className="mr-2 h-4 w-4" checked={nassauEnabled} onChange={() => setNassauEnabled((value) => !value)} />
+            Nassau
+          </label>
+          <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+            <input type="checkbox" className="mr-2 h-4 w-4" checked={stablefordEnabled} onChange={() => setStablefordEnabled((value) => !value)} />
+            Stableford
+          </label>
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
           {skinsEnabled ? (
@@ -242,6 +262,18 @@ export default function EditRoundSetupPage() {
           <label className="block">
             <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">CTP Pot</span>
             <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={ctpPot} onChange={(event) => setCtpPot(event.target.value)} />
+          </label>
+          ) : null}
+          {nassauEnabled ? (
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Nassau Pot</span>
+            <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={nassauPot} onChange={(event) => setNassauPot(event.target.value)} />
+          </label>
+          ) : null}
+          {stablefordEnabled ? (
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Stableford Pot</span>
+            <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={stablefordPot} onChange={(event) => setStablefordPot(event.target.value)} />
           </label>
           ) : null}
           <label className="block">

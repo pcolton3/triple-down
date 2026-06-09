@@ -105,6 +105,24 @@ type CtpSummary = {
   payouts: Array<{ playerId: string; playerName: string; wins: number; amount: number }>;
 };
 
+type NassauSegment = {
+  label: string;
+  holes: number[];
+  winners: Array<{ playerId: string; playerName: string; netTotal: number; amount: number }>;
+};
+
+type NassauSummary = {
+  pot: number;
+  segments: NassauSegment[];
+  payouts: Array<{ playerId: string; playerName: string; amount: number; wins: string[] }>;
+};
+
+type StablefordSummary = {
+  pot: number;
+  standings: Array<{ playerId: string; playerName: string; points: number; amount: number }>;
+  payouts: Array<{ playerId: string; playerName: string; points: number; amount: number }>;
+};
+
 type RoundStore = {
   round: RoundState;
   ledger: LedgerEntry[];
@@ -134,6 +152,8 @@ type RoundStore = {
   getSkinsSummary: () => SkinsSummary;
   getLowNetSummary: () => LowNetSummary;
   getCtpSummary: () => CtpSummary;
+  getNassauSummary: () => NassauSummary;
+  getStablefordSummary: () => StablefordSummary;
 };
 
 const defaultPlayers = [
@@ -217,9 +237,13 @@ function createDefaultRound(): RoundState {
       skinsEnabled: false,
       lowNetEnabled: false,
       ctpEnabled: false,
+      nassauEnabled: false,
+      stablefordEnabled: false,
       skinsPot: 0,
       lowNetPot: 0,
       ctpPot: 0,
+      nassauPot: 0,
+      stablefordPot: 0,
       courseRating: null,
       slopeRating: null,
       pcc: 0,
@@ -287,6 +311,14 @@ function lowNetEnabled(round: RoundState) {
 
 function ctpEnabled(round: RoundState) {
   return round.gameSettings?.ctpEnabled === true;
+}
+
+function nassauEnabled(round: RoundState) {
+  return round.gameSettings?.nassauEnabled === true;
+}
+
+function stablefordEnabled(round: RoundState) {
+  return round.gameSettings?.stablefordEnabled === true;
 }
 
 function ensureMultiFoursomeRound(round: RoundState): RoundState {
@@ -847,6 +879,101 @@ function buildCtpSummary(round: RoundState): CtpSummary {
   return { pot, par3Holes, payouts };
 }
 
+function buildNassauSummary(round: RoundState): NassauSummary {
+  const pot = round.gameSettings?.nassauPot ?? 0;
+  if (!nassauEnabled(round)) return { pot, segments: [], payouts: [] };
+
+  const segmentConfigs = [
+    { label: 'Front 9', holes: Array.from({ length: 9 }, (_, index) => index + 1) },
+    { label: 'Back 9', holes: Array.from({ length: 9 }, (_, index) => index + 10) },
+    { label: 'Total', holes: Array.from({ length: round.totalHoles }, (_, index) => index + 1) },
+  ];
+  const segmentPot = pot / segmentConfigs.length;
+  const payouts = new Map(round.players.map((player) => [
+    player.id,
+    { playerId: player.id, playerName: player.name, amount: 0, wins: [] as string[] },
+  ]));
+
+  const segments = segmentConfigs.map((segment) => {
+    const totals = round.players
+      .map((player) => {
+        let netTotal = 0;
+        let holesCounted = 0;
+        round.holes.forEach((hole) => {
+          if (!hole.isSaved || !segment.holes.includes(hole.holeNumber)) return;
+          const net = getPlayerNetForHole(round, hole, player.id);
+          if (net == null) return;
+          netTotal += net;
+          holesCounted += 1;
+        });
+        return { player, netTotal, holesCounted };
+      })
+      .filter((item) => item.holesCounted === segment.holes.length);
+
+    if (totals.length === 0) return { label: segment.label, holes: segment.holes, winners: [] };
+
+    const lowNet = Math.min(...totals.map((item) => item.netTotal));
+    const winners = totals
+      .filter((item) => item.netTotal === lowNet)
+      .map((item) => {
+        const amount = segmentPot / totals.filter((total) => total.netTotal === lowNet).length;
+        const payout = payouts.get(item.player.id);
+        if (payout) {
+          payout.amount += amount;
+          payout.wins.push(segment.label);
+        }
+        return { playerId: item.player.id, playerName: item.player.name, netTotal: item.netTotal, amount };
+      });
+
+    return { label: segment.label, holes: segment.holes, winners };
+  });
+
+  return {
+    pot,
+    segments,
+    payouts: Array.from(payouts.values()).filter((item) => item.amount > 0),
+  };
+}
+
+function stablefordPoints(netScore: number, par: number) {
+  const relativeToPar = netScore - par;
+  if (relativeToPar <= -3) return 5;
+  if (relativeToPar === -2) return 4;
+  if (relativeToPar === -1) return 3;
+  if (relativeToPar === 0) return 2;
+  if (relativeToPar === 1) return 1;
+  return 0;
+}
+
+function buildStablefordSummary(round: RoundState): StablefordSummary {
+  const pot = round.gameSettings?.stablefordPot ?? 0;
+  if (!stablefordEnabled(round)) return { pot, standings: [], payouts: [] };
+
+  const standings = round.players
+    .map((player) => {
+      const points = round.holes.reduce((sum, hole) => {
+        if (!hole.isSaved) return sum;
+        const net = getPlayerNetForHole(round, hole, player.id);
+        return net == null ? sum : sum + stablefordPoints(net, hole.par);
+      }, 0);
+      return { playerId: player.id, playerName: player.name, points, amount: 0 };
+    })
+    .sort((a, b) => b.points - a.points || a.playerName.localeCompare(b.playerName));
+
+  if (pot <= 0 || standings.length === 0) return { pot, standings, payouts: [] };
+
+  const topScore = standings[0]?.points ?? 0;
+  const winners = standings.filter((item) => item.points === topScore && topScore > 0);
+  const payouts = winners.map((item) => ({ ...item, amount: pot / winners.length }));
+  const payoutByPlayer = new Map(payouts.map((item) => [item.playerId, item.amount]));
+
+  return {
+    pot,
+    standings: standings.map((item) => ({ ...item, amount: payoutByPlayer.get(item.playerId) ?? 0 })),
+    payouts,
+  };
+}
+
 function simulationTargetScore(coursePar: number, handicap: number, playerIndex: number, groupNumber: number) {
   const dayVariance = ((playerIndex * 2 + groupNumber) % 5) - 1;
   return Math.max(coursePar - 4, Math.round(coursePar + Math.max(0, handicap) + dayVariance + 2));
@@ -1045,9 +1172,13 @@ export const useRoundStore = create<RoundStore>()(
                 skinsEnabled: input.gameSettings?.skinsEnabled ?? false,
                 lowNetEnabled: input.gameSettings?.lowNetEnabled ?? false,
                 ctpEnabled: input.gameSettings?.ctpEnabled ?? false,
+                nassauEnabled: input.gameSettings?.nassauEnabled ?? false,
+                stablefordEnabled: input.gameSettings?.stablefordEnabled ?? false,
                 skinsPot: input.gameSettings?.skinsPot ?? 0,
                 lowNetPot: input.gameSettings?.lowNetPot ?? 0,
                 ctpPot: input.gameSettings?.ctpPot ?? 0,
+                nassauPot: input.gameSettings?.nassauPot ?? 0,
+                stablefordPot: input.gameSettings?.stablefordPot ?? 0,
                 courseRating: input.gameSettings?.courseRating ?? null,
                 slopeRating: input.gameSettings?.slopeRating ?? null,
                 pcc: input.gameSettings?.pcc ?? 0,
@@ -1221,6 +1352,10 @@ export const useRoundStore = create<RoundStore>()(
       getLowNetSummary: () => buildLowNetSummary(get().round),
 
       getCtpSummary: () => buildCtpSummary(get().round),
+
+      getNassauSummary: () => buildNassauSummary(get().round),
+
+      getStablefordSummary: () => buildStablefordSummary(get().round),
 
       getRunningTotals: () => {
         const { round } = get();

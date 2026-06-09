@@ -62,10 +62,14 @@ export default function NewRoundPage() {
   const [skinsEnabled, setSkinsEnabled] = useState(false);
   const [lowNetEnabled, setLowNetEnabled] = useState(false);
   const [ctpEnabled, setCtpEnabled] = useState(false);
+  const [nassauEnabled, setNassauEnabled] = useState(false);
+  const [stablefordEnabled, setStablefordEnabled] = useState(false);
   const [defaultBet, setDefaultBet] = useState(5);
   const [skinsPot, setSkinsPot] = useState(0);
   const [lowNetPot, setLowNetPot] = useState(0);
   const [ctpPot, setCtpPot] = useState(0);
+  const [nassauPot, setNassauPot] = useState(0);
+  const [stablefordPot, setStablefordPot] = useState(0);
   const [courseRating, setCourseRating] = useState('');
   const [slopeRating, setSlopeRating] = useState('');
   const [pcc, setPcc] = useState('0');
@@ -372,9 +376,13 @@ export default function NewRoundPage() {
         skinsEnabled,
         lowNetEnabled,
         ctpEnabled,
+        nassauEnabled,
+        stablefordEnabled,
         skinsPot: Number.isFinite(skinsPot) ? Math.max(0, skinsPot) : 0,
         lowNetPot: Number.isFinite(lowNetPot) ? Math.max(0, lowNetPot) : 0,
         ctpPot: Number.isFinite(ctpPot) ? Math.max(0, ctpPot) : 0,
+        nassauPot: Number.isFinite(nassauPot) ? Math.max(0, nassauPot) : 0,
+        stablefordPot: Number.isFinite(stablefordPot) ? Math.max(0, stablefordPot) : 0,
         courseRating: courseRating.trim() ? Number(courseRating) || null : null,
         slopeRating: slopeRating.trim() ? Number(slopeRating) || null : null,
         pcc: pcc.trim() ? Number(pcc) || 0 : 0,
@@ -551,7 +559,7 @@ export default function NewRoundPage() {
           <div>
             <h2 className="text-xl font-bold">Games</h2>
             <p className="text-sm text-slate-500">
-              Choose which games are active for this round. Skins and CTP are separate games.
+              Choose which games are active for this round.
             </p>
           </div>
 
@@ -592,6 +600,24 @@ export default function NewRoundPage() {
               />
               Low Net
             </label>
+            <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+              <input
+                type="checkbox"
+                className="mr-2 h-4 w-4"
+                checked={nassauEnabled}
+                onChange={() => setNassauEnabled((value) => !value)}
+              />
+              Nassau
+            </label>
+            <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+              <input
+                type="checkbox"
+                className="mr-2 h-4 w-4"
+                checked={stablefordEnabled}
+                onChange={() => setStablefordEnabled((value) => !value)}
+              />
+              Stableford
+            </label>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -611,6 +637,18 @@ export default function NewRoundPage() {
             <div>
               <label className="mb-1 block text-sm font-medium">CTP Pot</label>
               <NumberField value={ctpPot} onChange={setCtpPot} placeholder="0" />
+            </div>
+            ) : null}
+            {nassauEnabled ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Nassau Pot</label>
+              <NumberField value={nassauPot} onChange={setNassauPot} placeholder="0" />
+            </div>
+            ) : null}
+            {stablefordEnabled ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Stableford Pot</label>
+              <NumberField value={stablefordPot} onChange={setStablefordPot} placeholder="0" />
             </div>
             ) : null}
           </div>

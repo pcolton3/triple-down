@@ -40,9 +40,13 @@ export type RoundGameSettings = {
   skinsEnabled?: boolean;
   lowNetEnabled?: boolean;
   ctpEnabled?: boolean;
+  nassauEnabled?: boolean;
+  stablefordEnabled?: boolean;
   skinsPot: number;
   lowNetPot: number;
   ctpPot: number;
+  nassauPot?: number;
+  stablefordPot?: number;
   courseRating?: number | null;
   slopeRating?: number | null;
   pcc?: number | null;
