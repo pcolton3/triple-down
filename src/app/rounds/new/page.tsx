@@ -68,6 +68,10 @@ export default function NewRoundPage() {
   const [birdiePotEnabled, setBirdiePotEnabled] = useState(false);
   const [eaglePotEnabled, setEaglePotEnabled] = useState(false);
   const [holeInOneEnabled, setHoleInOneEnabled] = useState(false);
+  const [wolfEnabled, setWolfEnabled] = useState(false);
+  const [bingoBangoBongoEnabled, setBingoBangoBongoEnabled] = useState(false);
+  const [vegasEnabled, setVegasEnabled] = useState(false);
+  const [teamMatchPlayEnabled, setTeamMatchPlayEnabled] = useState(false);
   const [defaultBet, setDefaultBet] = useState(5);
   const [skinsPot, setSkinsPot] = useState(0);
   const [lowNetPot, setLowNetPot] = useState(0);
@@ -76,6 +80,13 @@ export default function NewRoundPage() {
   const [stablefordPot, setStablefordPot] = useState(0);
   const [birdiePot, setBirdiePot] = useState(0);
   const [eaglePot, setEaglePot] = useState(0);
+  const [wolfUnit, setWolfUnit] = useState(0);
+  const [bingoBangoBongoUnit, setBingoBangoBongoUnit] = useState(0);
+  const [vegasUnit, setVegasUnit] = useState(0);
+  const [teamMatchPlayUnit, setTeamMatchPlayUnit] = useState(0);
+  const [teamOneName, setTeamOneName] = useState('Team 1');
+  const [teamTwoName, setTeamTwoName] = useState('Team 2');
+  const [teamAssignments, setTeamAssignments] = useState<Record<string, 'team_one' | 'team_two'>>({});
   const [courseRating, setCourseRating] = useState('');
   const [slopeRating, setSlopeRating] = useState('');
   const [teeColor, setTeeColor] = useState('');
@@ -121,6 +132,10 @@ export default function NewRoundPage() {
     birdiePotEnabled ? 'Birdie Pot' : null,
     eaglePotEnabled ? 'Eagle Pot' : null,
     holeInOneEnabled ? 'Hole-in-One' : null,
+    wolfEnabled ? 'Wolf' : null,
+    bingoBangoBongoEnabled ? 'Bingo Bango Bongo' : null,
+    vegasEnabled ? 'Vegas' : null,
+    teamMatchPlayEnabled ? 'Team Match Play' : null,
   ].filter(Boolean);
   const gameOptions: Array<{ label: string; checked: boolean; setChecked: Dispatch<SetStateAction<boolean>> }> = [
     { label: 'Banker', checked: bankerEnabled, setChecked: setBankerEnabled },
@@ -132,6 +147,10 @@ export default function NewRoundPage() {
     { label: 'Birdie Pot', checked: birdiePotEnabled, setChecked: setBirdiePotEnabled },
     { label: 'Eagle Pot', checked: eaglePotEnabled, setChecked: setEaglePotEnabled },
     { label: 'Hole-in-One', checked: holeInOneEnabled, setChecked: setHoleInOneEnabled },
+    { label: 'Wolf', checked: wolfEnabled, setChecked: setWolfEnabled },
+    { label: 'Bingo Bango Bongo', checked: bingoBangoBongoEnabled, setChecked: setBingoBangoBongoEnabled },
+    { label: 'Vegas', checked: vegasEnabled, setChecked: setVegasEnabled },
+    { label: 'Team Match Play / Ryder Cup', checked: teamMatchPlayEnabled, setChecked: setTeamMatchPlayEnabled },
   ];
 
   useEffect(() => {
@@ -274,6 +293,10 @@ export default function NewRoundPage() {
         player.id === playerId ? { ...player, [field]: player[field] === false } : player
       )
     );
+  }
+
+  function setPlayerTeam(playerId: string, team: 'team_one' | 'team_two') {
+    setTeamAssignments((current) => ({ ...current, [playerId]: team }));
   }
 
   function selectSavedGolfer(playerId: string, savedGolferId: string) {
@@ -447,6 +470,10 @@ export default function NewRoundPage() {
         birdiePotEnabled,
         eaglePotEnabled,
         holeInOneEnabled,
+        wolfEnabled,
+        bingoBangoBongoEnabled,
+        vegasEnabled,
+        teamMatchPlayEnabled,
         skinsPot: Number.isFinite(skinsPot) ? Math.max(0, skinsPot) : 0,
         lowNetPot: Number.isFinite(lowNetPot) ? Math.max(0, lowNetPot) : 0,
         ctpPot: Number.isFinite(ctpPot) ? Math.max(0, ctpPot) : 0,
@@ -454,6 +481,16 @@ export default function NewRoundPage() {
         stablefordPot: Number.isFinite(stablefordPot) ? Math.max(0, stablefordPot) : 0,
         birdiePot: Number.isFinite(birdiePot) ? Math.max(0, birdiePot) : 0,
         eaglePot: Number.isFinite(eaglePot) ? Math.max(0, eaglePot) : 0,
+        wolfUnit: Number.isFinite(wolfUnit) ? Math.max(0, wolfUnit) : 0,
+        bingoBangoBongoUnit: Number.isFinite(bingoBangoBongoUnit) ? Math.max(0, bingoBangoBongoUnit) : 0,
+        vegasUnit: Number.isFinite(vegasUnit) ? Math.max(0, vegasUnit) : 0,
+        teamMatchPlayUnit: Number.isFinite(teamMatchPlayUnit) ? Math.max(0, teamMatchPlayUnit) : 0,
+        teamOneName: teamOneName.trim() || 'Team 1',
+        teamTwoName: teamTwoName.trim() || 'Team 2',
+        teamAssignments: sanitizedPlayers.reduce<Record<string, 'team_one' | 'team_two'>>((assignments, player, index) => {
+          assignments[player.id] = teamAssignments[player.id] ?? (index % 2 === 0 ? 'team_one' : 'team_two');
+          return assignments;
+        }, {}),
         courseRating: courseRating.trim() ? Number(courseRating) || null : null,
         slopeRating: slopeRating.trim() ? Number(slopeRating) || null : null,
         teeColor: teeColor.trim() || null,
@@ -746,9 +783,45 @@ export default function NewRoundPage() {
               <NumberField value={eaglePot} onChange={setEaglePot} placeholder="0" />
             </div>
             ) : null}
+            {wolfEnabled ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Wolf Unit</label>
+              <NumberField value={wolfUnit} onChange={setWolfUnit} placeholder="0" />
+            </div>
+            ) : null}
+            {bingoBangoBongoEnabled ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Bingo Bango Bongo Unit</label>
+              <NumberField value={bingoBangoBongoUnit} onChange={setBingoBangoBongoUnit} placeholder="0" />
+            </div>
+            ) : null}
+            {vegasEnabled ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Vegas Unit</label>
+              <NumberField value={vegasUnit} onChange={setVegasUnit} placeholder="0" />
+            </div>
+            ) : null}
+            {teamMatchPlayEnabled ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Team Match Unit</label>
+              <NumberField value={teamMatchPlayUnit} onChange={setTeamMatchPlayUnit} placeholder="0" />
+            </div>
+            ) : null}
           </div>
           {holeInOneEnabled ? (
             <p className="text-sm text-slate-500">Hole-in-One pays $100 from every other golfer to the player who made it.</p>
+          ) : null}
+          {teamMatchPlayEnabled ? (
+            <div className="grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Team 1 Name</label>
+                <input className="w-full rounded-xl border border-slate-300 px-3 py-3" value={teamOneName} onChange={(event) => setTeamOneName(event.target.value)} />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Team 2 Name</label>
+                <input className="w-full rounded-xl border border-slate-300 px-3 py-3" value={teamTwoName} onChange={(event) => setTeamTwoName(event.target.value)} />
+              </div>
+            </div>
           ) : null}
         </Card>
 
@@ -894,6 +967,33 @@ export default function NewRoundPage() {
                             ) : null}
                           </div>
                         </div>
+                        {teamMatchPlayEnabled ? (
+                          <div className="sm:col-span-3">
+                            <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                              Ryder Cup Team
+                            </span>
+                            <div className="grid grid-cols-2 gap-2">
+                              <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+                                <input
+                                  type="radio"
+                                  className="mr-2 h-4 w-4"
+                                  checked={(teamAssignments[player.id] ?? (absoluteIndex % 2 === 0 ? 'team_one' : 'team_two')) === 'team_one'}
+                                  onChange={() => setPlayerTeam(player.id, 'team_one')}
+                                />
+                                {teamOneName || 'Team 1'}
+                              </label>
+                              <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+                                <input
+                                  type="radio"
+                                  className="mr-2 h-4 w-4"
+                                  checked={(teamAssignments[player.id] ?? (absoluteIndex % 2 === 0 ? 'team_one' : 'team_two')) === 'team_two'}
+                                  onChange={() => setPlayerTeam(player.id, 'team_two')}
+                                />
+                                {teamTwoName || 'Team 2'}
+                              </label>
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
                     );
                   })}

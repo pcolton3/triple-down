@@ -72,7 +72,20 @@ type RoundMatchupRow = {
 type RoundGameRow = {
   id: string;
   round_id: string;
-  game_type: 'banker' | 'skins' | 'low_net' | 'ctp' | 'nassau' | 'stableford' | 'birdie_pot' | 'eagle_pot' | 'hole_in_one';
+  game_type:
+    | 'banker'
+    | 'skins'
+    | 'low_net'
+    | 'ctp'
+    | 'nassau'
+    | 'stableford'
+    | 'birdie_pot'
+    | 'eagle_pot'
+    | 'hole_in_one'
+    | 'wolf'
+    | 'bingo_bango_bongo'
+    | 'vegas'
+    | 'team_match_play';
   pot_amount: number;
   enabled: boolean;
   settings: Record<string, unknown>;
@@ -214,6 +227,106 @@ function isMissingSchemaError(error: unknown) {
   );
 }
 
+function buildRoundGameRows(roundId: string, round: RoundState) {
+  return [
+    { round_id: roundId, game_type: 'banker', pot_amount: 0, enabled: round.gameSettings.bankerEnabled !== false, settings: {} },
+    {
+      round_id: roundId,
+      game_type: 'skins',
+      pot_amount: round.gameSettings.skinsPot,
+      enabled: round.gameSettings.skinsEnabled === true,
+      settings: {},
+    },
+    {
+      round_id: roundId,
+      game_type: 'low_net',
+      pot_amount: round.gameSettings.lowNetPot,
+      enabled: round.gameSettings.lowNetEnabled === true,
+      settings: {
+        courseRating: round.gameSettings.courseRating ?? null,
+        slopeRating: round.gameSettings.slopeRating ?? null,
+        teeColor: round.gameSettings.teeColor ?? null,
+        pcc: round.gameSettings.pcc ?? 0,
+      },
+    },
+    {
+      round_id: roundId,
+      game_type: 'ctp',
+      pot_amount: round.gameSettings.ctpPot,
+      enabled: round.gameSettings.ctpEnabled === true,
+      settings: {},
+    },
+    {
+      round_id: roundId,
+      game_type: 'nassau',
+      pot_amount: round.gameSettings.nassauPot ?? 0,
+      enabled: round.gameSettings.nassauEnabled === true,
+      settings: {},
+    },
+    {
+      round_id: roundId,
+      game_type: 'stableford',
+      pot_amount: round.gameSettings.stablefordPot ?? 0,
+      enabled: round.gameSettings.stablefordEnabled === true,
+      settings: {},
+    },
+    {
+      round_id: roundId,
+      game_type: 'birdie_pot',
+      pot_amount: round.gameSettings.birdiePot ?? 0,
+      enabled: round.gameSettings.birdiePotEnabled === true,
+      settings: {},
+    },
+    {
+      round_id: roundId,
+      game_type: 'eagle_pot',
+      pot_amount: round.gameSettings.eaglePot ?? 0,
+      enabled: round.gameSettings.eaglePotEnabled === true,
+      settings: {},
+    },
+    {
+      round_id: roundId,
+      game_type: 'hole_in_one',
+      pot_amount: 0,
+      enabled: round.gameSettings.holeInOneEnabled === true,
+      settings: { aceValue: 100 },
+    },
+    {
+      round_id: roundId,
+      game_type: 'wolf',
+      pot_amount: round.gameSettings.wolfUnit ?? 0,
+      enabled: round.gameSettings.wolfEnabled === true,
+      settings: { unit: round.gameSettings.wolfUnit ?? 0 },
+    },
+    {
+      round_id: roundId,
+      game_type: 'bingo_bango_bongo',
+      pot_amount: round.gameSettings.bingoBangoBongoUnit ?? 0,
+      enabled: round.gameSettings.bingoBangoBongoEnabled === true,
+      settings: { unit: round.gameSettings.bingoBangoBongoUnit ?? 0 },
+    },
+    {
+      round_id: roundId,
+      game_type: 'vegas',
+      pot_amount: round.gameSettings.vegasUnit ?? 0,
+      enabled: round.gameSettings.vegasEnabled === true,
+      settings: { unit: round.gameSettings.vegasUnit ?? 0 },
+    },
+    {
+      round_id: roundId,
+      game_type: 'team_match_play',
+      pot_amount: round.gameSettings.teamMatchPlayUnit ?? 0,
+      enabled: round.gameSettings.teamMatchPlayEnabled === true,
+      settings: {
+        unit: round.gameSettings.teamMatchPlayUnit ?? 0,
+        teamOneName: round.gameSettings.teamOneName ?? 'Team 1',
+        teamTwoName: round.gameSettings.teamTwoName ?? 'Team 2',
+        teamAssignments: round.gameSettings.teamAssignments ?? {},
+      },
+    },
+  ];
+}
+
 export async function createSharedRoundFromLocalRound(round: RoundState) {
   const { data: roundRow, error: roundError } = await supabase
     .from('rounds')
@@ -333,73 +446,7 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
 
   const { error: gamesError } = await supabase
     .from('round_games')
-    .upsert(
-      [
-        { round_id: roundId, game_type: 'banker', pot_amount: 0, enabled: round.gameSettings.bankerEnabled !== false, settings: {} },
-        {
-          round_id: roundId,
-          game_type: 'skins',
-          pot_amount: round.gameSettings.skinsPot,
-          enabled: round.gameSettings.skinsEnabled === true,
-          settings: {},
-        },
-        {
-          round_id: roundId,
-          game_type: 'low_net',
-          pot_amount: round.gameSettings.lowNetPot,
-          enabled: round.gameSettings.lowNetEnabled === true,
-          settings: {
-            courseRating: round.gameSettings.courseRating ?? null,
-            slopeRating: round.gameSettings.slopeRating ?? null,
-            teeColor: round.gameSettings.teeColor ?? null,
-            pcc: round.gameSettings.pcc ?? 0,
-          },
-        },
-        {
-          round_id: roundId,
-          game_type: 'ctp',
-          pot_amount: round.gameSettings.ctpPot,
-          enabled: round.gameSettings.ctpEnabled === true,
-          settings: {},
-        },
-        {
-          round_id: roundId,
-          game_type: 'nassau',
-          pot_amount: round.gameSettings.nassauPot ?? 0,
-          enabled: round.gameSettings.nassauEnabled === true,
-          settings: {},
-        },
-        {
-          round_id: roundId,
-          game_type: 'stableford',
-          pot_amount: round.gameSettings.stablefordPot ?? 0,
-          enabled: round.gameSettings.stablefordEnabled === true,
-          settings: {},
-        },
-        {
-          round_id: roundId,
-          game_type: 'birdie_pot',
-          pot_amount: round.gameSettings.birdiePot ?? 0,
-          enabled: round.gameSettings.birdiePotEnabled === true,
-          settings: {},
-        },
-        {
-          round_id: roundId,
-          game_type: 'eagle_pot',
-          pot_amount: round.gameSettings.eaglePot ?? 0,
-          enabled: round.gameSettings.eaglePotEnabled === true,
-          settings: {},
-        },
-        {
-          round_id: roundId,
-          game_type: 'hole_in_one',
-          pot_amount: 0,
-          enabled: round.gameSettings.holeInOneEnabled === true,
-          settings: { aceValue: 100 },
-        },
-      ],
-      { onConflict: 'round_id,game_type' }
-    );
+    .upsert(buildRoundGameRows(roundId, round), { onConflict: 'round_id,game_type' });
 
   if (gamesError) throw new Error(formatSupabaseError(gamesError, 'Unable to save games.'));
 
@@ -478,73 +525,7 @@ export async function updateSharedRoundSetup(round: RoundState) {
 
   const { error: gamesError } = await supabase
     .from('round_games')
-    .upsert(
-      [
-        { round_id: round.id, game_type: 'banker', pot_amount: 0, enabled: round.gameSettings.bankerEnabled !== false, settings: {} },
-        {
-          round_id: round.id,
-          game_type: 'skins',
-          pot_amount: round.gameSettings.skinsPot,
-          enabled: round.gameSettings.skinsEnabled === true,
-          settings: {},
-        },
-        {
-          round_id: round.id,
-          game_type: 'low_net',
-          pot_amount: round.gameSettings.lowNetPot,
-          enabled: round.gameSettings.lowNetEnabled === true,
-          settings: {
-            courseRating: round.gameSettings.courseRating ?? null,
-            slopeRating: round.gameSettings.slopeRating ?? null,
-            teeColor: round.gameSettings.teeColor ?? null,
-            pcc: round.gameSettings.pcc ?? 0,
-          },
-        },
-        {
-          round_id: round.id,
-          game_type: 'ctp',
-          pot_amount: round.gameSettings.ctpPot,
-          enabled: round.gameSettings.ctpEnabled === true,
-          settings: {},
-        },
-        {
-          round_id: round.id,
-          game_type: 'nassau',
-          pot_amount: round.gameSettings.nassauPot ?? 0,
-          enabled: round.gameSettings.nassauEnabled === true,
-          settings: {},
-        },
-        {
-          round_id: round.id,
-          game_type: 'stableford',
-          pot_amount: round.gameSettings.stablefordPot ?? 0,
-          enabled: round.gameSettings.stablefordEnabled === true,
-          settings: {},
-        },
-        {
-          round_id: round.id,
-          game_type: 'birdie_pot',
-          pot_amount: round.gameSettings.birdiePot ?? 0,
-          enabled: round.gameSettings.birdiePotEnabled === true,
-          settings: {},
-        },
-        {
-          round_id: round.id,
-          game_type: 'eagle_pot',
-          pot_amount: round.gameSettings.eaglePot ?? 0,
-          enabled: round.gameSettings.eaglePotEnabled === true,
-          settings: {},
-        },
-        {
-          round_id: round.id,
-          game_type: 'hole_in_one',
-          pot_amount: 0,
-          enabled: round.gameSettings.holeInOneEnabled === true,
-          settings: { aceValue: 100 },
-        },
-      ],
-      { onConflict: 'round_id,game_type' }
-    );
+    .upsert(buildRoundGameRows(round.id, round), { onConflict: 'round_id,game_type' });
 
   if (gamesError) throw new Error(formatSupabaseError(gamesError, 'Unable to save game setup.'));
 }
@@ -673,6 +654,14 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
   }));
   const games = new Map(bundle.games.map((game) => [game.game_type, game]));
   const handicapSettings = games.get('low_net')?.settings ?? {};
+  const wolfSettings = games.get('wolf')?.settings ?? {};
+  const bingoBangoBongoSettings = games.get('bingo_bango_bongo')?.settings ?? {};
+  const vegasSettings = games.get('vegas')?.settings ?? {};
+  const teamMatchPlaySettings = games.get('team_match_play')?.settings ?? {};
+  const teamAssignments =
+    teamMatchPlaySettings.teamAssignments && typeof teamMatchPlaySettings.teamAssignments === 'object'
+      ? (teamMatchPlaySettings.teamAssignments as Record<string, 'team_one' | 'team_two'>)
+      : {};
   const ctpByGroupHole = new Map(
     bundle.ctpResults.map((ctp) => [`${ctp.group_number ?? 1}:${ctp.hole_number}`, ctp.winner_player_key])
   );
@@ -753,6 +742,10 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
       birdiePotEnabled: games.get('birdie_pot')?.enabled ?? false,
       eaglePotEnabled: games.get('eagle_pot')?.enabled ?? false,
       holeInOneEnabled: games.get('hole_in_one')?.enabled ?? false,
+      wolfEnabled: games.get('wolf')?.enabled ?? false,
+      bingoBangoBongoEnabled: games.get('bingo_bango_bongo')?.enabled ?? false,
+      vegasEnabled: games.get('vegas')?.enabled ?? false,
+      teamMatchPlayEnabled: games.get('team_match_play')?.enabled ?? false,
       skinsPot: games.get('skins')?.pot_amount ?? 0,
       lowNetPot: games.get('low_net')?.pot_amount ?? 0,
       ctpPot: games.get('ctp')?.pot_amount ?? 0,
@@ -760,6 +753,17 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
       stablefordPot: games.get('stableford')?.pot_amount ?? 0,
       birdiePot: games.get('birdie_pot')?.pot_amount ?? 0,
       eaglePot: games.get('eagle_pot')?.pot_amount ?? 0,
+      wolfUnit: games.get('wolf')?.pot_amount ?? (typeof wolfSettings.unit === 'number' ? wolfSettings.unit : 0),
+      bingoBangoBongoUnit:
+        games.get('bingo_bango_bongo')?.pot_amount ??
+        (typeof bingoBangoBongoSettings.unit === 'number' ? bingoBangoBongoSettings.unit : 0),
+      vegasUnit: games.get('vegas')?.pot_amount ?? (typeof vegasSettings.unit === 'number' ? vegasSettings.unit : 0),
+      teamMatchPlayUnit:
+        games.get('team_match_play')?.pot_amount ??
+        (typeof teamMatchPlaySettings.unit === 'number' ? teamMatchPlaySettings.unit : 0),
+      teamOneName: typeof teamMatchPlaySettings.teamOneName === 'string' ? teamMatchPlaySettings.teamOneName : 'Team 1',
+      teamTwoName: typeof teamMatchPlaySettings.teamTwoName === 'string' ? teamMatchPlaySettings.teamTwoName : 'Team 2',
+      teamAssignments,
       courseRating: typeof handicapSettings.courseRating === 'number' ? handicapSettings.courseRating : null,
       slopeRating: typeof handicapSettings.slopeRating === 'number' ? handicapSettings.slopeRating : null,
       teeColor: typeof handicapSettings.teeColor === 'string' ? handicapSettings.teeColor : null,

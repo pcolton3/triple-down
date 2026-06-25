@@ -172,6 +172,38 @@ function ScorecardTable({ round, players }: { round: RoundState; players: Player
   );
 }
 
+function TeamMatchPlayCard({ round, players }: { round: RoundState; players: Player[] }) {
+  const teamOneName = round.gameSettings.teamOneName || 'Team 1';
+  const teamTwoName = round.gameSettings.teamTwoName || 'Team 2';
+  const assignments = round.gameSettings.teamAssignments ?? {};
+  const teamOnePlayers = players.filter((player, index) => (assignments[player.id] ?? (index % 2 === 0 ? 'team_one' : 'team_two')) === 'team_one');
+  const teamTwoPlayers = players.filter((player, index) => (assignments[player.id] ?? (index % 2 === 0 ? 'team_one' : 'team_two')) === 'team_two');
+
+  return (
+    <Card>
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold">Team Match Play</h2>
+          <p className="text-sm text-slate-500">Ryder Cup teams for this event.</p>
+        </div>
+        {round.gameSettings.teamMatchPlayUnit ? (
+          <span className="rounded-xl bg-slate-100 px-3 py-2 text-sm font-semibold">${round.gameSettings.teamMatchPlayUnit} unit</span>
+        ) : null}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <h3 className="font-bold">{teamOneName}</h3>
+          <p className="mt-2 text-sm text-slate-600">{teamOnePlayers.map((player) => player.name).join(', ') || 'No players assigned'}</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <h3 className="font-bold">{teamTwoName}</h3>
+          <p className="mt-2 text-sm text-slate-600">{teamTwoPlayers.map((player) => player.name).join(', ') || 'No players assigned'}</p>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 export default function EventLeaderboardPage() {
   const params = useParams<{ roundCode: string }>();
   const { round, hydrateRound, getGrossTotals, getSkinsSummary, getCtpSummary } = useRoundStore();
@@ -341,6 +373,8 @@ export default function EventLeaderboardPage() {
         <h2 className="mb-3 text-xl font-bold">Leaderboard</h2>
         <ScoreTable rows={eventLeaderboard} showSkins={skinsGameEnabled} showCtp={ctpGameEnabled} />
       </Card>
+
+      {round.gameSettings.teamMatchPlayEnabled ? <TeamMatchPlayCard round={round} players={roundPlayers} /> : null}
 
       <Card>
         <h2 className="mb-3 text-xl font-bold">Scorecard</h2>

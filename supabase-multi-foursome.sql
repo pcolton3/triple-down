@@ -33,7 +33,11 @@ alter table public.round_games
     'stableford',
     'birdie_pot',
     'eagle_pot',
-    'hole_in_one'
+    'hole_in_one',
+    'wolf',
+    'bingo_bango_bongo',
+    'vegas',
+    'team_match_play'
   ));
 
 do $$

@@ -65,6 +65,10 @@ export default function EditRoundSetupPage() {
   const [birdiePotEnabled, setBirdiePotEnabled] = useState(round.gameSettings.birdiePotEnabled === true);
   const [eaglePotEnabled, setEaglePotEnabled] = useState(round.gameSettings.eaglePotEnabled === true);
   const [holeInOneEnabled, setHoleInOneEnabled] = useState(round.gameSettings.holeInOneEnabled === true);
+  const [wolfEnabled, setWolfEnabled] = useState(round.gameSettings.wolfEnabled === true);
+  const [bingoBangoBongoEnabled, setBingoBangoBongoEnabled] = useState(round.gameSettings.bingoBangoBongoEnabled === true);
+  const [vegasEnabled, setVegasEnabled] = useState(round.gameSettings.vegasEnabled === true);
+  const [teamMatchPlayEnabled, setTeamMatchPlayEnabled] = useState(round.gameSettings.teamMatchPlayEnabled === true);
   const [skinsPot, setSkinsPot] = useState(String(round.gameSettings.skinsPot ?? 0));
   const [lowNetPot, setLowNetPot] = useState(String(round.gameSettings.lowNetPot ?? 0));
   const [ctpPot, setCtpPot] = useState(String(round.gameSettings.ctpPot ?? 0));
@@ -72,6 +76,13 @@ export default function EditRoundSetupPage() {
   const [stablefordPot, setStablefordPot] = useState(String(round.gameSettings.stablefordPot ?? 0));
   const [birdiePot, setBirdiePot] = useState(String(round.gameSettings.birdiePot ?? 0));
   const [eaglePot, setEaglePot] = useState(String(round.gameSettings.eaglePot ?? 0));
+  const [wolfUnit, setWolfUnit] = useState(String(round.gameSettings.wolfUnit ?? 0));
+  const [bingoBangoBongoUnit, setBingoBangoBongoUnit] = useState(String(round.gameSettings.bingoBangoBongoUnit ?? 0));
+  const [vegasUnit, setVegasUnit] = useState(String(round.gameSettings.vegasUnit ?? 0));
+  const [teamMatchPlayUnit, setTeamMatchPlayUnit] = useState(String(round.gameSettings.teamMatchPlayUnit ?? 0));
+  const [teamOneName, setTeamOneName] = useState(round.gameSettings.teamOneName ?? 'Team 1');
+  const [teamTwoName, setTeamTwoName] = useState(round.gameSettings.teamTwoName ?? 'Team 2');
+  const [teamAssignments, setTeamAssignments] = useState<Record<string, 'team_one' | 'team_two'>>(round.gameSettings.teamAssignments ?? {});
   const [courseRating, setCourseRating] = useState(round.gameSettings.courseRating == null ? '' : String(round.gameSettings.courseRating));
   const [slopeRating, setSlopeRating] = useState(round.gameSettings.slopeRating == null ? '' : String(round.gameSettings.slopeRating));
   const [teeColor, setTeeColor] = useState(round.gameSettings.teeColor ?? '');
@@ -90,6 +101,10 @@ export default function EditRoundSetupPage() {
     birdiePotEnabled ? 'Birdie Pot' : null,
     eaglePotEnabled ? 'Eagle Pot' : null,
     holeInOneEnabled ? 'Hole-in-One' : null,
+    wolfEnabled ? 'Wolf' : null,
+    bingoBangoBongoEnabled ? 'Bingo Bango Bongo' : null,
+    vegasEnabled ? 'Vegas' : null,
+    teamMatchPlayEnabled ? 'Team Match Play' : null,
   ].filter(Boolean);
   const gameOptions: Array<{ label: string; checked: boolean; setChecked: Dispatch<SetStateAction<boolean>> }> = [
     { label: 'Banker', checked: bankerEnabled, setChecked: setBankerEnabled },
@@ -101,6 +116,10 @@ export default function EditRoundSetupPage() {
     { label: 'Birdie Pot', checked: birdiePotEnabled, setChecked: setBirdiePotEnabled },
     { label: 'Eagle Pot', checked: eaglePotEnabled, setChecked: setEaglePotEnabled },
     { label: 'Hole-in-One', checked: holeInOneEnabled, setChecked: setHoleInOneEnabled },
+    { label: 'Wolf', checked: wolfEnabled, setChecked: setWolfEnabled },
+    { label: 'Bingo Bango Bongo', checked: bingoBangoBongoEnabled, setChecked: setBingoBangoBongoEnabled },
+    { label: 'Vegas', checked: vegasEnabled, setChecked: setVegasEnabled },
+    { label: 'Team Match Play / Ryder Cup', checked: teamMatchPlayEnabled, setChecked: setTeamMatchPlayEnabled },
   ];
 
   useEffect(() => {
@@ -137,6 +156,10 @@ export default function EditRoundSetupPage() {
     setBirdiePotEnabled(round.gameSettings.birdiePotEnabled === true);
     setEaglePotEnabled(round.gameSettings.eaglePotEnabled === true);
     setHoleInOneEnabled(round.gameSettings.holeInOneEnabled === true);
+    setWolfEnabled(round.gameSettings.wolfEnabled === true);
+    setBingoBangoBongoEnabled(round.gameSettings.bingoBangoBongoEnabled === true);
+    setVegasEnabled(round.gameSettings.vegasEnabled === true);
+    setTeamMatchPlayEnabled(round.gameSettings.teamMatchPlayEnabled === true);
     setSkinsPot(String(round.gameSettings.skinsPot ?? 0));
     setLowNetPot(String(round.gameSettings.lowNetPot ?? 0));
     setCtpPot(String(round.gameSettings.ctpPot ?? 0));
@@ -144,6 +167,13 @@ export default function EditRoundSetupPage() {
     setStablefordPot(String(round.gameSettings.stablefordPot ?? 0));
     setBirdiePot(String(round.gameSettings.birdiePot ?? 0));
     setEaglePot(String(round.gameSettings.eaglePot ?? 0));
+    setWolfUnit(String(round.gameSettings.wolfUnit ?? 0));
+    setBingoBangoBongoUnit(String(round.gameSettings.bingoBangoBongoUnit ?? 0));
+    setVegasUnit(String(round.gameSettings.vegasUnit ?? 0));
+    setTeamMatchPlayUnit(String(round.gameSettings.teamMatchPlayUnit ?? 0));
+    setTeamOneName(round.gameSettings.teamOneName ?? 'Team 1');
+    setTeamTwoName(round.gameSettings.teamTwoName ?? 'Team 2');
+    setTeamAssignments(round.gameSettings.teamAssignments ?? {});
     setCourseRating(round.gameSettings.courseRating == null ? '' : String(round.gameSettings.courseRating));
     setSlopeRating(round.gameSettings.slopeRating == null ? '' : String(round.gameSettings.slopeRating));
     setTeeColor(round.gameSettings.teeColor ?? '');
@@ -155,6 +185,10 @@ export default function EditRoundSetupPage() {
     setPlayerDrafts((current) =>
       current.map((player) => (player.id === playerId ? { ...player, [field]: value } : player))
     );
+  }
+
+  function setPlayerTeam(playerId: string, team: 'team_one' | 'team_two') {
+    setTeamAssignments((current) => ({ ...current, [playerId]: team }));
   }
 
   async function handleSaveSetup() {
@@ -191,6 +225,10 @@ export default function EditRoundSetupPage() {
           birdiePotEnabled,
           eaglePotEnabled,
           holeInOneEnabled,
+          wolfEnabled,
+          bingoBangoBongoEnabled,
+          vegasEnabled,
+          teamMatchPlayEnabled,
           skinsPot: Math.max(0, numberOrZero(skinsPot)),
           lowNetPot: Math.max(0, numberOrZero(lowNetPot)),
           ctpPot: Math.max(0, numberOrZero(ctpPot)),
@@ -198,6 +236,16 @@ export default function EditRoundSetupPage() {
           stablefordPot: Math.max(0, numberOrZero(stablefordPot)),
           birdiePot: Math.max(0, numberOrZero(birdiePot)),
           eaglePot: Math.max(0, numberOrZero(eaglePot)),
+          wolfUnit: Math.max(0, numberOrZero(wolfUnit)),
+          bingoBangoBongoUnit: Math.max(0, numberOrZero(bingoBangoBongoUnit)),
+          vegasUnit: Math.max(0, numberOrZero(vegasUnit)),
+          teamMatchPlayUnit: Math.max(0, numberOrZero(teamMatchPlayUnit)),
+          teamOneName: teamOneName.trim() || 'Team 1',
+          teamTwoName: teamTwoName.trim() || 'Team 2',
+          teamAssignments: nextPlayers.reduce<Record<string, 'team_one' | 'team_two'>>((assignments, player, index) => {
+            assignments[player.id] = teamAssignments[player.id] ?? (index % 2 === 0 ? 'team_one' : 'team_two');
+            return assignments;
+          }, {}),
           courseRating: numberOrNull(courseRating),
           slopeRating: numberOrNull(slopeRating),
           teeColor: teeColor.trim() || null,
@@ -343,6 +391,40 @@ export default function EditRoundSetupPage() {
             <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={eaglePot} onChange={(event) => setEaglePot(event.target.value)} />
           </label>
           ) : null}
+          {wolfEnabled ? (
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Wolf Unit</span>
+            <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={wolfUnit} onChange={(event) => setWolfUnit(event.target.value)} />
+          </label>
+          ) : null}
+          {bingoBangoBongoEnabled ? (
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Bingo Bango Bongo Unit</span>
+            <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={bingoBangoBongoUnit} onChange={(event) => setBingoBangoBongoUnit(event.target.value)} />
+          </label>
+          ) : null}
+          {vegasEnabled ? (
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Vegas Unit</span>
+            <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={vegasUnit} onChange={(event) => setVegasUnit(event.target.value)} />
+          </label>
+          ) : null}
+          {teamMatchPlayEnabled ? (
+          <>
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Team Match Unit</span>
+              <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={teamMatchPlayUnit} onChange={(event) => setTeamMatchPlayUnit(event.target.value)} />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Team 1 Name</span>
+              <input className="w-full rounded-xl border border-slate-300 px-3 py-3" value={teamOneName} onChange={(event) => setTeamOneName(event.target.value)} />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Team 2 Name</span>
+              <input className="w-full rounded-xl border border-slate-300 px-3 py-3" value={teamTwoName} onChange={(event) => setTeamTwoName(event.target.value)} />
+            </label>
+          </>
+          ) : null}
           <label className="block">
             <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Tee Color</span>
             <input className="w-full rounded-xl border border-slate-300 px-3 py-3" value={teeColor} onChange={(event) => setTeeColor(event.target.value)} />
@@ -411,6 +493,31 @@ export default function EditRoundSetupPage() {
                   ) : null}
                 </div>
               </div>
+              {teamMatchPlayEnabled ? (
+                <div className="sm:col-span-3">
+                  <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">Ryder Cup Team</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+                      <input
+                        type="radio"
+                        className="mr-2 h-4 w-4"
+                        checked={(teamAssignments[player.id] ?? 'team_one') === 'team_one'}
+                        onChange={() => setPlayerTeam(player.id, 'team_one')}
+                      />
+                      {teamOneName || 'Team 1'}
+                    </label>
+                    <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
+                      <input
+                        type="radio"
+                        className="mr-2 h-4 w-4"
+                        checked={(teamAssignments[player.id] ?? 'team_one') === 'team_two'}
+                        onChange={() => setPlayerTeam(player.id, 'team_two')}
+                      />
+                      {teamTwoName || 'Team 2'}
+                    </label>
+                  </div>
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

@@ -45,6 +45,10 @@ export type RoundGameSettings = {
   birdiePotEnabled?: boolean;
   eaglePotEnabled?: boolean;
   holeInOneEnabled?: boolean;
+  wolfEnabled?: boolean;
+  bingoBangoBongoEnabled?: boolean;
+  vegasEnabled?: boolean;
+  teamMatchPlayEnabled?: boolean;
   skinsPot: number;
   lowNetPot: number;
   ctpPot: number;
@@ -52,6 +56,13 @@ export type RoundGameSettings = {
   stablefordPot?: number;
   birdiePot?: number;
   eaglePot?: number;
+  wolfUnit?: number;
+  bingoBangoBongoUnit?: number;
+  vegasUnit?: number;
+  teamMatchPlayUnit?: number;
+  teamOneName?: string;
+  teamTwoName?: string;
+  teamAssignments?: Record<string, 'team_one' | 'team_two'>;
   courseRating?: number | null;
   slopeRating?: number | null;
   teeColor?: string | null;
