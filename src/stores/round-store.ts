@@ -246,6 +246,8 @@ function createDefaultRound(): RoundState {
   return {
     id: 'demo-round',
     roundCode,
+    ryderEventCode: null,
+    ryderEventDay: null,
     title: 'Saturday Group',
     courseName: 'Papago Golf Club',
     selectedCourseId: 'papago-golf-club',
@@ -1300,6 +1302,8 @@ export const useRoundStore = create<RoundStore>()(
             round: {
               id: `round-${input.roundCode}`,
               roundCode: input.roundCode,
+              ryderEventCode: input.ryderEventCode ?? null,
+              ryderEventDay: input.ryderEventDay ?? null,
               title: input.title,
               courseName: input.courseName,
               selectedCourseId: input.selectedCourseId ?? null,

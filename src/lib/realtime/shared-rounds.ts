@@ -5,6 +5,8 @@ import { createRoundGroups } from '@/lib/realtime/group-rounds';
 type RoundRow = {
   id: string;
   round_code: string;
+  ryder_event_code: string | null;
+  ryder_event_day: number | null;
   title: string;
   course_name: string;
   selected_course_id: string | null;
@@ -335,6 +337,8 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
     .upsert(
       {
         round_code: round.roundCode,
+        ryder_event_code: round.ryderEventCode ?? null,
+        ryder_event_day: round.ryderEventDay ?? null,
         title: round.title,
         course_name: round.courseName,
         selected_course_id: round.selectedCourseId,
@@ -476,6 +480,8 @@ export async function updateSharedRoundSetup(round: RoundState) {
     .from('rounds')
     .update({
       title: round.title,
+      ryder_event_code: round.ryderEventCode ?? null,
+      ryder_event_day: round.ryderEventDay ?? null,
       course_name: round.courseName,
       selected_course_id: round.selectedCourseId,
       default_bet: round.defaultBet,
@@ -543,6 +549,18 @@ export async function loadSharedRoundByCode(roundCode: string): Promise<SharedRo
   if (!round) return null;
 
   return loadSharedRoundById((round as RoundRow).id);
+}
+
+export async function loadSharedRoundsByRyderEventCode(eventCode: string): Promise<SharedRoundBundle[]> {
+  const { data, error } = await supabase
+    .from('rounds')
+    .select('id')
+    .eq('ryder_event_code', eventCode.toUpperCase())
+    .order('ryder_event_day', { ascending: true });
+
+  if (error) throw new Error(formatSupabaseError(error, 'Unable to load Ryder Cup rounds.'));
+
+  return Promise.all(((data ?? []) as Array<{ id: string }>).map((round) => loadSharedRoundById(round.id)));
 }
 
 export async function loadSettlementSnapshot(roundCode: string): Promise<SettlementSnapshot | null> {
@@ -730,6 +748,8 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
   return {
     id: bundle.round.id,
     roundCode: bundle.round.round_code,
+    ryderEventCode: bundle.round.ryder_event_code,
+    ryderEventDay: bundle.round.ryder_event_day,
     title: bundle.round.title,
     courseName: bundle.round.course_name,
     selectedCourseId: bundle.round.selected_course_id,

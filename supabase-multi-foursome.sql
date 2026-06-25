@@ -19,6 +19,15 @@ alter table public.round_players
 alter table public.round_matchups
   add column if not exists banker_participant boolean not null default true;
 
+alter table public.rounds
+  add column if not exists ryder_event_code text;
+
+alter table public.rounds
+  add column if not exists ryder_event_day integer;
+
+create index if not exists rounds_ryder_event_code_idx
+  on public.rounds (ryder_event_code, ryder_event_day);
+
 alter table public.round_games
   drop constraint if exists round_games_game_type_check;
 

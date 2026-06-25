@@ -57,6 +57,8 @@ export default function NewRoundPage() {
   const router = useRouter();
   const createRound = useRoundStore((state) => state.createRound);
   const [roundCode, setRoundCode] = useState('');
+  const [ryderEventCode, setRyderEventCode] = useState('');
+  const [ryderEventDay, setRyderEventDay] = useState(1);
   const [title, setTitle] = useState('Triple');
   const [courseName, setCourseName] = useState('');
   const [bankerEnabled, setBankerEnabled] = useState(true);
@@ -156,7 +158,9 @@ export default function NewRoundPage() {
   ];
 
   useEffect(() => {
-    setRoundCode(generateRoundCode());
+    const code = generateRoundCode();
+    setRoundCode(code);
+    setRyderEventCode(code);
   }, []);
 
   useEffect(() => {
@@ -485,6 +489,8 @@ export default function NewRoundPage() {
 
     createRound({
       roundCode: finalRoundCode,
+      ryderEventCode: teamMatchPlayEnabled ? (ryderEventCode.trim().toUpperCase() || finalRoundCode) : null,
+      ryderEventDay: teamMatchPlayEnabled ? Math.max(1, Math.floor(ryderEventDay || 1)) : null,
       title: title.trim() || 'Saturday Group',
       courseName: courseName.trim() || selectedCourse?.name || 'Golf Course',
       selectedCourseId: selectedCourse?.id ?? null,
@@ -563,7 +569,9 @@ export default function NewRoundPage() {
     }
 
     router.push(`/r/${finalRoundCode}/group/1`);
-    setRoundCode(generateRoundCode());
+    const nextCode = generateRoundCode();
+    setRoundCode(nextCode);
+    setRyderEventCode(nextCode);
     setIsCreating(false);
   }
 
@@ -851,6 +859,25 @@ export default function NewRoundPage() {
                   <option value="team_match">Day 1 - Team Match Play</option>
                   <option value="singles_match">Day 2 - Singles Match Play</option>
                 </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Ryder Event Code</label>
+                <input
+                  className="w-full rounded-xl border border-slate-300 px-3 py-3 uppercase"
+                  value={ryderEventCode}
+                  onChange={(event) => setRyderEventCode(event.target.value.toUpperCase())}
+                  placeholder="Same code for every day"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Ryder Day</label>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-3"
+                  value={ryderEventDay}
+                  onChange={(event) => setRyderEventDay(Number(event.target.value) || 1)}
+                />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium">Team 1 Name</label>

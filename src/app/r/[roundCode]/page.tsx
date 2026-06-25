@@ -483,6 +483,11 @@ export default function EventLeaderboardPage() {
             <Link className="rounded-xl bg-white/20 px-3 py-2 text-sm font-semibold" href={`/r/${round.roundCode}/setup`}>
               Edit Setup
             </Link>
+            {round.ryderEventCode ? (
+              <Link className="rounded-xl bg-white/20 px-3 py-2 text-sm font-semibold" href={`/e/${round.ryderEventCode}`}>
+                Ryder Event
+              </Link>
+            ) : null}
           </div>
         </div>
       </section>

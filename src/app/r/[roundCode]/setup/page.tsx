@@ -55,6 +55,8 @@ export default function EditRoundSetupPage() {
   const [loadStatus, setLoadStatus] = useState<'loading' | 'ready' | 'not_found'>('loading');
   const [saveStatus, setSaveStatus] = useState('');
   const [title, setTitle] = useState(round.title);
+  const [ryderEventCode, setRyderEventCode] = useState(round.ryderEventCode ?? '');
+  const [ryderEventDay, setRyderEventDay] = useState(String(round.ryderEventDay ?? 1));
   const [courseName, setCourseName] = useState(round.courseName);
   const [bankerEnabled, setBankerEnabled] = useState(round.gameSettings.bankerEnabled !== false);
   const [skinsEnabled, setSkinsEnabled] = useState(round.gameSettings.skinsEnabled === true);
@@ -148,6 +150,8 @@ export default function EditRoundSetupPage() {
 
   useEffect(() => {
     setTitle(round.title);
+    setRyderEventCode(round.ryderEventCode ?? '');
+    setRyderEventDay(String(round.ryderEventDay ?? 1));
     setCourseName(round.courseName);
     setBankerEnabled(round.gameSettings.bankerEnabled !== false);
     setSkinsEnabled(round.gameSettings.skinsEnabled === true);
@@ -244,6 +248,8 @@ export default function EditRoundSetupPage() {
       const nextRound: RoundState = {
         ...round,
         title: title.trim() || round.title,
+        ryderEventCode: teamMatchPlayEnabled ? (ryderEventCode.trim().toUpperCase() || round.ryderEventCode || round.roundCode) : null,
+        ryderEventDay: teamMatchPlayEnabled ? Math.max(1, numberOrZero(ryderEventDay) || 1) : null,
         courseName: courseName.trim() || round.courseName,
         gameSettings: {
           ...round.gameSettings,
@@ -441,6 +447,14 @@ export default function EditRoundSetupPage() {
           ) : null}
           {teamMatchPlayEnabled ? (
           <>
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Ryder Event Code</span>
+              <input className="w-full rounded-xl border border-slate-300 px-3 py-3 uppercase" value={ryderEventCode} onChange={(event) => setRyderEventCode(event.target.value.toUpperCase())} />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Ryder Day</span>
+              <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={ryderEventDay} onChange={(event) => setRyderEventDay(event.target.value)} />
+            </label>
             <label className="block">
               <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Ryder Format</span>
               <select

@@ -74,6 +74,8 @@ export type RoundGameSettings = {
 export type RoundState = {
   id: string;
   roundCode: string;
+  ryderEventCode?: string | null;
+  ryderEventDay?: number | null;
   title: string;
   courseName: string;
   selectedCourseId?: string | null;
@@ -88,6 +90,8 @@ export type RoundState = {
 
 export type CreateRoundInput = {
   roundCode: string;
+  ryderEventCode?: string | null;
+  ryderEventDay?: number | null;
   title: string;
   courseName: string;
   selectedCourseId?: string | null;
