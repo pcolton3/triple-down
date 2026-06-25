@@ -178,7 +178,7 @@ export default function RyderEventPage() {
 
   return (
     <main className="mx-auto max-w-5xl space-y-4 px-4 py-6">
-      <section className="rounded-3xl bg-[#2f8df3] p-5 text-white shadow-sm">
+      <section className="rounded-3xl bg-[#071b12] p-5 text-white shadow-sm">
         <p className="text-sm opacity-90">Ryder Cup Event</p>
         <h1 className="mt-1 text-3xl font-bold">{eventCode}</h1>
         <p className="mt-2 text-sm">{summaries.length} linked round{summaries.length === 1 ? '' : 's'}</p>
@@ -210,7 +210,7 @@ export default function RyderEventPage() {
                   <h2 className="text-xl font-bold">Day {summary.day}: {summary.title}</h2>
                   <p className="text-sm text-slate-500">{summary.format === 'team_match' ? 'Team Match Play' : 'Singles Match Play'}</p>
                 </div>
-                <Link className="text-sm font-semibold text-[#2f8df3]" href={`/r/${summary.roundCode}`}>
+                <Link className="text-sm font-bold text-[#0f5132]" href={`/r/${summary.roundCode}`}>
                   Open Round
                 </Link>
               </div>

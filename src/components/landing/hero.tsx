@@ -17,22 +17,22 @@ export function Hero() {
   }
 
   return (
-    <section className="mx-auto max-w-5xl px-4 py-12 md:py-20">
+    <section className="mx-auto max-w-5xl px-4 py-10 md:py-16">
       <div className="mx-auto max-w-3xl text-center">
-      <p className="mb-4 text-sm font-semibold uppercase tracking-[0.2em] text-[#0f5132]">
+      <p className="mb-4 text-sm font-black uppercase tracking-[0.22em] text-[#0f5132]">
         Live golf scoring and games
       </p>
-      <h1 className="text-4xl font-bold tracking-tight text-slate-900 md:text-6xl">
+      <h1 className="text-5xl font-black tracking-tight text-[#071b12] md:text-7xl">
         Run the whole golf event from everyone&apos;s phone.
       </h1>
-      <p className="mx-auto mt-5 max-w-2xl text-base text-slate-600 md:text-lg">
+      <p className="mx-auto mt-5 max-w-2xl text-base font-medium text-[#52635a] md:text-lg">
         Track multiple groups, live leaderboards, skins, CTP, low net, Banker, and Ryder Cup style matches without passing one scorecard around.
       </p>
       </div>
 
-      <form onSubmit={handleJoin} className="mx-auto mt-8 flex max-w-md flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row">
+      <form onSubmit={handleJoin} className="mx-auto mt-8 flex max-w-md flex-col gap-3 rounded-2xl border border-[#c9d8c7] bg-white p-3 shadow-sm sm:flex-row">
         <input
-          className="min-w-0 flex-1 rounded-xl border border-slate-300 px-3 py-3 text-center font-mono text-lg font-bold uppercase"
+          className="min-w-0 flex-1 rounded-xl border border-[#c9d8c7] px-3 py-3 text-center font-mono text-lg font-black uppercase text-[#071b12]"
           value={roundCode}
           placeholder="EVENT CODE"
           onChange={(event) => setRoundCode(event.target.value.toUpperCase())}
@@ -52,9 +52,9 @@ export function Hero() {
           ['Side games', 'Skins, CTP, low net, birdie and eagle pots, Banker, and more can be selected per round.'],
           ['Ryder Cup events', 'Link multiple days together with team match play, singles matches, and an overall event score.'],
         ].map(([title, body]) => (
-          <div key={title} className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm">
-            <h2 className="font-bold text-slate-900">{title}</h2>
-            <p className="mt-2 text-sm text-slate-600">{body}</p>
+          <div key={title} className="rounded-2xl border border-[#c9d8c7] bg-white p-4 text-left shadow-sm">
+            <h2 className="font-black text-[#071b12]">{title}</h2>
+            <p className="mt-2 text-sm font-medium text-[#52635a]">{body}</p>
           </div>
         ))}
       </div>

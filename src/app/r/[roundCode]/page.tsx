@@ -453,7 +453,7 @@ export default function EventLeaderboardPage() {
 
   return (
     <main className="mx-auto max-w-5xl space-y-4 px-4 py-6">
-      <section className="rounded-3xl bg-[#2f8df3] p-5 text-white shadow-sm">
+      <section className="rounded-3xl bg-[#071b12] p-5 text-white shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-sm opacity-90">{round.courseName}</p>
@@ -536,7 +536,7 @@ export default function EventLeaderboardPage() {
               >
                 <div className="flex items-center justify-between gap-3">
                   <span className="font-bold">Enter Group {group.groupNumber}</span>
-                  <span className="text-sm font-semibold text-[#2f8df3]">Hole {group.currentHole}</span>
+                  <span className="text-sm font-black text-[#0f5132]">Hole {group.currentHole}</span>
                 </div>
                 <p className="mt-1 text-sm text-slate-500">{names}</p>
                 <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-500">

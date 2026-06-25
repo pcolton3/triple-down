@@ -656,9 +656,9 @@ function NewRoundPageContent() {
           <p className="mt-2 text-slate-600">
             Search for a course, set side games, add 4 to 24 golfers, then start your Triple Track round.
           </p>
-          {prefillStatus ? <p className="mt-2 text-sm font-medium text-[#2f8df3]">{prefillStatus}</p> : null}
+          {prefillStatus ? <p className="mt-2 text-sm font-bold text-[#0f5132]">{prefillStatus}</p> : null}
         </div>
-        <Link href="/" className="text-sm font-medium text-[#2f8df3]">
+        <Link href="/" className="text-sm font-bold text-[#0f5132]">
           Back Home
         </Link>
       </div>
@@ -704,7 +704,7 @@ function NewRoundPageContent() {
                       {course.city}, {course.state}
                     </div>
                   </div>
-                  <span className="text-sm font-medium text-[#2f8df3]">Select</span>
+                  <span className="text-sm font-bold text-[#0f5132]">Select</span>
                 </button>
               ))}
             </div>

@@ -3,13 +3,14 @@
 @tailwind utilities;
 
 :root {
-  --background: #f3f4f6;
+  --background: #edf3ec;
   --surface: #ffffff;
-  --primary: #2f8df3;
-  --primary-dark: #1f7ee6;
-  --border: #68aef7;
-  --text: #1f2937;
-  --muted: #6b7280;
+  --primary: #0f5132;
+  --primary-dark: #0a3a24;
+  --accent: #f2c94c;
+  --border: #c9d8c7;
+  --text: #14211b;
+  --muted: #65736b;
   --success: #16a34a;
   --danger: #dc2626;
 }
@@ -23,6 +24,7 @@ body {
 body {
   margin: 0;
   min-height: 100vh;
+  font-feature-settings: "tnum";
 }
 
 * {
