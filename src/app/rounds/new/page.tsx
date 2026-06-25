@@ -1,14 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, type Dispatch, type SetStateAction, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Card } from '@/components/shared/card';
 import { Button } from '@/components/shared/button';
 import { generateRoundCode } from '@/lib/utils/round-code';
 import { useRoundStore } from '@/stores/round-store';
 import { getCourseDetails, getNearbyCourses, searchCourses } from '@/lib/course-search';
-import { createSharedRoundFromLocalRound } from '@/lib/realtime/shared-rounds';
+import { createSharedRoundFromLocalRound, loadSharedRoundsByRyderEventCode, sharedRoundBundleToRoundState } from '@/lib/realtime/shared-rounds';
 import { loadSavedGolfers, saveGolfersForLater, type SavedGolfer } from '@/lib/realtime/saved-golfers';
 import { loadSavedCourseTees, saveCourseTee, savedCourseKey, type SavedCourseTee } from '@/lib/realtime/saved-course-tees';
 import type { CourseRecord } from '@/types/course';
@@ -53,8 +53,9 @@ function NumberField({
   );
 }
 
-export default function NewRoundPage() {
+function NewRoundPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const createRound = useRoundStore((state) => state.createRound);
   const [roundCode, setRoundCode] = useState('');
   const [ryderEventCode, setRyderEventCode] = useState('');
@@ -114,6 +115,7 @@ export default function NewRoundPage() {
   const [createError, setCreateError] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [gamesOpen, setGamesOpen] = useState(false);
+  const [prefillStatus, setPrefillStatus] = useState('');
   const effectiveGroupSize: 4 | 5 = players.length === 5 ? 5 : 4;
 
   const groups = useMemo(() => {
@@ -162,6 +164,77 @@ export default function NewRoundPage() {
     setRoundCode(code);
     setRyderEventCode(code);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const eventCodeParam = searchParams.get('ryderEventCode')?.toUpperCase();
+    const day = Number(searchParams.get('ryderDay') ?? '');
+    if (!eventCodeParam) return;
+    const eventCode = eventCodeParam;
+
+    async function prefillFromRyderEvent() {
+      try {
+        setPrefillStatus(`Loading Ryder event ${eventCode}...`);
+        const bundles = await loadSharedRoundsByRyderEventCode(eventCode);
+        if (cancelled || bundles.length === 0) {
+          if (!cancelled) setPrefillStatus(`No existing Ryder event was found for ${eventCode}.`);
+          return;
+        }
+
+        const rounds = bundles.map(sharedRoundBundleToRoundState).sort((a, b) => (a.ryderEventDay ?? 1) - (b.ryderEventDay ?? 1));
+        const template = rounds[rounds.length - 1];
+        if (!template) return;
+        const nextDay = Number.isFinite(day) && day > 0 ? Math.floor(day) : (template.ryderEventDay ?? rounds.length) + 1;
+        const copiedPlayers = template.players.map((player) => ({
+          ...player,
+          bankerParticipant: player.bankerParticipant !== false,
+          skinsParticipant: player.skinsParticipant !== false,
+          ctpParticipant: player.ctpParticipant !== false,
+          lowNetParticipant: player.lowNetParticipant !== false,
+        }));
+        const uniqueHoles = Array.from(
+          new Map(
+            template.holes
+              .filter((hole) => (hole.groupNumber ?? 1) === 1)
+              .sort((a, b) => a.holeNumber - b.holeNumber)
+              .map((hole) => [hole.holeNumber, { holeNumber: hole.holeNumber, par: hole.par, handicapIndex: hole.handicapIndex }])
+          ).values()
+        );
+
+        setTeamMatchPlayEnabled(true);
+        setRyderEventCode(eventCode);
+        setRyderEventDay(nextDay);
+        setRyderCupFormat(nextDay > 1 ? 'singles_match' : template.gameSettings.ryderCupFormat ?? 'team_match');
+        setTitle(`Ryder Cup Day ${nextDay}`);
+        setCourseName(template.courseName);
+        setCourseQuery(template.courseName);
+        setSelectedCourse(null);
+        setPlayers(copiedPlayers);
+        setPlayerCount(PLAYER_COUNTS.includes(copiedPlayers.length) ? copiedPlayers.length : PLAYER_COUNTS.find((count) => count >= copiedPlayers.length) ?? 24);
+        setFirstBankerPlayerId(copiedPlayers.find((player) => player.bankerParticipant !== false)?.id ?? copiedPlayers[0]?.id ?? 'p1');
+        setTeamOneName(template.gameSettings.teamOneName ?? 'Team 1');
+        setTeamTwoName(template.gameSettings.teamTwoName ?? 'Team 2');
+        setTeamAssignments(template.gameSettings.teamAssignments ?? {});
+        setSinglesPairings(template.gameSettings.singlesPairings ?? {});
+        setTeamMatchPlayUnit(template.gameSettings.teamMatchPlayUnit ?? 0);
+        setCourseRating(template.gameSettings.courseRating == null ? '' : String(template.gameSettings.courseRating));
+        setSlopeRating(template.gameSettings.slopeRating == null ? '' : String(template.gameSettings.slopeRating));
+        setTeeColor(template.gameSettings.teeColor ?? '');
+        setPcc(String(template.gameSettings.pcc ?? 0));
+        if (uniqueHoles.length > 0) setManualHoles(uniqueHoles);
+        setPrefillStatus(`Prefilled Day ${nextDay} from Ryder event ${eventCode}.`);
+      } catch (error) {
+        console.error('Unable to prefill Ryder event.', error);
+        if (!cancelled) setPrefillStatus(error instanceof Error ? error.message : 'Unable to prefill Ryder event.');
+      }
+    }
+
+    void prefillFromRyderEvent();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams]);
 
   useEffect(() => {
     if (!bankerEligiblePlayers.some((player) => player.id === firstBankerPlayerId)) {
@@ -583,6 +656,7 @@ export default function NewRoundPage() {
           <p className="mt-2 text-slate-600">
             Search for a course, set side games, add 4 to 24 golfers, then start your Triple Track round.
           </p>
+          {prefillStatus ? <p className="mt-2 text-sm font-medium text-[#2f8df3]">{prefillStatus}</p> : null}
         </div>
         <Link href="/" className="text-sm font-medium text-[#2f8df3]">
           Back Home
@@ -1171,5 +1245,13 @@ export default function NewRoundPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function NewRoundPage() {
+  return (
+    <Suspense fallback={<main className="mx-auto max-w-3xl px-4 py-8">Loading create round...</main>}>
+      <NewRoundPageContent />
+    </Suspense>
   );
 }

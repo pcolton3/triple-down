@@ -484,9 +484,17 @@ export default function EventLeaderboardPage() {
               Edit Setup
             </Link>
             {round.ryderEventCode ? (
-              <Link className="rounded-xl bg-white/20 px-3 py-2 text-sm font-semibold" href={`/e/${round.ryderEventCode}`}>
-                Ryder Event
-              </Link>
+              <>
+                <Link className="rounded-xl bg-white/20 px-3 py-2 text-sm font-semibold" href={`/e/${round.ryderEventCode}`}>
+                  Ryder Event
+                </Link>
+                <Link
+                  className="rounded-xl bg-white/20 px-3 py-2 text-sm font-semibold"
+                  href={`/rounds/new?ryderEventCode=${encodeURIComponent(round.ryderEventCode)}&ryderDay=${(round.ryderEventDay ?? 1) + 1}`}
+                >
+                  Create Next Ryder Round
+                </Link>
+              </>
             ) : null}
           </div>
         </div>
