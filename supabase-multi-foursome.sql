@@ -46,6 +46,7 @@ alter table public.round_games
     'wolf',
     'bingo_bango_bongo',
     'vegas',
+    'match_play',
     'team_match_play'
   ));
 

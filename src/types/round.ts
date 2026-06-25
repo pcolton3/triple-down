@@ -48,6 +48,7 @@ export type RoundGameSettings = {
   wolfEnabled?: boolean;
   bingoBangoBongoEnabled?: boolean;
   vegasEnabled?: boolean;
+  matchPlayEnabled?: boolean;
   teamMatchPlayEnabled?: boolean;
   skinsPot: number;
   lowNetPot: number;
@@ -59,6 +60,7 @@ export type RoundGameSettings = {
   wolfUnit?: number;
   bingoBangoBongoUnit?: number;
   vegasUnit?: number;
+  matchPlayUnit?: number;
   teamMatchPlayUnit?: number;
   teamOneName?: string;
   teamTwoName?: string;

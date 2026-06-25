@@ -87,6 +87,7 @@ type RoundGameRow = {
     | 'wolf'
     | 'bingo_bango_bongo'
     | 'vegas'
+    | 'match_play'
     | 'team_match_play';
   pot_amount: number;
   enabled: boolean;
@@ -313,6 +314,13 @@ function buildRoundGameRows(roundId: string, round: RoundState) {
       pot_amount: round.gameSettings.vegasUnit ?? 0,
       enabled: round.gameSettings.vegasEnabled === true,
       settings: { unit: round.gameSettings.vegasUnit ?? 0 },
+    },
+    {
+      round_id: roundId,
+      game_type: 'match_play',
+      pot_amount: round.gameSettings.matchPlayUnit ?? 0,
+      enabled: round.gameSettings.matchPlayEnabled === true,
+      settings: { unit: round.gameSettings.matchPlayUnit ?? 0 },
     },
     {
       round_id: roundId,
@@ -771,6 +779,7 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
       wolfEnabled: games.get('wolf')?.enabled ?? false,
       bingoBangoBongoEnabled: games.get('bingo_bango_bongo')?.enabled ?? false,
       vegasEnabled: games.get('vegas')?.enabled ?? false,
+      matchPlayEnabled: games.get('match_play')?.enabled ?? false,
       teamMatchPlayEnabled: games.get('team_match_play')?.enabled ?? false,
       skinsPot: games.get('skins')?.pot_amount ?? 0,
       lowNetPot: games.get('low_net')?.pot_amount ?? 0,
@@ -784,6 +793,7 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
         games.get('bingo_bango_bongo')?.pot_amount ??
         (typeof bingoBangoBongoSettings.unit === 'number' ? bingoBangoBongoSettings.unit : 0),
       vegasUnit: games.get('vegas')?.pot_amount ?? (typeof vegasSettings.unit === 'number' ? vegasSettings.unit : 0),
+      matchPlayUnit: games.get('match_play')?.pot_amount ?? 0,
       teamMatchPlayUnit:
         games.get('team_match_play')?.pot_amount ??
         (typeof teamMatchPlaySettings.unit === 'number' ? teamMatchPlaySettings.unit : 0),

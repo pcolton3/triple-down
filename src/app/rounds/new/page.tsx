@@ -74,6 +74,7 @@ function NewRoundPageContent() {
   const [wolfEnabled, setWolfEnabled] = useState(false);
   const [bingoBangoBongoEnabled, setBingoBangoBongoEnabled] = useState(false);
   const [vegasEnabled, setVegasEnabled] = useState(false);
+  const [matchPlayEnabled, setMatchPlayEnabled] = useState(false);
   const [teamMatchPlayEnabled, setTeamMatchPlayEnabled] = useState(false);
   const [defaultBet, setDefaultBet] = useState(5);
   const [skinsPot, setSkinsPot] = useState(0);
@@ -86,6 +87,7 @@ function NewRoundPageContent() {
   const [wolfUnit, setWolfUnit] = useState(0);
   const [bingoBangoBongoUnit, setBingoBangoBongoUnit] = useState(0);
   const [vegasUnit, setVegasUnit] = useState(0);
+  const [matchPlayUnit, setMatchPlayUnit] = useState(0);
   const [teamMatchPlayUnit, setTeamMatchPlayUnit] = useState(0);
   const [teamOneName, setTeamOneName] = useState('Team 1');
   const [teamTwoName, setTeamTwoName] = useState('Team 2');
@@ -141,6 +143,7 @@ function NewRoundPageContent() {
     wolfEnabled ? 'Wolf' : null,
     bingoBangoBongoEnabled ? 'Bingo Bango Bongo' : null,
     vegasEnabled ? 'Vegas' : null,
+    matchPlayEnabled ? 'Match Play' : null,
     teamMatchPlayEnabled ? 'Team Match Play' : null,
   ].filter(Boolean);
   const gameOptions: Array<{ label: string; checked: boolean; setChecked: Dispatch<SetStateAction<boolean>> }> = [
@@ -156,6 +159,7 @@ function NewRoundPageContent() {
     { label: 'Wolf', checked: wolfEnabled, setChecked: setWolfEnabled },
     { label: 'Bingo Bango Bongo', checked: bingoBangoBongoEnabled, setChecked: setBingoBangoBongoEnabled },
     { label: 'Vegas', checked: vegasEnabled, setChecked: setVegasEnabled },
+    { label: 'Match Play', checked: matchPlayEnabled, setChecked: setMatchPlayEnabled },
     { label: 'Team Match Play / Ryder Cup', checked: teamMatchPlayEnabled, setChecked: setTeamMatchPlayEnabled },
   ];
 
@@ -581,6 +585,7 @@ function NewRoundPageContent() {
         wolfEnabled,
         bingoBangoBongoEnabled,
         vegasEnabled,
+        matchPlayEnabled,
         teamMatchPlayEnabled,
         skinsPot: Number.isFinite(skinsPot) ? Math.max(0, skinsPot) : 0,
         lowNetPot: Number.isFinite(lowNetPot) ? Math.max(0, lowNetPot) : 0,
@@ -592,6 +597,7 @@ function NewRoundPageContent() {
         wolfUnit: Number.isFinite(wolfUnit) ? Math.max(0, wolfUnit) : 0,
         bingoBangoBongoUnit: Number.isFinite(bingoBangoBongoUnit) ? Math.max(0, bingoBangoBongoUnit) : 0,
         vegasUnit: Number.isFinite(vegasUnit) ? Math.max(0, vegasUnit) : 0,
+        matchPlayUnit: Number.isFinite(matchPlayUnit) ? Math.max(0, matchPlayUnit) : 0,
         teamMatchPlayUnit: Number.isFinite(teamMatchPlayUnit) ? Math.max(0, teamMatchPlayUnit) : 0,
         teamOneName: teamOneName.trim() || 'Team 1',
         teamTwoName: teamTwoName.trim() || 'Team 2',
@@ -907,6 +913,12 @@ function NewRoundPageContent() {
             <div>
               <label className="mb-1 block text-sm font-medium">Vegas Unit</label>
               <NumberField value={vegasUnit} onChange={setVegasUnit} placeholder="0" />
+            </div>
+            ) : null}
+            {matchPlayEnabled ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Match Play Unit</label>
+              <NumberField value={matchPlayUnit} onChange={setMatchPlayUnit} placeholder="0" />
             </div>
             ) : null}
             {teamMatchPlayEnabled ? (

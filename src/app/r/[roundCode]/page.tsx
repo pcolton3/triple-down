@@ -363,6 +363,83 @@ function TeamMatchPlayCard({ round, players }: { round: RoundState; players: Pla
   );
 }
 
+function MatchPlayCard({ round, players }: { round: RoundState; players: Player[] }) {
+  const groupSize = round.multiFoursome?.groupSize ?? 4;
+  const groupAssignments = round.multiFoursome?.groupPlayers ?? players.map((player, index) => ({
+    playerId: player.id,
+    groupNumber: Math.floor(index / groupSize) + 1,
+    sortOrder: index % groupSize,
+  }));
+  const groups = [...new Set(groupAssignments.map((assignment) => assignment.groupNumber))].sort((a, b) => a - b);
+  const rows = groups.map((groupNumber) => {
+    const playerIds = groupAssignments
+      .filter((assignment) => assignment.groupNumber === groupNumber)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((assignment) => assignment.playerId);
+    const points = new Map(playerIds.map((playerId) => [playerId, 0]));
+    const holes = round.holes
+      .filter((hole) => (hole.groupNumber ?? 1) === groupNumber && hole.isSaved)
+      .sort((a, b) => a.holeNumber - b.holeNumber);
+
+    holes.forEach((hole) => {
+      const scores = playerIds
+        .map((playerId) => ({ playerId, net: getPlayerNetForHole(round, hole, playerId) }))
+        .filter((score): score is { playerId: string; net: number } => score.net != null);
+      if (scores.length === 0) return;
+      const lowNet = Math.min(...scores.map((score) => score.net));
+      const winners = scores.filter((score) => score.net === lowNet);
+      const point = 1 / winners.length;
+      winners.forEach((winner) => points.set(winner.playerId, (points.get(winner.playerId) ?? 0) + point));
+    });
+
+    const standings = [...points.entries()]
+      .map(([playerId, score]) => ({
+        playerId,
+        playerName: players.find((player) => player.id === playerId)?.name ?? 'Player',
+        score,
+      }))
+      .sort((a, b) => b.score - a.score || a.playerName.localeCompare(b.playerName));
+
+    return {
+      groupNumber,
+      holesComplete: holes.length,
+      standings,
+    };
+  });
+
+  return (
+    <Card>
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold">Match Play</h2>
+          <p className="text-sm text-slate-500">Low net wins each hole within the group. Ties split the point.</p>
+        </div>
+        {round.gameSettings.matchPlayUnit ? (
+          <span className="rounded-xl bg-slate-100 px-3 py-2 text-sm font-semibold">${round.gameSettings.matchPlayUnit} unit</span>
+        ) : null}
+      </div>
+      <div className="space-y-3">
+        {rows.map((row) => (
+          <div key={row.groupNumber} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="font-bold">Group {row.groupNumber}</h3>
+              <span className="text-sm font-semibold text-slate-500">Through {row.holesComplete}</span>
+            </div>
+            <div className="space-y-2">
+              {row.standings.map((standing, index) => (
+                <div key={standing.playerId} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm">
+                  <span className="font-semibold">{index + 1}. {standing.playerName}</span>
+                  <span className="font-bold tabular-nums">{standing.score}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 export default function EventLeaderboardPage() {
   const params = useParams<{ roundCode: string }>();
   const { round, hydrateRound, getGrossTotals, getSkinsSummary, getCtpSummary } = useRoundStore();
@@ -552,6 +629,8 @@ export default function EventLeaderboardPage() {
         <h2 className="mb-3 text-xl font-bold">Leaderboard</h2>
         <ScoreTable rows={eventLeaderboard} showSkins={skinsGameEnabled} showCtp={ctpGameEnabled} />
       </Card>
+
+      {round.gameSettings.matchPlayEnabled ? <MatchPlayCard round={round} players={roundPlayers} /> : null}
 
       {round.gameSettings.teamMatchPlayEnabled ? <TeamMatchPlayCard round={round} players={roundPlayers} /> : null}
 

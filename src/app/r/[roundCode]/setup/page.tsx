@@ -70,6 +70,7 @@ export default function EditRoundSetupPage() {
   const [wolfEnabled, setWolfEnabled] = useState(round.gameSettings.wolfEnabled === true);
   const [bingoBangoBongoEnabled, setBingoBangoBongoEnabled] = useState(round.gameSettings.bingoBangoBongoEnabled === true);
   const [vegasEnabled, setVegasEnabled] = useState(round.gameSettings.vegasEnabled === true);
+  const [matchPlayEnabled, setMatchPlayEnabled] = useState(round.gameSettings.matchPlayEnabled === true);
   const [teamMatchPlayEnabled, setTeamMatchPlayEnabled] = useState(round.gameSettings.teamMatchPlayEnabled === true);
   const [skinsPot, setSkinsPot] = useState(String(round.gameSettings.skinsPot ?? 0));
   const [lowNetPot, setLowNetPot] = useState(String(round.gameSettings.lowNetPot ?? 0));
@@ -81,6 +82,7 @@ export default function EditRoundSetupPage() {
   const [wolfUnit, setWolfUnit] = useState(String(round.gameSettings.wolfUnit ?? 0));
   const [bingoBangoBongoUnit, setBingoBangoBongoUnit] = useState(String(round.gameSettings.bingoBangoBongoUnit ?? 0));
   const [vegasUnit, setVegasUnit] = useState(String(round.gameSettings.vegasUnit ?? 0));
+  const [matchPlayUnit, setMatchPlayUnit] = useState(String(round.gameSettings.matchPlayUnit ?? 0));
   const [teamMatchPlayUnit, setTeamMatchPlayUnit] = useState(String(round.gameSettings.teamMatchPlayUnit ?? 0));
   const [teamOneName, setTeamOneName] = useState(round.gameSettings.teamOneName ?? 'Team 1');
   const [teamTwoName, setTeamTwoName] = useState(round.gameSettings.teamTwoName ?? 'Team 2');
@@ -108,6 +110,7 @@ export default function EditRoundSetupPage() {
     wolfEnabled ? 'Wolf' : null,
     bingoBangoBongoEnabled ? 'Bingo Bango Bongo' : null,
     vegasEnabled ? 'Vegas' : null,
+    matchPlayEnabled ? 'Match Play' : null,
     teamMatchPlayEnabled ? 'Team Match Play' : null,
   ].filter(Boolean);
   const gameOptions: Array<{ label: string; checked: boolean; setChecked: Dispatch<SetStateAction<boolean>> }> = [
@@ -123,6 +126,7 @@ export default function EditRoundSetupPage() {
     { label: 'Wolf', checked: wolfEnabled, setChecked: setWolfEnabled },
     { label: 'Bingo Bango Bongo', checked: bingoBangoBongoEnabled, setChecked: setBingoBangoBongoEnabled },
     { label: 'Vegas', checked: vegasEnabled, setChecked: setVegasEnabled },
+    { label: 'Match Play', checked: matchPlayEnabled, setChecked: setMatchPlayEnabled },
     { label: 'Team Match Play / Ryder Cup', checked: teamMatchPlayEnabled, setChecked: setTeamMatchPlayEnabled },
   ];
 
@@ -165,6 +169,7 @@ export default function EditRoundSetupPage() {
     setWolfEnabled(round.gameSettings.wolfEnabled === true);
     setBingoBangoBongoEnabled(round.gameSettings.bingoBangoBongoEnabled === true);
     setVegasEnabled(round.gameSettings.vegasEnabled === true);
+    setMatchPlayEnabled(round.gameSettings.matchPlayEnabled === true);
     setTeamMatchPlayEnabled(round.gameSettings.teamMatchPlayEnabled === true);
     setSkinsPot(String(round.gameSettings.skinsPot ?? 0));
     setLowNetPot(String(round.gameSettings.lowNetPot ?? 0));
@@ -176,6 +181,7 @@ export default function EditRoundSetupPage() {
     setWolfUnit(String(round.gameSettings.wolfUnit ?? 0));
     setBingoBangoBongoUnit(String(round.gameSettings.bingoBangoBongoUnit ?? 0));
     setVegasUnit(String(round.gameSettings.vegasUnit ?? 0));
+    setMatchPlayUnit(String(round.gameSettings.matchPlayUnit ?? 0));
     setTeamMatchPlayUnit(String(round.gameSettings.teamMatchPlayUnit ?? 0));
     setTeamOneName(round.gameSettings.teamOneName ?? 'Team 1');
     setTeamTwoName(round.gameSettings.teamTwoName ?? 'Team 2');
@@ -265,6 +271,7 @@ export default function EditRoundSetupPage() {
           wolfEnabled,
           bingoBangoBongoEnabled,
           vegasEnabled,
+          matchPlayEnabled,
           teamMatchPlayEnabled,
           skinsPot: Math.max(0, numberOrZero(skinsPot)),
           lowNetPot: Math.max(0, numberOrZero(lowNetPot)),
@@ -276,6 +283,7 @@ export default function EditRoundSetupPage() {
           wolfUnit: Math.max(0, numberOrZero(wolfUnit)),
           bingoBangoBongoUnit: Math.max(0, numberOrZero(bingoBangoBongoUnit)),
           vegasUnit: Math.max(0, numberOrZero(vegasUnit)),
+          matchPlayUnit: Math.max(0, numberOrZero(matchPlayUnit)),
           teamMatchPlayUnit: Math.max(0, numberOrZero(teamMatchPlayUnit)),
           teamOneName: teamOneName.trim() || 'Team 1',
           teamTwoName: teamTwoName.trim() || 'Team 2',
@@ -443,6 +451,12 @@ export default function EditRoundSetupPage() {
           <label className="block">
             <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Vegas Unit</span>
             <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={vegasUnit} onChange={(event) => setVegasUnit(event.target.value)} />
+          </label>
+          ) : null}
+          {matchPlayEnabled ? (
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Match Play Unit</span>
+            <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={matchPlayUnit} onChange={(event) => setMatchPlayUnit(event.target.value)} />
           </label>
           ) : null}
           {teamMatchPlayEnabled ? (
