@@ -790,21 +790,13 @@ function NewRoundPageContent() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            {bankerEnabled ? (
-            <div>
-              <label className="mb-1 block text-sm font-medium">Default Banker Bet</label>
-              <NumberField value={defaultBet} onChange={setDefaultBet} placeholder="Bet" />
-            </div>
-            ) : null}
-            <div>
-              <label className="mb-1 block text-sm font-medium">Holes</label>
-              <input
-                className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-3 text-slate-500"
-                value="18"
-                readOnly
-              />
-            </div>
+          <div className="max-w-xs">
+            <label className="mb-1 block text-sm font-medium">Holes</label>
+            <input
+              className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-3 text-slate-500"
+              value="18"
+              readOnly
+            />
           </div>
           <p className="text-sm text-slate-500">Preview share code: {roundCode}</p>
         </Card>
@@ -851,6 +843,12 @@ function NewRoundPageContent() {
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {bankerEnabled ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Default Banker Bet</label>
+              <NumberField value={defaultBet} onChange={setDefaultBet} placeholder="Bet" />
+            </div>
+            ) : null}
             {skinsEnabled ? (
             <div>
               <label className="mb-1 block text-sm font-medium">Skins Pot</label>
