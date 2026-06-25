@@ -86,7 +86,9 @@ export default function NewRoundPage() {
   const [teamMatchPlayUnit, setTeamMatchPlayUnit] = useState(0);
   const [teamOneName, setTeamOneName] = useState('Team 1');
   const [teamTwoName, setTeamTwoName] = useState('Team 2');
+  const [ryderCupFormat, setRyderCupFormat] = useState<'team_match' | 'singles_match'>('team_match');
   const [teamAssignments, setTeamAssignments] = useState<Record<string, 'team_one' | 'team_two'>>({});
+  const [singlesPairings, setSinglesPairings] = useState<Record<string, string>>({});
   const [courseRating, setCourseRating] = useState('');
   const [slopeRating, setSlopeRating] = useState('');
   const [teeColor, setTeeColor] = useState('');
@@ -299,6 +301,19 @@ export default function NewRoundPage() {
     setTeamAssignments((current) => ({ ...current, [playerId]: team }));
   }
 
+  function setSinglesOpponent(playerId: string, opponentId: string) {
+    setSinglesPairings((current) => {
+      const next = { ...current };
+      if (!opponentId) {
+        delete next[playerId];
+        return next;
+      }
+      next[playerId] = opponentId;
+      next[opponentId] = playerId;
+      return next;
+    });
+  }
+
   function selectSavedGolfer(playerId: string, savedGolferId: string) {
     const savedGolfer = savedGolfers.find((golfer) => golfer.id === savedGolferId);
     if (!savedGolfer) return;
@@ -451,6 +466,20 @@ export default function NewRoundPage() {
     );
     const firstFilledPlayerId = sanitizedPlayers[0]?.id ?? firstBankerPlayerId;
     const openingBankerId = playerIds.has(firstBankerPlayerId) ? firstBankerPlayerId : firstFilledPlayerId;
+    const finalTeamAssignments = sanitizedPlayers.reduce<Record<string, 'team_one' | 'team_two'>>((assignments, player, index) => {
+      assignments[player.id] = teamAssignments[player.id] ?? (index % 2 === 0 ? 'team_one' : 'team_two');
+      return assignments;
+    }, {});
+    const teamOneIds = sanitizedPlayers.filter((player) => finalTeamAssignments[player.id] === 'team_one').map((player) => player.id);
+    const teamTwoIds = sanitizedPlayers.filter((player) => finalTeamAssignments[player.id] === 'team_two').map((player) => player.id);
+    const finalSinglesPairings = { ...singlesPairings };
+    teamOneIds.forEach((playerId, index) => {
+      if (finalSinglesPairings[playerId]) return;
+      const opponentId = teamTwoIds[index];
+      if (!opponentId) return;
+      finalSinglesPairings[playerId] = opponentId;
+      finalSinglesPairings[opponentId] = playerId;
+    });
 
     const finalRoundCode = roundCode || generateRoundCode();
 
@@ -487,10 +516,9 @@ export default function NewRoundPage() {
         teamMatchPlayUnit: Number.isFinite(teamMatchPlayUnit) ? Math.max(0, teamMatchPlayUnit) : 0,
         teamOneName: teamOneName.trim() || 'Team 1',
         teamTwoName: teamTwoName.trim() || 'Team 2',
-        teamAssignments: sanitizedPlayers.reduce<Record<string, 'team_one' | 'team_two'>>((assignments, player, index) => {
-          assignments[player.id] = teamAssignments[player.id] ?? (index % 2 === 0 ? 'team_one' : 'team_two');
-          return assignments;
-        }, {}),
+        ryderCupFormat,
+        teamAssignments: finalTeamAssignments,
+        singlesPairings: finalSinglesPairings,
         courseRating: courseRating.trim() ? Number(courseRating) || null : null,
         slopeRating: slopeRating.trim() ? Number(slopeRating) || null : null,
         teeColor: teeColor.trim() || null,
@@ -813,6 +841,17 @@ export default function NewRoundPage() {
           ) : null}
           {teamMatchPlayEnabled ? (
             <div className="grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-sm font-medium">Ryder Format</label>
+                <select
+                  className="w-full rounded-xl border border-slate-300 px-3 py-3"
+                  value={ryderCupFormat}
+                  onChange={(event) => setRyderCupFormat(event.target.value as 'team_match' | 'singles_match')}
+                >
+                  <option value="team_match">Day 1 - Team Match Play</option>
+                  <option value="singles_match">Day 2 - Singles Match Play</option>
+                </select>
+              </div>
               <div>
                 <label className="mb-1 block text-sm font-medium">Team 1 Name</label>
                 <input className="w-full rounded-xl border border-slate-300 px-3 py-3" value={teamOneName} onChange={(event) => setTeamOneName(event.target.value)} />
@@ -992,6 +1031,33 @@ export default function NewRoundPage() {
                                 {teamTwoName || 'Team 2'}
                               </label>
                             </div>
+                            {ryderCupFormat === 'singles_match' ? (
+                              <div className="mt-3">
+                                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                  Singles Opponent
+                                </label>
+                                <select
+                                  className="w-full rounded-xl border border-slate-300 px-3 py-3"
+                                  value={singlesPairings[player.id] ?? ''}
+                                  onChange={(event) => setSinglesOpponent(player.id, event.target.value)}
+                                >
+                                  <option value="">Auto pair by team order</option>
+                                  {players
+                                    .filter((opponent) => {
+                                      if (opponent.id === player.id) return false;
+                                      const playerTeam = teamAssignments[player.id] ?? (absoluteIndex % 2 === 0 ? 'team_one' : 'team_two');
+                                      const opponentIndex = players.findIndex((item) => item.id === opponent.id);
+                                      const opponentTeam = teamAssignments[opponent.id] ?? (opponentIndex % 2 === 0 ? 'team_one' : 'team_two');
+                                      return playerTeam !== opponentTeam;
+                                    })
+                                    .map((opponent) => (
+                                      <option key={opponent.id} value={opponent.id}>
+                                        {opponent.name.trim() || `Player ${players.findIndex((item) => item.id === opponent.id) + 1}`}
+                                      </option>
+                                    ))}
+                                </select>
+                              </div>
+                            ) : null}
                           </div>
                         ) : null}
                       </div>

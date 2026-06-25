@@ -321,7 +321,9 @@ function buildRoundGameRows(roundId: string, round: RoundState) {
         unit: round.gameSettings.teamMatchPlayUnit ?? 0,
         teamOneName: round.gameSettings.teamOneName ?? 'Team 1',
         teamTwoName: round.gameSettings.teamTwoName ?? 'Team 2',
+        ryderCupFormat: round.gameSettings.ryderCupFormat ?? 'team_match',
         teamAssignments: round.gameSettings.teamAssignments ?? {},
+        singlesPairings: round.gameSettings.singlesPairings ?? {},
       },
     },
   ];
@@ -662,6 +664,10 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
     teamMatchPlaySettings.teamAssignments && typeof teamMatchPlaySettings.teamAssignments === 'object'
       ? (teamMatchPlaySettings.teamAssignments as Record<string, 'team_one' | 'team_two'>)
       : {};
+  const singlesPairings =
+    teamMatchPlaySettings.singlesPairings && typeof teamMatchPlaySettings.singlesPairings === 'object'
+      ? (teamMatchPlaySettings.singlesPairings as Record<string, string>)
+      : {};
   const ctpByGroupHole = new Map(
     bundle.ctpResults.map((ctp) => [`${ctp.group_number ?? 1}:${ctp.hole_number}`, ctp.winner_player_key])
   );
@@ -763,7 +769,12 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
         (typeof teamMatchPlaySettings.unit === 'number' ? teamMatchPlaySettings.unit : 0),
       teamOneName: typeof teamMatchPlaySettings.teamOneName === 'string' ? teamMatchPlaySettings.teamOneName : 'Team 1',
       teamTwoName: typeof teamMatchPlaySettings.teamTwoName === 'string' ? teamMatchPlaySettings.teamTwoName : 'Team 2',
+      ryderCupFormat:
+        teamMatchPlaySettings.ryderCupFormat === 'singles_match' || teamMatchPlaySettings.ryderCupFormat === 'team_match'
+          ? teamMatchPlaySettings.ryderCupFormat
+          : 'team_match',
       teamAssignments,
+      singlesPairings,
       courseRating: typeof handicapSettings.courseRating === 'number' ? handicapSettings.courseRating : null,
       slopeRating: typeof handicapSettings.slopeRating === 'number' ? handicapSettings.slopeRating : null,
       teeColor: typeof handicapSettings.teeColor === 'string' ? handicapSettings.teeColor : null,

@@ -88,9 +88,51 @@ function getPlayerHoleScore(round: RoundState, playerId: string, holeNumber: num
   );
 }
 
+function getPlayerNetForHole(round: RoundState, hole: HoleState, playerId: string) {
+  const gross = getPlayerGrossForHole(hole, playerId);
+  if (gross == null) return null;
+
+  const player = round.players.find((item) => item.id === playerId);
+  if (!player) return gross;
+
+  const fullRoundStrokes = Math.floor(Math.max(0, player.handicap) / round.totalHoles);
+  const extraStrokes = Math.max(0, player.handicap) % round.totalHoles;
+  const strokesOnHole = fullRoundStrokes + (hole.handicapIndex <= extraStrokes ? 1 : 0);
+  return gross - strokesOnHole;
+}
+
 function sumScores(scores: Array<number | null>) {
   const entered = scores.filter((score): score is number => score != null);
   return entered.length > 0 ? entered.reduce((sum, score) => sum + score, 0) : null;
+}
+
+function getTeamForPlayer(round: RoundState, playerId: string, fallbackIndex = 0): 'team_one' | 'team_two' {
+  return round.gameSettings.teamAssignments?.[playerId] ?? (fallbackIndex % 2 === 0 ? 'team_one' : 'team_two');
+}
+
+function buildAutoSinglesPairings(round: RoundState, players: Player[]) {
+  const explicit = round.gameSettings.singlesPairings ?? {};
+  const teamOneIds = players
+    .filter((player, index) => getTeamForPlayer(round, player.id, index) === 'team_one')
+    .map((player) => player.id);
+  const teamTwoIds = players
+    .filter((player, index) => getTeamForPlayer(round, player.id, index) === 'team_two')
+    .map((player) => player.id);
+  const pairings = { ...explicit };
+  teamOneIds.forEach((playerId, index) => {
+    if (pairings[playerId]) return;
+    const opponentId = teamTwoIds[index];
+    if (!opponentId) return;
+    pairings[playerId] = opponentId;
+    pairings[opponentId] = playerId;
+  });
+  return pairings;
+}
+
+function formatMatchLead(teamOnePoints: number, teamTwoPoints: number, teamOneName: string, teamTwoName: string) {
+  if (teamOnePoints === teamTwoPoints) return 'All square';
+  const leader = teamOnePoints > teamTwoPoints ? teamOneName : teamTwoName;
+  return `${leader} leads ${Math.abs(teamOnePoints - teamTwoPoints)}`;
 }
 
 function ScorecardTable({ round, players }: { round: RoundState; players: Player[] }) {
@@ -178,13 +220,107 @@ function TeamMatchPlayCard({ round, players }: { round: RoundState; players: Pla
   const assignments = round.gameSettings.teamAssignments ?? {};
   const teamOnePlayers = players.filter((player, index) => (assignments[player.id] ?? (index % 2 === 0 ? 'team_one' : 'team_two')) === 'team_one');
   const teamTwoPlayers = players.filter((player, index) => (assignments[player.id] ?? (index % 2 === 0 ? 'team_one' : 'team_two')) === 'team_two');
+  const format = round.gameSettings.ryderCupFormat ?? 'team_match';
+  const groupAssignments = round.multiFoursome?.groupPlayers ?? players.map((player, index) => ({
+    playerId: player.id,
+    groupNumber: Math.floor(index / (round.multiFoursome?.groupSize ?? 4)) + 1,
+    sortOrder: index % (round.multiFoursome?.groupSize ?? 4),
+  }));
+  const groups = [...new Set(groupAssignments.map((assignment) => assignment.groupNumber))].sort((a, b) => a - b);
+  const teamMatchRows = groups.map((groupNumber) => {
+    const playerIds = groupAssignments
+      .filter((assignment) => assignment.groupNumber === groupNumber)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((assignment) => assignment.playerId);
+    let teamOnePoints = 0;
+    let teamTwoPoints = 0;
+    const holes = round.holes
+      .filter((hole) => (hole.groupNumber ?? 1) === groupNumber && hole.isSaved)
+      .sort((a, b) => a.holeNumber - b.holeNumber);
+
+    holes.forEach((hole) => {
+      const scores = playerIds
+        .map((playerId, index) => ({
+          playerId,
+          team: getTeamForPlayer(round, playerId, index),
+          net: getPlayerNetForHole(round, hole, playerId),
+        }))
+        .filter((score): score is { playerId: string; team: 'team_one' | 'team_two'; net: number } => score.net != null);
+      if (scores.length === 0) return;
+      const lowNet = Math.min(...scores.map((score) => score.net));
+      const winningTeams = new Set(scores.filter((score) => score.net === lowNet).map((score) => score.team));
+      if (winningTeams.size > 1) {
+        teamOnePoints += 0.5;
+        teamTwoPoints += 0.5;
+      } else if (winningTeams.has('team_one')) {
+        teamOnePoints += 1;
+      } else if (winningTeams.has('team_two')) {
+        teamTwoPoints += 1;
+      }
+    });
+
+    return {
+      groupNumber,
+      holesComplete: holes.length,
+      teamOnePoints,
+      teamTwoPoints,
+      status: formatMatchLead(teamOnePoints, teamTwoPoints, teamOneName, teamTwoName),
+    };
+  });
+  const pairings = buildAutoSinglesPairings(round, players);
+  const seenPairings = new Set<string>();
+  const singlesRows = players.flatMap((player, index) => {
+    if (getTeamForPlayer(round, player.id, index) !== 'team_one') return [];
+    const opponentId = pairings[player.id];
+    const opponent = players.find((item) => item.id === opponentId);
+    if (!opponent) return [];
+    const key = [player.id, opponent.id].sort().join(':');
+    if (seenPairings.has(key)) return [];
+    seenPairings.add(key);
+
+    let playerPoints = 0;
+    let opponentPoints = 0;
+    let holesComplete = 0;
+    round.holes
+      .filter((hole) => hole.isSaved)
+      .sort((a, b) => a.holeNumber - b.holeNumber)
+      .forEach((hole) => {
+        const playerNet = getPlayerNetForHole(round, hole, player.id);
+        const opponentNet = getPlayerNetForHole(round, hole, opponent.id);
+        if (playerNet == null || opponentNet == null) return;
+        holesComplete += 1;
+        if (playerNet < opponentNet) playerPoints += 1;
+        else if (opponentNet < playerNet) opponentPoints += 1;
+        else {
+          playerPoints += 0.5;
+          opponentPoints += 0.5;
+        }
+      });
+
+    return [{
+      playerName: player.name,
+      opponentName: opponent.name,
+      playerPoints,
+      opponentPoints,
+      holesComplete,
+      status: formatMatchLead(playerPoints, opponentPoints, player.name, opponent.name),
+    }];
+  });
+  const totalTeamOnePoints = format === 'team_match'
+    ? teamMatchRows.reduce((sum, row) => sum + row.teamOnePoints, 0)
+    : singlesRows.reduce((sum, row) => sum + row.playerPoints, 0);
+  const totalTeamTwoPoints = format === 'team_match'
+    ? teamMatchRows.reduce((sum, row) => sum + row.teamTwoPoints, 0)
+    : singlesRows.reduce((sum, row) => sum + row.opponentPoints, 0);
 
   return (
     <Card>
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold">Team Match Play</h2>
-          <p className="text-sm text-slate-500">Ryder Cup teams for this event.</p>
+          <p className="text-sm text-slate-500">
+            {format === 'team_match' ? 'Day 1 - low net wins the hole for that team.' : 'Day 2 - singles net match play.'}
+          </p>
         </div>
         {round.gameSettings.teamMatchPlayUnit ? (
           <span className="rounded-xl bg-slate-100 px-3 py-2 text-sm font-semibold">${round.gameSettings.teamMatchPlayUnit} unit</span>
@@ -192,13 +328,36 @@ function TeamMatchPlayCard({ round, players }: { round: RoundState; players: Pla
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          <h3 className="font-bold">{teamOneName}</h3>
+          <h3 className="font-bold">{teamOneName} - {totalTeamOnePoints}</h3>
           <p className="mt-2 text-sm text-slate-600">{teamOnePlayers.map((player) => player.name).join(', ') || 'No players assigned'}</p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          <h3 className="font-bold">{teamTwoName}</h3>
+          <h3 className="font-bold">{teamTwoName} - {totalTeamTwoPoints}</h3>
           <p className="mt-2 text-sm text-slate-600">{teamTwoPlayers.map((player) => player.name).join(', ') || 'No players assigned'}</p>
         </div>
+      </div>
+      <div className="mt-4 space-y-2">
+        {format === 'team_match' ? (
+          teamMatchRows.map((row) => (
+            <div key={`group-${row.groupNumber}`} className="rounded-xl border border-slate-200 px-3 py-3 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-semibold">Group {row.groupNumber}</span>
+                <span className="font-semibold tabular-nums">{row.teamOnePoints} - {row.teamTwoPoints}</span>
+                <span className="text-slate-500">{row.status} through {row.holesComplete}</span>
+              </div>
+            </div>
+          ))
+        ) : (
+          singlesRows.map((row) => (
+            <div key={`${row.playerName}-${row.opponentName}`} className="rounded-xl border border-slate-200 px-3 py-3 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-semibold">{row.playerName} vs {row.opponentName}</span>
+                <span className="font-semibold tabular-nums">{row.playerPoints} - {row.opponentPoints}</span>
+                <span className="text-slate-500">{row.status} through {row.holesComplete}</span>
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </Card>
   );

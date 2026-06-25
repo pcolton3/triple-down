@@ -62,7 +62,9 @@ export type RoundGameSettings = {
   teamMatchPlayUnit?: number;
   teamOneName?: string;
   teamTwoName?: string;
+  ryderCupFormat?: 'team_match' | 'singles_match';
   teamAssignments?: Record<string, 'team_one' | 'team_two'>;
+  singlesPairings?: Record<string, string>;
   courseRating?: number | null;
   slopeRating?: number | null;
   teeColor?: string | null;
