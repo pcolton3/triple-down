@@ -62,7 +62,7 @@ function NewRoundPageContent() {
   const [ryderEventDay, setRyderEventDay] = useState(1);
   const [title, setTitle] = useState('Triple');
   const [courseName, setCourseName] = useState('');
-  const [bankerEnabled, setBankerEnabled] = useState(true);
+  const [bankerEnabled, setBankerEnabled] = useState(false);
   const [skinsEnabled, setSkinsEnabled] = useState(false);
   const [lowNetEnabled, setLowNetEnabled] = useState(false);
   const [ctpEnabled, setCtpEnabled] = useState(false);

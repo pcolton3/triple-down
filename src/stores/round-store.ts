@@ -1311,7 +1311,7 @@ export const useRoundStore = create<RoundStore>()(
               totalHoles,
               defaultBet: input.defaultBet,
               gameSettings: {
-                bankerEnabled: input.gameSettings?.bankerEnabled ?? true,
+                bankerEnabled: input.gameSettings?.bankerEnabled ?? false,
                 skinsEnabled: input.gameSettings?.skinsEnabled ?? false,
                 lowNetEnabled: input.gameSettings?.lowNetEnabled ?? false,
                 ctpEnabled: input.gameSettings?.ctpEnabled ?? false,
