@@ -442,6 +442,7 @@ export default function EventLeaderboardPage() {
   }));
   const totalSaved = roundHoles.filter((hole) => hole.isSaved).length;
   const totalPossible = groups.length * round.totalHoles;
+  const roundComplete = totalPossible > 0 && totalSaved >= totalPossible;
   const eventPath = `/r/${round.roundCode}`;
 
   async function copyLink(path: string, label: string) {
@@ -488,12 +489,18 @@ export default function EventLeaderboardPage() {
                 <Link className="rounded-xl bg-white/20 px-3 py-2 text-sm font-semibold" href={`/e/${round.ryderEventCode}`}>
                   Ryder Event
                 </Link>
-                <Link
-                  className="rounded-xl bg-white/20 px-3 py-2 text-sm font-semibold"
-                  href={`/rounds/new?ryderEventCode=${encodeURIComponent(round.ryderEventCode)}&ryderDay=${(round.ryderEventDay ?? 1) + 1}`}
-                >
-                  Create Next Ryder Round
-                </Link>
+                {roundComplete ? (
+                  <Link
+                    className="rounded-xl bg-white/20 px-3 py-2 text-sm font-semibold"
+                    href={`/rounds/new?ryderEventCode=${encodeURIComponent(round.ryderEventCode)}&ryderDay=${(round.ryderEventDay ?? 1) + 1}`}
+                  >
+                    Create Next Ryder Round
+                  </Link>
+                ) : (
+                  <span className="rounded-xl bg-white/10 px-3 py-2 text-sm font-semibold text-white/70">
+                    Complete all holes for next Ryder round
+                  </span>
+                )}
               </>
             ) : null}
           </div>
