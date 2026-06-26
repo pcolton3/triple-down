@@ -47,7 +47,26 @@ alter table public.round_games
     'bingo_bango_bongo',
     'vegas',
     'match_play',
-    'team_match_play'
+    'team_match_play',
+    'aces_and_deuces',
+    'arnies',
+    'best_ball',
+    'better_ball',
+    'dots',
+    'four_ball',
+    'medal_play',
+    'medal_play_group',
+    'nines',
+    'points',
+    'quota',
+    'rabbit',
+    'scotch',
+    'sixes',
+    'skins_group',
+    'snake',
+    'stableford_group',
+    'three_ball',
+    'trouble'
   ));
 
 do $$

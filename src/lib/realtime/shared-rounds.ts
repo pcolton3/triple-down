@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase/client';
 import type { HoleState, RoundState } from '@/types/round';
 import { createRoundGroups } from '@/lib/realtime/group-rounds';
+import { BEEZER_EXTRA_GAMES, type BeezerExtraGameKey } from '@/lib/games/catalog';
 
 type RoundRow = {
   id: string;
@@ -88,7 +89,8 @@ type RoundGameRow = {
     | 'bingo_bango_bongo'
     | 'vegas'
     | 'match_play'
-    | 'team_match_play';
+    | 'team_match_play'
+    | BeezerExtraGameKey;
   pot_amount: number;
   enabled: boolean;
   settings: Record<string, unknown>;
@@ -336,6 +338,13 @@ function buildRoundGameRows(roundId: string, round: RoundState) {
         singlesPairings: round.gameSettings.singlesPairings ?? {},
       },
     },
+    ...BEEZER_EXTRA_GAMES.map((game) => ({
+      round_id: roundId,
+      game_type: game.key,
+      pot_amount: round.gameSettings.extraGameUnits?.[game.key] ?? 0,
+      enabled: round.gameSettings.extraGames?.[game.key] === true,
+      settings: { unit: round.gameSettings.extraGameUnits?.[game.key] ?? 0 },
+    })),
   ];
 }
 
@@ -686,6 +695,16 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
   const bingoBangoBongoSettings = games.get('bingo_bango_bongo')?.settings ?? {};
   const vegasSettings = games.get('vegas')?.settings ?? {};
   const teamMatchPlaySettings = games.get('team_match_play')?.settings ?? {};
+  const extraGames = BEEZER_EXTRA_GAMES.reduce<Partial<Record<BeezerExtraGameKey, boolean>>>((settings, game) => {
+    settings[game.key] = games.get(game.key)?.enabled ?? false;
+    return settings;
+  }, {});
+  const extraGameUnits = BEEZER_EXTRA_GAMES.reduce<Partial<Record<BeezerExtraGameKey, number>>>((settings, game) => {
+    const gameRow = games.get(game.key);
+    const rowSettings = gameRow?.settings ?? {};
+    settings[game.key] = gameRow?.pot_amount ?? (typeof rowSettings.unit === 'number' ? rowSettings.unit : 0);
+    return settings;
+  }, {});
   const teamAssignments =
     teamMatchPlaySettings.teamAssignments && typeof teamMatchPlaySettings.teamAssignments === 'object'
       ? (teamMatchPlaySettings.teamAssignments as Record<string, 'team_one' | 'team_two'>)
@@ -781,6 +800,8 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
       vegasEnabled: games.get('vegas')?.enabled ?? false,
       matchPlayEnabled: games.get('match_play')?.enabled ?? false,
       teamMatchPlayEnabled: games.get('team_match_play')?.enabled ?? false,
+      extraGames,
+      extraGameUnits,
       skinsPot: games.get('skins')?.pot_amount ?? 0,
       lowNetPot: games.get('low_net')?.pot_amount ?? 0,
       ctpPot: games.get('ctp')?.pot_amount ?? 0,

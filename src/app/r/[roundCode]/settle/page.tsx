@@ -30,22 +30,43 @@ function ScoreTable({
   rows: Array<{ playerId: string; playerName: string; grossTotal: number; netTotal: number }>;
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200">
-      <div className="grid grid-cols-[1fr_90px_90px] bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-        <div>Player</div>
-        <div className="text-right">Gross</div>
-        <div className="text-right">Net</div>
-      </div>
-      {rows.map((item, index) => (
-        <div key={item.playerId} className="grid grid-cols-[1fr_90px_90px] border-t border-slate-200 px-3 py-3 text-sm">
-          <div className="font-medium">
-            {index + 1}. {item.playerName}
+    <>
+      <div className="space-y-2 sm:hidden">
+        {rows.map((item, index) => (
+          <div key={item.playerId} className="rounded-xl border border-slate-200 bg-white p-3">
+            <p className="truncate font-bold">
+              {index + 1}. {item.playerName}
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+              <div className="rounded-lg bg-slate-50 px-3 py-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Gross</p>
+                <p className="font-bold tabular-nums">{item.grossTotal}</p>
+              </div>
+              <div className="rounded-lg bg-slate-50 px-3 py-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Net</p>
+                <p className="font-bold tabular-nums">{item.netTotal}</p>
+              </div>
+            </div>
           </div>
-          <div className="text-right font-semibold">{item.grossTotal}</div>
-          <div className="text-right font-semibold">{item.netTotal}</div>
+        ))}
+      </div>
+      <div className="hidden overflow-hidden rounded-xl border border-slate-200 sm:block">
+        <div className="grid grid-cols-[1fr_90px_90px] bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <div>Player</div>
+          <div className="text-right">Gross</div>
+          <div className="text-right">Net</div>
         </div>
-      ))}
-    </div>
+        {rows.map((item, index) => (
+          <div key={item.playerId} className="grid grid-cols-[1fr_90px_90px] border-t border-slate-200 px-3 py-3 text-sm">
+            <div className="truncate font-medium">
+              {index + 1}. {item.playerName}
+            </div>
+            <div className="text-right font-semibold tabular-nums">{item.grossTotal}</div>
+            <div className="text-right font-semibold tabular-nums">{item.netTotal}</div>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 

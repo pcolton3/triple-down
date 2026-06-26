@@ -2,11 +2,12 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
 import { loadSharedRoundByCode, sharedRoundBundleToRoundState, updateSharedRoundSetup } from '@/lib/realtime/shared-rounds';
 import { saveCourseTee, savedCourseKey } from '@/lib/realtime/saved-course-tees';
+import { BEEZER_EXTRA_GAMES, type BeezerExtraGameKey } from '@/lib/games/catalog';
 import { useRoundStore } from '@/stores/round-store';
 import type { Player, RoundState } from '@/types/round';
 
@@ -84,6 +85,10 @@ export default function EditRoundSetupPage() {
   const [vegasUnit, setVegasUnit] = useState(String(round.gameSettings.vegasUnit ?? 0));
   const [matchPlayUnit, setMatchPlayUnit] = useState(String(round.gameSettings.matchPlayUnit ?? 0));
   const [teamMatchPlayUnit, setTeamMatchPlayUnit] = useState(String(round.gameSettings.teamMatchPlayUnit ?? 0));
+  const [extraGames, setExtraGames] = useState<Partial<Record<BeezerExtraGameKey, boolean>>>(round.gameSettings.extraGames ?? {});
+  const [extraGameUnits, setExtraGameUnits] = useState<Partial<Record<BeezerExtraGameKey, string>>>(
+    Object.fromEntries(BEEZER_EXTRA_GAMES.map((game) => [game.key, String(round.gameSettings.extraGameUnits?.[game.key] ?? 0)]))
+  );
   const [teamOneName, setTeamOneName] = useState(round.gameSettings.teamOneName ?? 'Team 1');
   const [teamTwoName, setTeamTwoName] = useState(round.gameSettings.teamTwoName ?? 'Team 2');
   const [ryderCupFormat, setRyderCupFormat] = useState<'team_match' | 'singles_match'>(round.gameSettings.ryderCupFormat ?? 'team_match');
@@ -112,22 +117,28 @@ export default function EditRoundSetupPage() {
     vegasEnabled ? 'Vegas' : null,
     matchPlayEnabled ? 'Match Play' : null,
     teamMatchPlayEnabled ? 'Team Match Play' : null,
+    ...BEEZER_EXTRA_GAMES.filter((game) => extraGames[game.key]).map((game) => game.label),
   ].filter(Boolean);
-  const gameOptions: Array<{ label: string; checked: boolean; setChecked: Dispatch<SetStateAction<boolean>> }> = [
-    { label: 'Banker', checked: bankerEnabled, setChecked: setBankerEnabled },
-    { label: 'Skins', checked: skinsEnabled, setChecked: setSkinsEnabled },
-    { label: 'CTP', checked: ctpEnabled, setChecked: setCtpEnabled },
-    { label: 'Low Net', checked: lowNetEnabled, setChecked: setLowNetEnabled },
-    { label: 'Nassau', checked: nassauEnabled, setChecked: setNassauEnabled },
-    { label: 'Stableford', checked: stablefordEnabled, setChecked: setStablefordEnabled },
-    { label: 'Birdie Pot', checked: birdiePotEnabled, setChecked: setBirdiePotEnabled },
-    { label: 'Eagle Pot', checked: eaglePotEnabled, setChecked: setEaglePotEnabled },
-    { label: 'Hole-in-One', checked: holeInOneEnabled, setChecked: setHoleInOneEnabled },
-    { label: 'Wolf', checked: wolfEnabled, setChecked: setWolfEnabled },
-    { label: 'Bingo Bango Bongo', checked: bingoBangoBongoEnabled, setChecked: setBingoBangoBongoEnabled },
-    { label: 'Vegas', checked: vegasEnabled, setChecked: setVegasEnabled },
-    { label: 'Match Play', checked: matchPlayEnabled, setChecked: setMatchPlayEnabled },
-    { label: 'Team Match Play / Ryder Cup', checked: teamMatchPlayEnabled, setChecked: setTeamMatchPlayEnabled },
+  const gameOptions: Array<{ label: string; checked: boolean; onToggle: () => void }> = [
+    { label: 'Banker', checked: bankerEnabled, onToggle: () => setBankerEnabled((value) => !value) },
+    { label: 'Skins', checked: skinsEnabled, onToggle: () => setSkinsEnabled((value) => !value) },
+    { label: 'CTP', checked: ctpEnabled, onToggle: () => setCtpEnabled((value) => !value) },
+    { label: 'Low Net', checked: lowNetEnabled, onToggle: () => setLowNetEnabled((value) => !value) },
+    { label: 'Nassau', checked: nassauEnabled, onToggle: () => setNassauEnabled((value) => !value) },
+    { label: 'Stableford', checked: stablefordEnabled, onToggle: () => setStablefordEnabled((value) => !value) },
+    { label: 'Birdie Pot', checked: birdiePotEnabled, onToggle: () => setBirdiePotEnabled((value) => !value) },
+    { label: 'Eagle Pot', checked: eaglePotEnabled, onToggle: () => setEaglePotEnabled((value) => !value) },
+    { label: 'Hole-in-One', checked: holeInOneEnabled, onToggle: () => setHoleInOneEnabled((value) => !value) },
+    { label: 'Wolf', checked: wolfEnabled, onToggle: () => setWolfEnabled((value) => !value) },
+    { label: 'Bingo Bango Bongo', checked: bingoBangoBongoEnabled, onToggle: () => setBingoBangoBongoEnabled((value) => !value) },
+    { label: 'Vegas', checked: vegasEnabled, onToggle: () => setVegasEnabled((value) => !value) },
+    { label: 'Match Play', checked: matchPlayEnabled, onToggle: () => setMatchPlayEnabled((value) => !value) },
+    { label: 'Team Match Play / Ryder Cup', checked: teamMatchPlayEnabled, onToggle: () => setTeamMatchPlayEnabled((value) => !value) },
+    ...BEEZER_EXTRA_GAMES.map((game) => ({
+      label: game.label,
+      checked: extraGames[game.key] === true,
+      onToggle: () => setExtraGames((current) => ({ ...current, [game.key]: !current[game.key] })),
+    })),
   ];
 
   useEffect(() => {
@@ -171,6 +182,10 @@ export default function EditRoundSetupPage() {
     setVegasEnabled(round.gameSettings.vegasEnabled === true);
     setMatchPlayEnabled(round.gameSettings.matchPlayEnabled === true);
     setTeamMatchPlayEnabled(round.gameSettings.teamMatchPlayEnabled === true);
+    setExtraGames(round.gameSettings.extraGames ?? {});
+    setExtraGameUnits(
+      Object.fromEntries(BEEZER_EXTRA_GAMES.map((game) => [game.key, String(round.gameSettings.extraGameUnits?.[game.key] ?? 0)]))
+    );
     setSkinsPot(String(round.gameSettings.skinsPot ?? 0));
     setLowNetPot(String(round.gameSettings.lowNetPot ?? 0));
     setCtpPot(String(round.gameSettings.ctpPot ?? 0));
@@ -273,6 +288,10 @@ export default function EditRoundSetupPage() {
           vegasEnabled,
           matchPlayEnabled,
           teamMatchPlayEnabled,
+          extraGames,
+          extraGameUnits: Object.fromEntries(
+            BEEZER_EXTRA_GAMES.map((game) => [game.key, Math.max(0, numberOrZero(extraGameUnits[game.key] ?? '0'))])
+          ) as Partial<Record<BeezerExtraGameKey, number>>,
           skinsPot: Math.max(0, numberOrZero(skinsPot)),
           lowNetPot: Math.max(0, numberOrZero(lowNetPot)),
           ctpPot: Math.max(0, numberOrZero(ctpPot)),
@@ -378,7 +397,7 @@ export default function EditRoundSetupPage() {
                       type="checkbox"
                       className="mr-2 h-4 w-4"
                       checked={option.checked}
-                      onChange={() => option.setChecked((value) => !value)}
+                      onChange={option.onToggle}
                     />
                     {option.label}
                   </label>
@@ -494,6 +513,18 @@ export default function EditRoundSetupPage() {
             </label>
           </>
           ) : null}
+          {BEEZER_EXTRA_GAMES.filter((game) => extraGames[game.key]).map((game) => (
+          <label key={game.key} className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{game.unitLabel}</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              className="w-full rounded-xl border border-slate-300 px-3 py-3"
+              value={extraGameUnits[game.key] ?? '0'}
+              onChange={(event) => setExtraGameUnits((current) => ({ ...current, [game.key]: event.target.value }))}
+            />
+          </label>
+          ))}
           <label className="block">
             <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Tee Color</span>
             <input className="w-full rounded-xl border border-slate-300 px-3 py-3" value={teeColor} onChange={(event) => setTeeColor(event.target.value)} />

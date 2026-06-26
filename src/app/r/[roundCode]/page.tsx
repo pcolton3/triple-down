@@ -32,34 +32,82 @@ function ScoreTable({
   const minWidth = gameColumnCount === 0 ? 620 : gameColumnCount === 1 ? 690 : 760;
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200">
-      <div style={{ minWidth }}>
-        <div className="grid bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500" style={{ gridTemplateColumns }}>
-          <div className="truncate">Player</div>
-          <div className="text-right tabular-nums">Holes</div>
-          <div className="text-right tabular-nums">Gross</div>
-          <div className="text-right tabular-nums">Net</div>
-          <div className="text-right tabular-nums">Birdies</div>
-          <div className="text-right tabular-nums">Eagles</div>
-          {showSkins ? <div className="text-right tabular-nums">Skins</div> : null}
-          {showCtp ? <div className="text-right tabular-nums">CTP</div> : null}
-        </div>
+    <>
+      <div className="space-y-2 sm:hidden">
         {rows.map((item, index) => (
-          <div key={item.playerId} className="grid border-t border-slate-200 px-3 py-3 text-sm" style={{ gridTemplateColumns }}>
-            <div className="truncate font-medium">
-              {index + 1}. {item.playerName}
+          <div key={item.playerId} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-base font-black">
+                  {index + 1}. {item.playerName}
+                </p>
+                <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {item.holesCounted} holes complete
+                </p>
+              </div>
+              <div className="shrink-0 text-right">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Net</p>
+                <p className="text-2xl font-black tabular-nums">{item.netTotal}</p>
+              </div>
             </div>
-            <div className="text-right font-semibold tabular-nums">{item.holesCounted}</div>
-            <div className="text-right font-semibold tabular-nums">{item.grossTotal}</div>
-            <div className="text-right font-semibold tabular-nums">{item.netTotal}</div>
-            <div className="text-right font-semibold tabular-nums">{item.naturalBirdies}</div>
-            <div className="text-right font-semibold tabular-nums">{item.naturalEagles}</div>
-            {showSkins ? <div className="text-right font-semibold tabular-nums">{item.skins}</div> : null}
-            {showCtp ? <div className="text-right font-semibold tabular-nums">{item.ctpWins}</div> : null}
+            <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
+              <div className="rounded-lg bg-slate-50 px-2 py-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Gross</p>
+                <p className="font-bold tabular-nums">{item.grossTotal}</p>
+              </div>
+              <div className="rounded-lg bg-slate-50 px-2 py-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Birdies</p>
+                <p className="font-bold tabular-nums">{item.naturalBirdies}</p>
+              </div>
+              <div className="rounded-lg bg-slate-50 px-2 py-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Eagles</p>
+                <p className="font-bold tabular-nums">{item.naturalEagles}</p>
+              </div>
+              {showSkins ? (
+                <div className="rounded-lg bg-slate-50 px-2 py-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Skins</p>
+                  <p className="font-bold tabular-nums">{item.skins}</p>
+                </div>
+              ) : null}
+              {showCtp ? (
+                <div className="rounded-lg bg-slate-50 px-2 py-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">CTP</p>
+                  <p className="font-bold tabular-nums">{item.ctpWins}</p>
+                </div>
+              ) : null}
+            </div>
           </div>
         ))}
       </div>
-    </div>
+      <div className="hidden overflow-x-auto rounded-xl border border-slate-200 sm:block">
+        <div style={{ minWidth }}>
+          <div className="grid bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500" style={{ gridTemplateColumns }}>
+            <div className="truncate">Player</div>
+            <div className="text-right tabular-nums">Holes</div>
+            <div className="text-right tabular-nums">Gross</div>
+            <div className="text-right tabular-nums">Net</div>
+            <div className="text-right tabular-nums">Birdies</div>
+            <div className="text-right tabular-nums">Eagles</div>
+            {showSkins ? <div className="text-right tabular-nums">Skins</div> : null}
+            {showCtp ? <div className="text-right tabular-nums">CTP</div> : null}
+          </div>
+          {rows.map((item, index) => (
+            <div key={item.playerId} className="grid border-t border-slate-200 px-3 py-3 text-sm" style={{ gridTemplateColumns }}>
+              <div className="truncate font-medium">
+                {index + 1}. {item.playerName}
+              </div>
+              <div className="text-right font-semibold tabular-nums">{item.holesCounted}</div>
+              <div className="text-right font-semibold tabular-nums">{item.grossTotal}</div>
+              <div className="text-right font-semibold tabular-nums">{item.netTotal}</div>
+              <div className="text-right font-semibold tabular-nums">{item.naturalBirdies}</div>
+              <div className="text-right font-semibold tabular-nums">{item.naturalEagles}</div>
+              {showSkins ? <div className="text-right font-semibold tabular-nums">{item.skins}</div> : null}
+              {showCtp ? <div className="text-right font-semibold tabular-nums">{item.ctpWins}</div> : null}
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -143,11 +191,13 @@ function ScorecardTable({ round, players }: { round: RoundState; players: Player
   const parIn = backHoles.reduce((sum, hole) => sum + hole.par, 0);
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200">
-      <table className="min-w-[980px] border-collapse text-sm">
+    <div>
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 sm:hidden">Swipe scorecard sideways</p>
+      <div className="overflow-x-auto rounded-xl border border-slate-200">
+      <table className="min-w-[900px] border-collapse text-sm">
         <thead>
           <tr className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            <th className="sticky left-0 z-10 w-44 bg-slate-50 px-3 py-2 text-left">Player</th>
+            <th className="sticky left-0 z-10 w-36 bg-slate-50 px-3 py-2 text-left sm:w-44">Player</th>
             {frontHoles.map((hole) => (
               <th key={hole.holeNumber} className="w-11 px-2 py-2 text-right tabular-nums">{hole.holeNumber}</th>
             ))}
@@ -193,7 +243,7 @@ function ScorecardTable({ round, players }: { round: RoundState; players: Player
 
             return (
               <tr key={player.id} className="border-t border-slate-200 odd:bg-white even:bg-slate-50/50">
-                <th className="sticky left-0 z-10 max-w-44 bg-inherit px-3 py-2 text-left font-semibold">
+                <th className="sticky left-0 z-10 max-w-36 bg-inherit px-3 py-2 text-left font-semibold sm:max-w-44">
                   <span className="block truncate">{player.name}</span>
                 </th>
                 {frontScores.map((score, index) => (
@@ -210,6 +260,7 @@ function ScorecardTable({ round, players }: { round: RoundState; players: Player
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

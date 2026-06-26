@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Suspense, type Dispatch, type SetStateAction, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card } from '@/components/shared/card';
 import { Button } from '@/components/shared/button';
@@ -11,6 +11,7 @@ import { getCourseDetails, getNearbyCourses, searchCourses } from '@/lib/course-
 import { createSharedRoundFromLocalRound, loadSharedRoundsByRyderEventCode, sharedRoundBundleToRoundState } from '@/lib/realtime/shared-rounds';
 import { loadSavedGolfers, saveGolfersForLater, type SavedGolfer } from '@/lib/realtime/saved-golfers';
 import { loadSavedCourseTees, saveCourseTee, savedCourseKey, type SavedCourseTee } from '@/lib/realtime/saved-course-tees';
+import { BEEZER_EXTRA_GAMES, type BeezerExtraGameKey } from '@/lib/games/catalog';
 import type { CourseRecord } from '@/types/course';
 import type { HoleConfig } from '@/types/round';
 
@@ -89,6 +90,8 @@ function NewRoundPageContent() {
   const [vegasUnit, setVegasUnit] = useState(0);
   const [matchPlayUnit, setMatchPlayUnit] = useState(0);
   const [teamMatchPlayUnit, setTeamMatchPlayUnit] = useState(0);
+  const [extraGames, setExtraGames] = useState<Partial<Record<BeezerExtraGameKey, boolean>>>({});
+  const [extraGameUnits, setExtraGameUnits] = useState<Partial<Record<BeezerExtraGameKey, number>>>({});
   const [teamOneName, setTeamOneName] = useState('Team 1');
   const [teamTwoName, setTeamTwoName] = useState('Team 2');
   const [ryderCupFormat, setRyderCupFormat] = useState<'team_match' | 'singles_match'>('team_match');
@@ -145,22 +148,28 @@ function NewRoundPageContent() {
     vegasEnabled ? 'Vegas' : null,
     matchPlayEnabled ? 'Match Play' : null,
     teamMatchPlayEnabled ? 'Team Match Play' : null,
+    ...BEEZER_EXTRA_GAMES.filter((game) => extraGames[game.key]).map((game) => game.label),
   ].filter(Boolean);
-  const gameOptions: Array<{ label: string; checked: boolean; setChecked: Dispatch<SetStateAction<boolean>> }> = [
-    { label: 'Banker', checked: bankerEnabled, setChecked: setBankerEnabled },
-    { label: 'Skins', checked: skinsEnabled, setChecked: setSkinsEnabled },
-    { label: 'CTP', checked: ctpEnabled, setChecked: setCtpEnabled },
-    { label: 'Low Net', checked: lowNetEnabled, setChecked: setLowNetEnabled },
-    { label: 'Nassau', checked: nassauEnabled, setChecked: setNassauEnabled },
-    { label: 'Stableford', checked: stablefordEnabled, setChecked: setStablefordEnabled },
-    { label: 'Birdie Pot', checked: birdiePotEnabled, setChecked: setBirdiePotEnabled },
-    { label: 'Eagle Pot', checked: eaglePotEnabled, setChecked: setEaglePotEnabled },
-    { label: 'Hole-in-One', checked: holeInOneEnabled, setChecked: setHoleInOneEnabled },
-    { label: 'Wolf', checked: wolfEnabled, setChecked: setWolfEnabled },
-    { label: 'Bingo Bango Bongo', checked: bingoBangoBongoEnabled, setChecked: setBingoBangoBongoEnabled },
-    { label: 'Vegas', checked: vegasEnabled, setChecked: setVegasEnabled },
-    { label: 'Match Play', checked: matchPlayEnabled, setChecked: setMatchPlayEnabled },
-    { label: 'Team Match Play / Ryder Cup', checked: teamMatchPlayEnabled, setChecked: setTeamMatchPlayEnabled },
+  const gameOptions: Array<{ label: string; checked: boolean; onToggle: () => void }> = [
+    { label: 'Banker', checked: bankerEnabled, onToggle: () => setBankerEnabled((value) => !value) },
+    { label: 'Skins', checked: skinsEnabled, onToggle: () => setSkinsEnabled((value) => !value) },
+    { label: 'CTP', checked: ctpEnabled, onToggle: () => setCtpEnabled((value) => !value) },
+    { label: 'Low Net', checked: lowNetEnabled, onToggle: () => setLowNetEnabled((value) => !value) },
+    { label: 'Nassau', checked: nassauEnabled, onToggle: () => setNassauEnabled((value) => !value) },
+    { label: 'Stableford', checked: stablefordEnabled, onToggle: () => setStablefordEnabled((value) => !value) },
+    { label: 'Birdie Pot', checked: birdiePotEnabled, onToggle: () => setBirdiePotEnabled((value) => !value) },
+    { label: 'Eagle Pot', checked: eaglePotEnabled, onToggle: () => setEaglePotEnabled((value) => !value) },
+    { label: 'Hole-in-One', checked: holeInOneEnabled, onToggle: () => setHoleInOneEnabled((value) => !value) },
+    { label: 'Wolf', checked: wolfEnabled, onToggle: () => setWolfEnabled((value) => !value) },
+    { label: 'Bingo Bango Bongo', checked: bingoBangoBongoEnabled, onToggle: () => setBingoBangoBongoEnabled((value) => !value) },
+    { label: 'Vegas', checked: vegasEnabled, onToggle: () => setVegasEnabled((value) => !value) },
+    { label: 'Match Play', checked: matchPlayEnabled, onToggle: () => setMatchPlayEnabled((value) => !value) },
+    { label: 'Team Match Play / Ryder Cup', checked: teamMatchPlayEnabled, onToggle: () => setTeamMatchPlayEnabled((value) => !value) },
+    ...BEEZER_EXTRA_GAMES.map((game) => ({
+      label: game.label,
+      checked: extraGames[game.key] === true,
+      onToggle: () => setExtraGames((current) => ({ ...current, [game.key]: !current[game.key] })),
+    })),
   ];
 
   useEffect(() => {
@@ -587,6 +596,8 @@ function NewRoundPageContent() {
         vegasEnabled,
         matchPlayEnabled,
         teamMatchPlayEnabled,
+        extraGames,
+        extraGameUnits,
         skinsPot: Number.isFinite(skinsPot) ? Math.max(0, skinsPot) : 0,
         lowNetPot: Number.isFinite(lowNetPot) ? Math.max(0, lowNetPot) : 0,
         ctpPot: Number.isFinite(ctpPot) ? Math.max(0, ctpPot) : 0,
@@ -833,7 +844,7 @@ function NewRoundPageContent() {
                         type="checkbox"
                         className="mr-2 h-4 w-4"
                         checked={option.checked}
-                        onChange={() => option.setChecked((value) => !value)}
+                        onChange={option.onToggle}
                       />
                       {option.label}
                     </label>
@@ -927,6 +938,16 @@ function NewRoundPageContent() {
               <NumberField value={teamMatchPlayUnit} onChange={setTeamMatchPlayUnit} placeholder="0" />
             </div>
             ) : null}
+            {BEEZER_EXTRA_GAMES.filter((game) => extraGames[game.key]).map((game) => (
+              <div key={game.key}>
+                <label className="mb-1 block text-sm font-medium">{game.unitLabel}</label>
+                <NumberField
+                  value={extraGameUnits[game.key] ?? 0}
+                  onChange={(value) => setExtraGameUnits((current) => ({ ...current, [game.key]: value }))}
+                  placeholder="0"
+                />
+              </div>
+            ))}
           </div>
           {holeInOneEnabled ? (
             <p className="text-sm text-slate-500">Hole-in-One pays $100 from every other golfer to the player who made it.</p>

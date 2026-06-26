@@ -50,6 +50,8 @@ export type RoundGameSettings = {
   vegasEnabled?: boolean;
   matchPlayEnabled?: boolean;
   teamMatchPlayEnabled?: boolean;
+  extraGames?: Partial<Record<import('@/lib/games/catalog').BeezerExtraGameKey, boolean>>;
+  extraGameUnits?: Partial<Record<import('@/lib/games/catalog').BeezerExtraGameKey, number>>;
   skinsPot: number;
   lowNetPot: number;
   ctpPot: number;

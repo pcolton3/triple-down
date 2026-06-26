@@ -25,22 +25,43 @@ function ScoreTable({
   rows: Array<{ playerId: string; playerName: string; grossTotal: number; netTotal: number }>;
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200">
-      <div className="grid grid-cols-[1fr_90px_90px] bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-        <div>Player</div>
-        <div className="text-right">Gross</div>
-        <div className="text-right">Net</div>
-      </div>
-      {rows.map((item, index) => (
-        <div key={item.playerId} className="grid grid-cols-[1fr_90px_90px] border-t border-slate-200 px-3 py-3 text-sm">
-          <div className="font-medium">
-            {index + 1}. {item.playerName}
+    <>
+      <div className="space-y-2 sm:hidden">
+        {rows.map((item, index) => (
+          <div key={item.playerId} className="rounded-xl border border-slate-200 bg-white p-3">
+            <p className="truncate font-bold">
+              {index + 1}. {item.playerName}
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+              <div className="rounded-lg bg-slate-50 px-3 py-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Gross</p>
+                <p className="font-bold tabular-nums">{item.grossTotal}</p>
+              </div>
+              <div className="rounded-lg bg-slate-50 px-3 py-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Net</p>
+                <p className="font-bold tabular-nums">{item.netTotal}</p>
+              </div>
+            </div>
           </div>
-          <div className="text-right font-semibold">{item.grossTotal}</div>
-          <div className="text-right font-semibold">{item.netTotal}</div>
+        ))}
+      </div>
+      <div className="hidden overflow-hidden rounded-xl border border-slate-200 sm:block">
+        <div className="grid grid-cols-[1fr_90px_90px] bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <div>Player</div>
+          <div className="text-right">Gross</div>
+          <div className="text-right">Net</div>
         </div>
-      ))}
-    </div>
+        {rows.map((item, index) => (
+          <div key={item.playerId} className="grid grid-cols-[1fr_90px_90px] border-t border-slate-200 px-3 py-3 text-sm">
+            <div className="truncate font-medium">
+              {index + 1}. {item.playerName}
+            </div>
+            <div className="text-right font-semibold tabular-nums">{item.grossTotal}</div>
+            <div className="text-right font-semibold tabular-nums">{item.netTotal}</div>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -116,11 +137,13 @@ function ScorecardTable({
   const parIn = backHoles.reduce((sum, hole) => sum + hole.par, 0);
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200">
-      <table className="min-w-[980px] border-collapse text-sm">
+    <div>
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 sm:hidden">Swipe scorecard sideways</p>
+      <div className="overflow-x-auto rounded-xl border border-slate-200">
+      <table className="min-w-[900px] border-collapse text-sm">
         <thead>
           <tr className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            <th className="sticky left-0 z-10 w-44 bg-slate-50 px-3 py-2 text-left">Player</th>
+            <th className="sticky left-0 z-10 w-36 bg-slate-50 px-3 py-2 text-left sm:w-44">Player</th>
             {frontHoles.map((hole) => (
               <th key={hole.holeNumber} className="w-11 px-2 py-2 text-right tabular-nums">{hole.holeNumber}</th>
             ))}
@@ -166,7 +189,7 @@ function ScorecardTable({
 
             return (
               <tr key={player.id} className="border-t border-slate-200 odd:bg-white even:bg-slate-50/50">
-                <th className="sticky left-0 z-10 max-w-44 bg-inherit px-3 py-2 text-left font-semibold">
+                <th className="sticky left-0 z-10 max-w-36 bg-inherit px-3 py-2 text-left font-semibold sm:max-w-44">
                   <span className="block truncate">{player.name}</span>
                 </th>
                 {frontScores.map((score, index) => {
@@ -225,6 +248,7 @@ function ScorecardTable({
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
