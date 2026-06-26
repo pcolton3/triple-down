@@ -190,7 +190,7 @@ export async function getNearbyCourses(options: SearchOptions = {}): Promise<Cou
   return dedupeCourses([...savedCourses, ...localCourses, ...remoteCourses]).slice(0, limit);
 }
 
-export async function getCourseDetails(courseId: string): Promise<CourseRecord | null> {
+export async function getCourseDetails(courseId: string, courseHint?: Partial<CourseRecord>): Promise<CourseRecord | null> {
   const local = courseCatalog.find((course) => course.id === courseId);
   if (local) return local;
 
@@ -212,7 +212,14 @@ export async function getCourseDetails(courseId: string): Promise<CourseRecord |
     if (data) return mapSavedCourse(data);
   }
 
-  const response = await fetch(`/api/courses/details?id=${encodeURIComponent(courseId)}`, {
+  const params = new URLSearchParams({ id: courseId });
+  if (courseHint?.name) params.set('name', courseHint.name);
+  if (courseHint?.city) params.set('city', courseHint.city);
+  if (courseHint?.state) params.set('state', courseHint.state);
+  if (courseHint?.latitude != null) params.set('lat', String(courseHint.latitude));
+  if (courseHint?.longitude != null) params.set('lon', String(courseHint.longitude));
+
+  const response = await fetch(`/api/courses/details?${params.toString()}`, {
     method: 'GET',
     cache: 'no-store',
   });

@@ -31,6 +31,15 @@ function buildDefaultPlayers(count = 4) {
   }));
 }
 
+function buildDefaultHoleConfig() {
+  return Array.from({ length: 18 }, (_, index) => ({ holeNumber: index + 1, par: 4 as const, handicapIndex: index + 1 }));
+}
+
+function mergeHoleConfig(importedHoles: HoleConfig[]) {
+  const importedByNumber = new Map(importedHoles.map((hole) => [hole.holeNumber, hole]));
+  return buildDefaultHoleConfig().map((hole) => importedByNumber.get(hole.holeNumber) ?? hole);
+}
+
 function NumberField({
   value,
   onChange,
@@ -102,6 +111,7 @@ function NewRoundPageContent() {
   const [teeColor, setTeeColor] = useState('');
   const [savedCourseTees, setSavedCourseTees] = useState<SavedCourseTee[]>([]);
   const [savedCourseTeesStatus, setSavedCourseTeesStatus] = useState('');
+  const [courseImportStatus, setCourseImportStatus] = useState('');
   const [pcc, setPcc] = useState('0');
   const [playerCount, setPlayerCount] = useState(4);
   const [players, setPlayers] = useState(buildDefaultPlayers(4));
@@ -109,9 +119,7 @@ function NewRoundPageContent() {
   const [courseQuery, setCourseQuery] = useState('');
   const [courseResults, setCourseResults] = useState<CourseRecord[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<CourseRecord | null>(null);
-  const [manualHoles, setManualHoles] = useState<HoleConfig[]>(
-    Array.from({ length: 18 }, (_, index) => ({ holeNumber: index + 1, par: 4, handicapIndex: index + 1 }))
-  );
+  const [manualHoles, setManualHoles] = useState<HoleConfig[]>(buildDefaultHoleConfig());
   const [locationStatus, setLocationStatus] = useState('Getting nearby courses…');
   const [searchMode, setSearchMode] = useState<'nearby' | 'search'>('nearby');
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -469,13 +477,15 @@ function NewRoundPageContent() {
     setCourseName(resultCourse.name);
     setCourseQuery(resultCourse.name);
     setCourseResults([]);
+    setCourseImportStatus('Checking OpenStreetMap for scorecard details...');
     void loadTeesForCourse(resultCourse.id, resultCourse.name);
 
     if (resultCourse.holes.length > 0) {
-      setManualHoles(resultCourse.holes.map((hole) => ({ ...hole })));
+      setManualHoles(mergeHoleConfig(resultCourse.holes));
+      setCourseImportStatus(`Loaded ${resultCourse.holes.length} saved/local hole setup${resultCourse.holes.length === 1 ? '' : 's'}.`);
     }
 
-    const detailedCourse = await getCourseDetails(courseId);
+    const detailedCourse = await getCourseDetails(courseId, resultCourse);
     if (detailedCourse) {
       const mergedCourse = {
         ...resultCourse,
@@ -493,8 +503,17 @@ function NewRoundPageContent() {
       void loadTeesForCourse(mergedCourse.id, mergedCourse.name);
 
       if (mergedCourse.holes.length > 0) {
-        setManualHoles(mergedCourse.holes.map((hole) => ({ ...hole })));
+        setManualHoles(mergeHoleConfig(mergedCourse.holes));
+        setCourseImportStatus(
+          detailedCourse.holes.length >= 18
+            ? 'Imported full scorecard from OpenStreetMap.'
+            : `Imported ${detailedCourse.holes.length} OpenStreetMap hole${detailedCourse.holes.length === 1 ? '' : 's'}; fill any missing details below.`
+        );
+      } else {
+        setCourseImportStatus('No OpenStreetMap scorecard found yet. You can enter it once and save it for later rounds.');
       }
+    } else if (resultCourse.holes.length === 0) {
+      setCourseImportStatus('No OpenStreetMap scorecard found yet. You can enter it once and save it for later rounds.');
     }
   }
 
@@ -523,9 +542,8 @@ function NewRoundPageContent() {
     setSlopeRating('');
     setSavedCourseTees([]);
     setSavedCourseTeesStatus('');
-    setManualHoles(
-      Array.from({ length: 18 }, (_, index) => ({ holeNumber: index + 1, par: 4, handicapIndex: index + 1 }))
-    );
+    setCourseImportStatus('');
+    setManualHoles(buildDefaultHoleConfig());
     void getNearbyCourses(userLocation ?? undefined).then((results) => setCourseResults(results));
   }
 
@@ -720,6 +738,11 @@ function NewRoundPageContent() {
                     <div className="text-sm text-slate-500">
                       {course.city}, {course.state}
                     </div>
+                    {course.holes.length > 0 ? (
+                      <div className="mt-1 text-xs font-semibold text-[#0f5132]">
+                        {course.holes.length} saved hole{course.holes.length === 1 ? '' : 's'}
+                      </div>
+                    ) : null}
                   </div>
                   <span className="text-sm font-bold text-[#0f5132]">Select</span>
                 </button>
@@ -1226,6 +1249,9 @@ function NewRoundPageContent() {
                   {selectedCourse.city && selectedCourse.state ? ', ' : ''}
                   {selectedCourse.state}
                 </>
+              ) : null}
+              {courseImportStatus ? (
+                <div className="mt-2 text-xs font-semibold text-[#0f5132]">{courseImportStatus}</div>
               ) : null}
             </div>
           ) : (
