@@ -1,6 +1,6 @@
-# Triple Down PWA Starter
+# Triple Track
 
-A runnable Next.js starter for a mobile-first golf betting web app focused on the Banker game inside Triple Down.
+A mobile-first golf event scoring app for live multi-group rounds, side games, Banker, and Ryder Cup style events.
 
 ## What is included
 
@@ -9,8 +9,9 @@ A runnable Next.js starter for a mobile-first golf betting web app focused on th
 - Tailwind CSS
 - Zustand state store
 - Banker settlement engine
-- Landing page, games page, create round page, live round page, ledger page, and summary page
-- Blue/gray design direction based on your reference
+- Multi-group scorekeeping
+- Event leaderboard, history, setup, settle-up, and Ryder Cup event pages
+- PWA manifest, service worker, and install button
 
 ## Run locally
 
@@ -21,23 +22,32 @@ npm run dev
 
 Then open `http://localhost:3000`
 
+## Test scoring
+
+Run the fast local scoring checks:
+
+```bash
+npm run test:scoring
+```
+
+This verifies core scoring calculations without touching Supabase.
+
+Run the Supabase multi-scorekeeper concurrency check:
+
+```bash
+npm run test:concurrency
+```
+
+This creates a temporary test event in the configured Supabase project, saves multiple groups at the same time, reloads the round, and confirms the saved group scores did not overwrite each other.
+
 ## Main routes
 
 - `/` home
 - `/games` games grid
 - `/rounds/new` create round
-- `/r/BANK01` live round
-- `/r/BANK01/ledger` ledger
-- `/r/BANK01/summary` summary
-
-## Notes
-
-This starter uses in-memory demo state.
-
-Next upgrades to add:
-- Supabase persistence
-- shareable round codes backed by the database
-- multi-hole support
-- real create-round form handling
-- PWA manifest and install prompt
-- permissions for friends joining from a link
+- `/r/BANK01` event leaderboard
+- `/r/BANK01/group/1` group scoring
+- `/r/BANK01/history` round history and scorecard
+- `/r/BANK01/setup` round setup edits
+- `/r/BANK01/settle` settle up
+- `/e/RYDER1` Ryder Cup event
