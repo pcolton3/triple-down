@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useState } from 'react';
+import { InstallAppButton } from '@/components/pwa/install-app-button';
 import { Button } from '@/components/shared/button';
 
 export function Hero() {
@@ -45,6 +46,8 @@ export function Hero() {
           <Button variant="secondary">Start a Round</Button>
         </Link>
       </div>
+
+      <InstallAppButton />
 
       <div className="mt-10 grid gap-3 md:grid-cols-3">
         {[
