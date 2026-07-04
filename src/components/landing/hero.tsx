@@ -41,9 +41,14 @@ export function Hero() {
         <Button type="submit">Join Round</Button>
       </form>
 
-      <div className="mt-4 flex items-center justify-center">
-        <Link href="/rounds/new">
-          <Button variant="secondary">Start a Round</Button>
+      <div className="mx-auto mt-4 flex max-w-md items-center justify-center">
+        <Link href="/rounds/new" className="w-full">
+          <Button
+            variant="secondary"
+            className="w-full border-[#d7aa2f] bg-[#f2c94c] py-4 text-[#071b12] hover:border-[#b78f20] hover:bg-[#e4b936]"
+          >
+            Start a Round
+          </Button>
         </Link>
       </div>
 
