@@ -24,10 +24,10 @@ export function Hero() {
         Live golf scoring and games
       </p>
       <h1 className="text-5xl font-black tracking-tight text-[#071b12] md:text-7xl">
-        Run a drama free golf event.
+        Golf games without the scorecard chaos.
       </h1>
       <p className="mx-auto mt-5 max-w-2xl text-base font-medium text-[#52635a] md:text-lg">
-        Track multiple groups, live leaderboards, skins, CTP, low net, Banker, and Ryder Cup style matches without passing one scorecard around.
+        Live group scoring, leaderboards, side games, match play, and settle-up without passing scorecards around.
       </p>
       </div>
 
