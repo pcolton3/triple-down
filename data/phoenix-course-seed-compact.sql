@@ -1,4 +1,4 @@
-create extension if not exists pgcrypto;
+﻿create extension if not exists pgcrypto;
 
 create table if not exists public.saved_courses (id uuid primary key default gen_random_uuid(), source_provider text, source_course_id text, name text not null, normalized_name text not null, city text, state text, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), unique (normalized_name, city, state));
 create table if not exists public.saved_course_holes (id uuid primary key default gen_random_uuid(), saved_course_id uuid not null references public.saved_courses(id) on delete cascade, hole_number integer not null check (hole_number between 1 and 18), par integer check (par between 3 and 5), handicap_index integer check (handicap_index between 1 and 18), created_at timestamptz not null default now(), updated_at timestamptz not null default now(), unique (saved_course_id, hole_number));
@@ -12,7 +12,7 @@ update public.saved_course_tees set gender = 'M' where gender is null;
 alter table public.saved_course_tees add column if not exists total_yards integer;
 alter table public.saved_course_tees add column if not exists source_url text;
 alter table public.saved_course_tees drop constraint if exists saved_course_tees_course_key_tee_color_key;
-do $$ begin
+do  begin
 if not exists (select 1 from pg_constraint where conname='saved_course_tees_course_key_tee_name_gender_key' and conrelid='public.saved_course_tees'::regclass) then alter table public.saved_course_tees add constraint saved_course_tees_course_key_tee_name_gender_key unique (course_key, tee_name, gender); end if;
 end $$;
 
@@ -261,10 +261,6 @@ values
   ('san-marcos', 'San Marcos', 'Blue', 'Blue', 'M', 69.3, 120, null, 'https://www.sanmarcosgolfresort.com/golf/course-details'),
   ('seville', 'Seville', 'Gold/Blue', 'Gold/Blue', 'M', 69.8, 116, null, 'https://course.bluegolf.com/bluegolf/course/course/sevillegcc/detailedscorecard.htm'),
   ('stonecreek-golf-club', 'Stonecreek Golf Club', 'Middle', 'Middle', 'M', 68.1, 125, null, 'https://customer.condoresorts.com/Stonecreek'),
-  ('sun-city-lakes-east', 'Sun City Lakes East', 'White', 'White', 'M', 56.8, 84, null, 'https://cms.suncityaz.org/media/1cgj5pfg/sun-city-lakes-golf-club-east-course-13595.pdf'),
-  ('sun-city-lakes-west', 'Sun City Lakes West', 'White', 'White', 'M', 67.8, 112, null, 'https://cms.suncityaz.org/media/kgrp1vqd/sun-city-az-lakes-west-123.pdf'),
-  ('sun-city-north', 'Sun City North', 'White', 'White', 'M', 68.4, 112, null, 'https://cms.suncityaz.org/media/23edbm2n/north-scorecard-updated-2016-07.pdf'),
-  ('sun-city-south', 'Sun City South', 'White', 'White', 'M', 67.8, 113, null, 'https://cms.suncityaz.org/media/sffcoe52/sun-city-south-118113.pdf'),
   ('sundance-golf-club', 'Sundance Golf Club', 'Blue', 'Blue', 'M', 70.6, 123, null, 'https://sundancegolfclub.com/wp-content/uploads/2025/11/SDG-SC1.pdf'),
   ('sunridge-canyon', 'SunRidge Canyon', 'Middle', 'Middle', 'M', 68.2, 129, null, 'https://customer.condoresorts.com/SunridgeCanyon'),
   ('superstition-springs', 'Superstition Springs', 'Middle', 'Middle', 'M', 70.5, 124, null, 'https://condoresorts.com/superstition-springs-golf-course-arizona/'),
@@ -300,7 +296,31 @@ values
   ('wildfire-golf-club-palmer', 'Wildfire Golf Club (Palmer)', 'Championship', 'Blue', 'M', 70.4, 131, 6645, 'https://www.golfify.io/courses/wildfire-golf-club-palmer'),
   ('wildfire-golf-club-palmer', 'Wildfire Golf Club (Palmer)', 'Regular', 'White', 'M', 68.1, 122, 6060, 'https://www.golfify.io/courses/wildfire-golf-club-palmer'),
   ('wildfire-golf-club-palmer', 'Wildfire Golf Club (Palmer)', 'Forward', 'Red', 'M', 70.6, 118, 5390, 'https://www.golfify.io/courses/wildfire-golf-club-palmer'),
-  ('wildfire-golf-club-palmer', 'Wildfire Golf Club (Palmer)', 'Wildfire', 'Maroon', 'M', 68.5, 107, 4835, 'https://www.golfify.io/courses/wildfire-golf-club-palmer')
+  ('wildfire-golf-club-palmer', 'Wildfire Golf Club (Palmer)', 'Wildfire', 'Maroon', 'M', 68.5, 107, 4835, 'https://www.golfify.io/courses/wildfire-golf-club-palmer'),
+  ('sun-city-north', 'Sun City North', 'Blue', 'Blue', 'M', 69.7, 115, 6423, 'https://cms.suncityaz.org/media/23edbm2n/north-scorecard-updated-2016-07.pdf'),
+  ('sun-city-north', 'Sun City North', 'White', 'White', 'M', 68.4, 112, 6159, 'https://cms.suncityaz.org/media/23edbm2n/north-scorecard-updated-2016-07.pdf'),
+  ('sun-city-north', 'Sun City North', 'White', 'White', 'F', 74.1, 124, 6159, 'https://cms.suncityaz.org/media/23edbm2n/north-scorecard-updated-2016-07.pdf'),
+  ('sun-city-north', 'Sun City North', 'Red', 'Red', 'M', 65.8, 106, 5571, 'https://cms.suncityaz.org/media/23edbm2n/north-scorecard-updated-2016-07.pdf'),
+  ('sun-city-north', 'Sun City North', 'Red', 'Red', 'F', 70.8, 118, 5571, 'https://cms.suncityaz.org/media/23edbm2n/north-scorecard-updated-2016-07.pdf'),
+  ('sun-city-north', 'Sun City North', 'Yellow', 'Yellow', 'M', 62.5, 99, 4962, 'https://cms.suncityaz.org/media/23edbm2n/north-scorecard-updated-2016-07.pdf'),
+  ('sun-city-north', 'Sun City North', 'Yellow', 'Yellow', 'F', 67.6, 115, 4962, 'https://cms.suncityaz.org/media/23edbm2n/north-scorecard-updated-2016-07.pdf'),
+  ('sun-city-south', 'Sun City South', 'Black', 'Black', 'M', 71.7, 118, 6813, 'https://cms.suncityaz.org/media/sffcoe52/sun-city-south-118113.pdf'),
+  ('sun-city-south', 'Sun City South', 'Blue', 'Blue', 'M', 69.9, 116, 6456, 'https://cms.suncityaz.org/media/sffcoe52/sun-city-south-118113.pdf'),
+  ('sun-city-south', 'Sun City South', 'White', 'White', 'M', 67.8, 113, 6041, 'https://cms.suncityaz.org/media/sffcoe52/sun-city-south-118113.pdf'),
+  ('sun-city-south', 'Sun City South', 'White', 'White', 'F', 73.9, 121, 6041, 'https://cms.suncityaz.org/media/sffcoe52/sun-city-south-118113.pdf'),
+  ('sun-city-south', 'Sun City South', 'Red', 'Red', 'M', 65.4, 107, 5530, 'https://cms.suncityaz.org/media/sffcoe52/sun-city-south-118113.pdf'),
+  ('sun-city-south', 'Sun City South', 'Red', 'Red', 'F', 70.5, 116, 5530, 'https://cms.suncityaz.org/media/sffcoe52/sun-city-south-118113.pdf'),
+  ('sun-city-south', 'Sun City South', 'Yellow', 'Yellow', 'M', 63.6, 102, 5195, 'https://cms.suncityaz.org/media/sffcoe52/sun-city-south-118113.pdf'),
+  ('sun-city-south', 'Sun City South', 'Yellow', 'Yellow', 'F', 68.5, 111, 5195, 'https://cms.suncityaz.org/media/sffcoe52/sun-city-south-118113.pdf'),
+  ('sun-city-lakes-west', 'Sun City Lakes West', 'Blue', 'Blue', 'M', 68.8, 117, 6195, 'https://cms.suncityaz.org/media/kgrp1vqd/sun-city-az-lakes-west-123.pdf'),
+  ('sun-city-lakes-west', 'Sun City Lakes West', 'White', 'White', 'M', 67.8, 112, 5944, 'https://cms.suncityaz.org/media/kgrp1vqd/sun-city-az-lakes-west-123.pdf'),
+  ('sun-city-lakes-west', 'Sun City Lakes West', 'White', 'White', 'F', 73.2, 121, 5944, 'https://cms.suncityaz.org/media/kgrp1vqd/sun-city-az-lakes-west-123.pdf'),
+  ('sun-city-lakes-west', 'Sun City Lakes West', 'Red', 'Red', 'M', 66.0, 107, 5620, 'https://cms.suncityaz.org/media/kgrp1vqd/sun-city-az-lakes-west-123.pdf'),
+  ('sun-city-lakes-west', 'Sun City Lakes West', 'Red', 'Red', 'F', 71.0, 114, 5620, 'https://cms.suncityaz.org/media/kgrp1vqd/sun-city-az-lakes-west-123.pdf'),
+  ('sun-city-lakes-west', 'Sun City Lakes West', 'Yellow', 'Yellow', 'M', 62.0, 97, 4696, 'https://cms.suncityaz.org/media/kgrp1vqd/sun-city-az-lakes-west-123.pdf'),
+  ('sun-city-lakes-west', 'Sun City Lakes West', 'Yellow', 'Yellow', 'F', 66.3, 105, 4696, 'https://cms.suncityaz.org/media/kgrp1vqd/sun-city-az-lakes-west-123.pdf'),
+  ('sun-city-lakes-east', 'Sun City Lakes East', 'White', 'White', 'M', 56.8, 84, 3310, 'https://cms.suncityaz.org/media/1cgj5pfg/sun-city-lakes-golf-club-east-course-13595.pdf'),
+  ('sun-city-lakes-east', 'Sun City Lakes East', 'Red', 'Red', 'M', 55.7, 80, 2914, 'https://cms.suncityaz.org/media/1cgj5pfg/sun-city-lakes-golf-club-east-course-13595.pdf')
 ), upsert_courses as (
   insert into public.saved_courses (source_provider, source_course_id, name, normalized_name, city, state, updated_at)
   select 'manual_seed', course_key, course_name, course_key, city, state, now() from course_seed
