@@ -279,20 +279,71 @@ create table if not exists public.saved_golfer_scores (
   unique (golfer_id, round_code, player_key)
 );
 
+create table if not exists public.saved_courses (
+  id uuid primary key default gen_random_uuid(),
+  source_provider text,
+  source_course_id text,
+  name text not null,
+  normalized_name text not null,
+  city text,
+  state text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (normalized_name, city, state)
+);
+
+create table if not exists public.saved_course_holes (
+  id uuid primary key default gen_random_uuid(),
+  saved_course_id uuid not null references public.saved_courses(id) on delete cascade,
+  hole_number integer not null check (hole_number between 1 and 18),
+  par integer check (par between 3 and 5),
+  handicap_index integer check (handicap_index between 1 and 18),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (saved_course_id, hole_number)
+);
+
 create table if not exists public.saved_course_tees (
   id uuid primary key default gen_random_uuid(),
   course_key text not null,
   course_name text not null,
+  tee_name text not null,
   tee_color text not null,
+  gender text,
   course_rating numeric not null,
   slope_rating numeric not null,
+  total_yards integer,
+  source_url text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (course_key, tee_color)
+  unique (course_key, tee_name, gender)
 );
+
+alter table public.saved_course_tees add column if not exists tee_name text;
+update public.saved_course_tees set tee_name = tee_color where tee_name is null;
+alter table public.saved_course_tees alter column tee_name set not null;
+alter table public.saved_course_tees add column if not exists gender text;
+update public.saved_course_tees set gender = 'M' where gender is null;
+alter table public.saved_course_tees add column if not exists total_yards integer;
+alter table public.saved_course_tees add column if not exists source_url text;
+alter table public.saved_course_tees drop constraint if exists saved_course_tees_course_key_tee_color_key;
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'saved_course_tees_course_key_tee_name_gender_key'
+      and conrelid = 'public.saved_course_tees'::regclass
+  ) then
+    alter table public.saved_course_tees
+      add constraint saved_course_tees_course_key_tee_name_gender_key unique (course_key, tee_name, gender);
+  end if;
+end $$;
 
 alter table public.saved_golfers enable row level security;
 alter table public.saved_golfer_scores enable row level security;
+alter table public.saved_courses enable row level security;
+alter table public.saved_course_holes enable row level security;
 alter table public.saved_course_tees enable row level security;
 
 do $$
@@ -361,6 +412,74 @@ begin
   ) then
     create policy saved_golfer_scores_public_update
       on public.saved_golfer_scores for update
+      using (true)
+      with check (true);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'saved_courses'
+      and policyname = 'saved_courses_public_read'
+  ) then
+    create policy saved_courses_public_read
+      on public.saved_courses for select
+      using (true);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'saved_courses'
+      and policyname = 'saved_courses_public_insert'
+  ) then
+    create policy saved_courses_public_insert
+      on public.saved_courses for insert
+      with check (true);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'saved_courses'
+      and policyname = 'saved_courses_public_update'
+  ) then
+    create policy saved_courses_public_update
+      on public.saved_courses for update
+      using (true)
+      with check (true);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'saved_course_holes'
+      and policyname = 'saved_course_holes_public_read'
+  ) then
+    create policy saved_course_holes_public_read
+      on public.saved_course_holes for select
+      using (true);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'saved_course_holes'
+      and policyname = 'saved_course_holes_public_insert'
+  ) then
+    create policy saved_course_holes_public_insert
+      on public.saved_course_holes for insert
+      with check (true);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'saved_course_holes'
+      and policyname = 'saved_course_holes_public_update'
+  ) then
+    create policy saved_course_holes_public_update
+      on public.saved_course_holes for update
       using (true)
       with check (true);
   end if;

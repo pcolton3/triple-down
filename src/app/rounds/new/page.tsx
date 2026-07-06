@@ -778,7 +778,10 @@ function NewRoundPageContent() {
                   <option value="">Select saved tees</option>
                   {savedCourseTees.map((tee) => (
                     <option key={tee.id} value={tee.id}>
-                      {tee.teeColor} - {tee.courseRating} / {tee.slopeRating}
+                      {tee.teeName}
+                      {tee.gender ? ` (${tee.gender})` : ''}
+                      {tee.totalYards ? ` - ${tee.totalYards} yds` : ''}
+                      {` - ${tee.courseRating} / ${tee.slopeRating}`}
                     </option>
                   ))}
                 </select>
