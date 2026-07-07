@@ -39,12 +39,15 @@ function itemToCourse(item: NominatimItem): CourseRecord | null {
   const displayName = item.display_name ?? '';
   const primaryName = normalizeName(displayName.split(',')[0] ?? item.name ?? 'Golf Course');
   const lowerDisplay = displayName.toLowerCase();
+  const lowerPrimaryName = primaryName.toLowerCase();
+  const isRoadLike =
+    /\b(road|rd|street|st|avenue|ave|boulevard|blvd|drive|dr|lane|ln|way|trail)\b/.test(lowerPrimaryName);
   const isGolf =
-    lowerDisplay.includes('golf') ||
     item.type === 'golf_course' ||
-    item.class === 'leisure';
+    lowerDisplay.includes('golf') ||
+    lowerPrimaryName.includes('golf');
 
-  if (!isGolf) return null;
+  if (!isGolf || isRoadLike) return null;
 
   return {
     id: `osm-${item.osm_type ?? 'node'}-${item.osm_id ?? item.place_id ?? primaryName}`,
@@ -86,6 +89,7 @@ export async function GET(request: NextRequest) {
 
   if (hasLocation) {
     params.set('viewbox', buildViewbox(lat, lon));
+    params.set('bounded', '1');
   }
 
   try {

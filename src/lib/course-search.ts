@@ -96,6 +96,21 @@ function dedupeCourses(courses: CourseRecord[]) {
   });
 }
 
+function distanceScore(course: CourseRecord, options: SearchOptions) {
+  if (
+    options.latitude == null ||
+    options.longitude == null ||
+    course.latitude == null ||
+    course.longitude == null
+  ) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const latDelta = course.latitude - options.latitude;
+  const lonDelta = course.longitude - options.longitude;
+  return latDelta * latDelta + lonDelta * lonDelta;
+}
+
 async function fetchRemoteCourses(query: string, options: SearchOptions): Promise<RemoteCourseResult[]> {
   const params = new URLSearchParams();
   params.set('limit', String(options.limit ?? 12));
@@ -113,7 +128,14 @@ async function fetchRemoteCourses(query: string, options: SearchOptions): Promis
   }
 
   const data = (await response.json()) as { courses?: RemoteCourseResult[] };
-  return data.courses ?? [];
+  const courses = data.courses ?? [];
+  const normalizedQuery = normalize(query);
+  if (!normalizedQuery) return courses;
+
+  return courses.filter((course) => {
+    const searchable = normalize(`${course.name} ${course.city} ${course.state}`);
+    return searchable.includes(normalizedQuery);
+  });
 }
 
 export async function searchCourses(query: string, options: SearchOptions = {}): Promise<CourseRecord[]> {
@@ -154,11 +176,19 @@ export async function getNearbyCourses(options: SearchOptions = {}): Promise<Cou
   const limit = options.limit ?? 12;
 
   const [savedCourses, remoteCourses] = await Promise.all([
-    fetchSavedCourses('', options),
+    fetchSavedCourses('', { ...options, limit: 250 }),
     fetchRemoteCourses('', options),
   ]);
 
-  return dedupeCourses([...savedCourses, ...remoteCourses]).slice(0, limit);
+  const savedByIdentity = new Map(savedCourses.map((course) => [normalizeCourseIdentity(course.name), course]));
+  const orderedRemoteCourses = [...remoteCourses].sort(
+    (a, b) => distanceScore(a, options) - distanceScore(b, options)
+  );
+  const nearbyWithSavedDetails = orderedRemoteCourses.map((course) => {
+    return savedByIdentity.get(normalizeCourseIdentity(course.name)) ?? course;
+  });
+
+  return dedupeCourses([...nearbyWithSavedDetails, ...savedCourses]).slice(0, limit);
 }
 
 export async function getCourseDetails(courseId: string, courseHint?: Partial<CourseRecord>): Promise<CourseRecord | null> {
