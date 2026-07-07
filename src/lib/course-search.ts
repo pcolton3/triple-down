@@ -6,6 +6,13 @@ function normalize(text: string) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+function normalizeCourseIdentity(text: string) {
+  return normalize(text)
+    .replace(/\b(country club|golf club|golf course|gc|course|club)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 type SearchOptions = {
   latitude?: number | null;
   longitude?: number | null;
@@ -82,33 +89,11 @@ async function fetchSavedCourses(query: string, options: SearchOptions): Promise
 function dedupeCourses(courses: CourseRecord[]) {
   const seen = new Set<string>();
   return courses.filter((course) => {
-    const key = normalize(course.name);
+    const key = normalizeCourseIdentity(course.name);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
-}
-
-function scoreLocalCourse(course: CourseRecord, query: string, options: SearchOptions) {
-  const normalized = normalize(query);
-  const exactName = normalize(course.name);
-  const haystack = normalize(`${course.name} ${course.city} ${course.state}`);
-
-  let score = normalized ? (haystack.includes(normalized) ? 100 : 0) : 25;
-
-  if (normalized && exactName.startsWith(normalized)) score += 30;
-  if (normalized && exactName === normalized) score += 60;
-
-  const phoenixAreaCities = new Set(['sun city', 'peoria', 'cave creek', 'glendale', 'phoenix', 'scottsdale']);
-  if (phoenixAreaCities.has(normalize(course.city))) score += 15;
-
-  if (options.latitude != null && options.longitude != null && course.latitude != null && course.longitude != null) {
-    const latDelta = Math.abs(course.latitude - options.latitude);
-    const lonDelta = Math.abs(course.longitude - options.longitude);
-    score += Math.max(0, 25 - (latDelta + lonDelta) * 50);
-  }
-
-  return score;
 }
 
 async function fetchRemoteCourses(query: string, options: SearchOptions): Promise<RemoteCourseResult[]> {
@@ -134,22 +119,14 @@ async function fetchRemoteCourses(query: string, options: SearchOptions): Promis
 export async function searchCourses(query: string, options: SearchOptions = {}): Promise<CourseRecord[]> {
   const limit = options.limit ?? 12;
 
-  const [savedCourses, localCourses, remoteCourses] = await Promise.all([
+  const [savedCourses, remoteCourses] = await Promise.all([
     fetchSavedCourses(query, options),
-    Promise.resolve(
-      [...courseCatalog]
-        .map((course) => ({ course, score: scoreLocalCourse(course, query, options) }))
-        .filter((item) => item.score > 0)
-        .sort((a, b) => b.score - a.score || a.course.name.localeCompare(b.course.name))
-        .slice(0, limit)
-        .map((item) => item.course)
-    ),
     fetchRemoteCourses(query, options),
   ]);
 
 const normalizedQuery = normalize(query);
 
-const combined = dedupeCourses([...savedCourses, ...localCourses, ...remoteCourses]);
+const combined = dedupeCourses([...savedCourses, ...remoteCourses]);
 
 return combined
   .sort((a, b) => {
@@ -181,13 +158,7 @@ export async function getNearbyCourses(options: SearchOptions = {}): Promise<Cou
     fetchRemoteCourses('', options),
   ]);
 
-  const localCourses = [...courseCatalog]
-    .map((course) => ({ course, score: scoreLocalCourse(course, '', options) }))
-    .sort((a, b) => b.score - a.score || a.course.name.localeCompare(b.course.name))
-    .slice(0, limit)
-    .map((item) => item.course);
-
-  return dedupeCourses([...savedCourses, ...localCourses, ...remoteCourses]).slice(0, limit);
+  return dedupeCourses([...savedCourses, ...remoteCourses]).slice(0, limit);
 }
 
 export async function getCourseDetails(courseId: string, courseHint?: Partial<CourseRecord>): Promise<CourseRecord | null> {
