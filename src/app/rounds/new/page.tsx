@@ -125,6 +125,7 @@ function NewRoundPageContent() {
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [savedGolfers, setSavedGolfers] = useState<SavedGolfer[]>([]);
   const [savedGolfersStatus, setSavedGolfersStatus] = useState('');
+  const [golferSearchQueries, setGolferSearchQueries] = useState<Record<string, string>>({});
   const [createError, setCreateError] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [gamesOpen, setGamesOpen] = useState(false);
@@ -427,6 +428,28 @@ function NewRoundPageContent() {
           : player
       )
     );
+    setGolferSearchQueries((current) => ({ ...current, [playerId]: savedGolfer.name }));
+  }
+
+  function updateGolferSearch(playerId: string, value: string) {
+    setGolferSearchQueries((current) => ({ ...current, [playerId]: value }));
+  }
+
+  function savedGolferMatches(query: string) {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) return savedGolfers.slice(0, 6);
+
+    return savedGolfers
+      .map((golfer) => {
+        const normalizedName = golfer.name.toLowerCase();
+        const starts = normalizedName.startsWith(normalizedQuery);
+        const includes = normalizedName.includes(normalizedQuery);
+        return { golfer, score: starts ? 2 : includes ? 1 : 0 };
+      })
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score || a.golfer.name.localeCompare(b.golfer.name))
+      .slice(0, 6)
+      .map((item) => item.golfer);
   }
 
   async function loadTeesForCourse(courseId: string | null | undefined, name: string) {
@@ -1073,24 +1096,42 @@ function NewRoundPageContent() {
                 <div className="space-y-3">
                   {group.players.map((player, groupIndex) => {
                     const absoluteIndex = (group.groupNumber - 1) * effectiveGroupSize + groupIndex;
+                    const golferSearchQuery = golferSearchQueries[player.id] ?? '';
+                    const golferMatches = savedGolferMatches(golferSearchQuery);
                     return (
                       <div key={player.id} className="grid gap-3 rounded-xl bg-slate-50 p-3 sm:grid-cols-[1fr_1fr_100px]">
                         <div>
                           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            Saved Golfer
+                            Search Saved Golfers
                           </label>
-                          <select
+                          <input
                             className="w-full rounded-xl border border-slate-300 px-3 py-3"
-                            value=""
-                            onChange={(event) => selectSavedGolfer(player.id, event.target.value)}
-                          >
-                            <option value="">Select golfer</option>
-                            {savedGolfers.map((golfer) => (
-                              <option key={golfer.id} value={golfer.id}>
-                                {golfer.name} ({golfer.handicap}{golfer.postedRounds ? `, ${golfer.postedRounds} posted` : ''})
-                              </option>
-                            ))}
-                          </select>
+                            value={golferSearchQuery}
+                            placeholder="Search saved golfers"
+                            onChange={(event) => updateGolferSearch(player.id, event.target.value)}
+                          />
+                          {savedGolfers.length > 0 && golferSearchQuery.trim().length > 0 ? (
+                            <div className="mt-2 max-h-44 overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+                              {golferMatches.length > 0 ? (
+                                golferMatches.map((golfer) => (
+                                  <button
+                                    key={golfer.id}
+                                    type="button"
+                                    className="flex w-full items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 text-left text-sm last:border-b-0 hover:bg-emerald-50"
+                                    onClick={() => selectSavedGolfer(player.id, golfer.id)}
+                                  >
+                                    <span className="font-semibold text-slate-900">{golfer.name}</span>
+                                    <span className="shrink-0 text-xs text-slate-500">
+                                      HCP {golfer.handicap}
+                                      {golfer.postedRounds ? `, ${golfer.postedRounds} posted` : ''}
+                                    </span>
+                                  </button>
+                                ))
+                              ) : (
+                                <div className="px-3 py-2 text-sm text-slate-500">No saved golfers found.</div>
+                              )}
+                            </div>
+                          ) : null}
                         </div>
                         <div>
                           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
