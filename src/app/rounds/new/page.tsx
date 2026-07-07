@@ -15,9 +15,9 @@ import { BEEZER_EXTRA_GAMES, type BeezerExtraGameKey } from '@/lib/games/catalog
 import type { CourseRecord } from '@/types/course';
 import type { HoleConfig } from '@/types/round';
 
-const MAX_PLAYERS = 24;
-const MIN_PLAYERS = 4;
-const PLAYER_COUNTS = [4, 5, 8, 12, 16, 20, 24];
+const MAX_PLAYERS = 40;
+const MIN_PLAYERS = 1;
+const PLAYER_COUNTS = [1, 2, 3, 4, 5, 8, 12, 16, 20, 24, 28, 32, 36, 40];
 
 function buildDefaultPlayers(count = 4) {
   return Array.from({ length: count }, (_, index) => ({
@@ -130,7 +130,7 @@ function NewRoundPageContent() {
   const [isCreating, setIsCreating] = useState(false);
   const [gamesOpen, setGamesOpen] = useState(false);
   const [prefillStatus, setPrefillStatus] = useState('');
-  const effectiveGroupSize: 4 | 5 = players.length === 5 ? 5 : 4;
+  const effectiveGroupSize: 4 | 5 = players.length <= 4 ? 4 : players.length === 5 ? 5 : 4;
 
   const groups = useMemo(() => {
     return Array.from({ length: Math.ceil(players.length / effectiveGroupSize) }, (_, groupIndex) => ({
@@ -576,7 +576,7 @@ function NewRoundPageContent() {
 
     const filledPlayers = players.filter((player) => player.name.trim().length > 0);
     if (filledPlayers.length < MIN_PLAYERS) {
-      setCreateError('Enter at least 4 golfer names before creating the round.');
+      setCreateError('Enter at least 1 golfer name before creating the round.');
       setIsCreating(false);
       return;
     }
@@ -712,7 +712,7 @@ function NewRoundPageContent() {
         <div>
           <h1 className="text-3xl font-bold">Create Round</h1>
           <p className="mt-2 text-slate-600">
-            Search for a course, set side games, add 4 to 24 golfers, then start your Triple Track round.
+            Search for a course, set side games, add golfers, then start your Triple Track round.
           </p>
           {prefillStatus ? <p className="mt-2 text-sm font-bold text-[#0f5132]">{prefillStatus}</p> : null}
         </div>
@@ -1049,7 +1049,7 @@ function NewRoundPageContent() {
           <div className="mb-4">
             <h2 className="text-xl font-bold">Golfers and Foursomes</h2>
             <p className="text-sm text-slate-500">
-              Pick the number of setup slots you need. Blank golfer rows are ignored, so 8 slots can become 4/3, 3/3, or 4/4.
+              Pick the number of setup slots you need. Blank golfer rows are ignored, so you can track a solo round or build out a larger event.
             </p>
             {savedGolfersStatus ? <p className="mt-2 text-xs text-slate-500">{savedGolfersStatus}</p> : null}
           </div>
