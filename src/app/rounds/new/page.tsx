@@ -326,7 +326,7 @@ function NewRoundPageContent() {
           setLocationStatus('Location unavailable. Showing featured courses.');
         }
       },
-      { enableHighAccuracy: false, timeout: 4000, maximumAge: 600000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     );
 
     return () => {

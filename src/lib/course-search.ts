@@ -226,11 +226,23 @@ return combined
 
 export async function getNearbyCourses(options: SearchOptions = {}): Promise<CourseRecord[]> {
   const limit = options.limit ?? 12;
+  const hasLocation = options.latitude != null && options.longitude != null;
 
   const [savedCourses, remoteCourses] = await Promise.all([
     fetchSavedCourses('', { ...options, limit: 250 }),
-    fetchRemoteCourses('', options),
+    hasLocation ? fetchRemoteCourses('', options) : Promise.resolve([]),
   ]);
+
+  if (!hasLocation) {
+    return dedupeCourses(savedCourses)
+      .sort((a, b) => {
+        const aSaved = hasSavedDetails(a) ? 1 : 0;
+        const bSaved = hasSavedDetails(b) ? 1 : 0;
+        if (aSaved !== bSaved) return bSaved - aSaved;
+        return a.name.localeCompare(b.name);
+      })
+      .slice(0, limit);
+  }
 
   const nearbyWithSavedDetails = mergeSavedDetailsIntoRemoteCourses(remoteCourses, savedCourses);
 

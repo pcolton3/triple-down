@@ -74,6 +74,10 @@ export async function GET(request: NextRequest) {
   const hasLocation = Number.isFinite(lat) && Number.isFinite(lon);
   const limit = Math.min(20, Math.max(1, Number(searchParams.get('limit') ?? '12') || 12));
 
+  if (!query && !hasLocation) {
+    return NextResponse.json({ courses: [] }, { status: 200 });
+  }
+
   const params = new URLSearchParams({
     format: 'jsonv2',
     addressdetails: '1',
