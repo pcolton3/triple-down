@@ -111,6 +111,52 @@ function distanceScore(course: CourseRecord, options: SearchOptions) {
   return latDelta * latDelta + lonDelta * lonDelta;
 }
 
+function hasDistance(course: CourseRecord, options: SearchOptions) {
+  return (
+    options.latitude != null &&
+    options.longitude != null &&
+    course.latitude != null &&
+    course.longitude != null
+  );
+}
+
+function hasSavedDetails(course: CourseRecord) {
+  return course.holes.length > 0 && !course.id.startsWith('osm-');
+}
+
+function mergeSavedDetailsIntoRemoteCourses(remoteCourses: CourseRecord[], savedCourses: CourseRecord[]) {
+  const savedByIdentity = new Map(savedCourses.map((course) => [normalizeCourseIdentity(course.name), course]));
+
+  return remoteCourses.map((course) => {
+    const savedCourse = savedByIdentity.get(normalizeCourseIdentity(course.name));
+    if (!savedCourse) return course;
+
+    return {
+      ...savedCourse,
+      latitude: course.latitude,
+      longitude: course.longitude,
+    };
+  });
+}
+
+function sortByDistanceThenSaved(a: CourseRecord, b: CourseRecord, options: SearchOptions) {
+  const aHasDistance = hasDistance(a, options);
+  const bHasDistance = hasDistance(b, options);
+
+  if (aHasDistance !== bHasDistance) return aHasDistance ? -1 : 1;
+
+  if (aHasDistance && bHasDistance) {
+    const distanceDelta = distanceScore(a, options) - distanceScore(b, options);
+    if (Math.abs(distanceDelta) > 0.000001) return distanceDelta;
+  }
+
+  const aSaved = hasSavedDetails(a) ? 1 : 0;
+  const bSaved = hasSavedDetails(b) ? 1 : 0;
+  if (aSaved !== bSaved) return bSaved - aSaved;
+
+  return a.name.localeCompare(b.name);
+}
+
 async function fetchRemoteCourses(query: string, options: SearchOptions): Promise<RemoteCourseResult[]> {
   const params = new URLSearchParams();
   params.set('limit', String(options.limit ?? 12));
@@ -142,16 +188,22 @@ export async function searchCourses(query: string, options: SearchOptions = {}):
   const limit = options.limit ?? 12;
 
   const [savedCourses, remoteCourses] = await Promise.all([
-    fetchSavedCourses(query, options),
+    fetchSavedCourses(query, { ...options, limit: 250 }),
     fetchRemoteCourses(query, options),
   ]);
 
 const normalizedQuery = normalize(query);
 
-const combined = dedupeCourses([...savedCourses, ...remoteCourses]);
+const remoteWithSavedDetails = mergeSavedDetailsIntoRemoteCourses(remoteCourses, savedCourses);
+const combined = dedupeCourses([...remoteWithSavedDetails, ...savedCourses]);
 
 return combined
   .sort((a, b) => {
+    if (options.latitude != null && options.longitude != null) {
+      const distanceResult = sortByDistanceThenSaved(a, b, options);
+      if (distanceResult !== 0) return distanceResult;
+    }
+
     const aName = normalize(a.name);
     const bName = normalize(b.name);
 
@@ -180,15 +232,11 @@ export async function getNearbyCourses(options: SearchOptions = {}): Promise<Cou
     fetchRemoteCourses('', options),
   ]);
 
-  const savedByIdentity = new Map(savedCourses.map((course) => [normalizeCourseIdentity(course.name), course]));
-  const orderedRemoteCourses = [...remoteCourses].sort(
-    (a, b) => distanceScore(a, options) - distanceScore(b, options)
-  );
-  const nearbyWithSavedDetails = orderedRemoteCourses.map((course) => {
-    return savedByIdentity.get(normalizeCourseIdentity(course.name)) ?? course;
-  });
+  const nearbyWithSavedDetails = mergeSavedDetailsIntoRemoteCourses(remoteCourses, savedCourses);
 
-  return dedupeCourses([...nearbyWithSavedDetails, ...savedCourses]).slice(0, limit);
+  return dedupeCourses([...nearbyWithSavedDetails, ...savedCourses])
+    .sort((a, b) => sortByDistanceThenSaved(a, b, options))
+    .slice(0, limit);
 }
 
 export async function getCourseDetails(courseId: string, courseHint?: Partial<CourseRecord>): Promise<CourseRecord | null> {
