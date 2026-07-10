@@ -33,6 +33,15 @@ type SavedCourseRow = {
   }>;
 };
 
+type SavedCourseTeeRow = {
+  course_key: string;
+  course_name: string;
+};
+
+type SearchableCourseRecord = CourseRecord & {
+  savedTeeCount?: number;
+};
+
 function createSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -56,6 +65,17 @@ function mapSavedCourse(row: SavedCourseRow): CourseRecord {
   };
 }
 
+function mapSavedTeeCourse(row: SavedCourseTeeRow, savedTeeCount: number): SearchableCourseRecord {
+  return {
+    id: row.course_key,
+    name: row.course_name,
+    city: '',
+    state: '',
+    holes: [],
+    savedTeeCount,
+  };
+}
+
 async function fetchSavedCourses(query: string, options: SearchOptions): Promise<CourseRecord[]> {
   const supabase = createSupabase();
   if (!supabase) return [];
@@ -73,7 +93,36 @@ async function fetchSavedCourses(query: string, options: SearchOptions): Promise
   const { data, error } = await request;
   if (error || !data) return [];
 
-  return (data as SavedCourseRow[]).map(mapSavedCourse);
+  const savedCourses = (data as SavedCourseRow[]).map(mapSavedCourse);
+
+  let teeRequest = supabase
+    .from('saved_course_tees')
+    .select('course_key,course_name')
+    .limit(500);
+
+  if (normalized) {
+    const escaped = normalized.replace(/[%_,]/g, '');
+    teeRequest = teeRequest.or(`course_key.ilike.%${escaped}%,course_name.ilike.%${escaped}%`);
+  }
+
+  const { data: teeData } = await teeRequest;
+  const teeCounts = new Map<string, { row: SavedCourseTeeRow; count: number }>();
+
+  for (const row of (teeData ?? []) as SavedCourseTeeRow[]) {
+    const existing = teeCounts.get(row.course_key);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      teeCounts.set(row.course_key, { row, count: 1 });
+    }
+  }
+
+  const courseKeys = new Set(savedCourses.map((course) => course.id));
+  const teeCourses = Array.from(teeCounts.values())
+    .filter(({ row }) => !courseKeys.has(row.course_key))
+    .map(({ row, count }) => mapSavedTeeCourse(row, count));
+
+  return [...savedCourses, ...teeCourses];
 }
 
 function dedupeCourses(courses: CourseRecord[]) {
@@ -110,11 +159,11 @@ function hasDistance(course: CourseRecord, options: SearchOptions) {
   );
 }
 
-function hasSavedDetails(course: CourseRecord) {
-  return course.holes.length > 0 && !course.id.startsWith('osm-');
+function hasSavedDetails(course: SearchableCourseRecord) {
+  return (course.holes.length > 0 || (course.savedTeeCount ?? 0) > 0) && !course.id.startsWith('osm-');
 }
 
-function sortBySavedThenDistance(a: CourseRecord, b: CourseRecord, options: SearchOptions) {
+function sortBySavedThenDistance(a: SearchableCourseRecord, b: SearchableCourseRecord, options: SearchOptions) {
   const aSaved = hasSavedDetails(a) ? 1 : 0;
   const bSaved = hasSavedDetails(b) ? 1 : 0;
   if (aSaved !== bSaved) return bSaved - aSaved;
