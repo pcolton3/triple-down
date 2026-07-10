@@ -139,7 +139,11 @@ function mergeSavedDetailsIntoRemoteCourses(remoteCourses: CourseRecord[], saved
   });
 }
 
-function sortByDistanceThenSaved(a: CourseRecord, b: CourseRecord, options: SearchOptions) {
+function sortBySavedThenDistance(a: CourseRecord, b: CourseRecord, options: SearchOptions) {
+  const aSaved = hasSavedDetails(a) ? 1 : 0;
+  const bSaved = hasSavedDetails(b) ? 1 : 0;
+  if (aSaved !== bSaved) return bSaved - aSaved;
+
   const aHasDistance = hasDistance(a, options);
   const bHasDistance = hasDistance(b, options);
 
@@ -149,10 +153,6 @@ function sortByDistanceThenSaved(a: CourseRecord, b: CourseRecord, options: Sear
     const distanceDelta = distanceScore(a, options) - distanceScore(b, options);
     if (Math.abs(distanceDelta) > 0.000001) return distanceDelta;
   }
-
-  const aSaved = hasSavedDetails(a) ? 1 : 0;
-  const bSaved = hasSavedDetails(b) ? 1 : 0;
-  if (aSaved !== bSaved) return bSaved - aSaved;
 
   return a.name.localeCompare(b.name);
 }
@@ -200,9 +200,13 @@ const combined = dedupeCourses([...remoteWithSavedDetails, ...savedCourses]);
 return combined
   .sort((a, b) => {
     if (options.latitude != null && options.longitude != null) {
-      const distanceResult = sortByDistanceThenSaved(a, b, options);
+      const distanceResult = sortBySavedThenDistance(a, b, options);
       if (distanceResult !== 0) return distanceResult;
     }
+
+    const aSaved = hasSavedDetails(a) ? 1 : 0;
+    const bSaved = hasSavedDetails(b) ? 1 : 0;
+    if (aSaved !== bSaved) return bSaved - aSaved;
 
     const aName = normalize(a.name);
     const bName = normalize(b.name);
@@ -247,7 +251,7 @@ export async function getNearbyCourses(options: SearchOptions = {}): Promise<Cou
   const nearbyWithSavedDetails = mergeSavedDetailsIntoRemoteCourses(remoteCourses, savedCourses);
 
   return dedupeCourses([...nearbyWithSavedDetails, ...savedCourses])
-    .sort((a, b) => sortByDistanceThenSaved(a, b, options))
+    .sort((a, b) => sortBySavedThenDistance(a, b, options))
     .slice(0, limit);
 }
 
