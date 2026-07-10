@@ -19,16 +19,6 @@ type SearchOptions = {
   limit?: number;
 };
 
-type RemoteCourseResult = {
-  id: string;
-  name: string;
-  city: string;
-  state: string;
-  latitude?: number;
-  longitude?: number;
-  holes: CourseRecord['holes'];
-};
-
 type SavedCourseRow = {
   id: string;
   source_provider: string | null;
@@ -124,21 +114,6 @@ function hasSavedDetails(course: CourseRecord) {
   return course.holes.length > 0 && !course.id.startsWith('osm-');
 }
 
-function mergeSavedDetailsIntoRemoteCourses(remoteCourses: CourseRecord[], savedCourses: CourseRecord[]) {
-  const savedByIdentity = new Map(savedCourses.map((course) => [normalizeCourseIdentity(course.name), course]));
-
-  return remoteCourses.map((course) => {
-    const savedCourse = savedByIdentity.get(normalizeCourseIdentity(course.name));
-    if (!savedCourse) return course;
-
-    return {
-      ...savedCourse,
-      latitude: course.latitude,
-      longitude: course.longitude,
-    };
-  });
-}
-
 function sortBySavedThenDistance(a: CourseRecord, b: CourseRecord, options: SearchOptions) {
   const aSaved = hasSavedDetails(a) ? 1 : 0;
   const bSaved = hasSavedDetails(b) ? 1 : 0;
@@ -157,45 +132,12 @@ function sortBySavedThenDistance(a: CourseRecord, b: CourseRecord, options: Sear
   return a.name.localeCompare(b.name);
 }
 
-async function fetchRemoteCourses(query: string, options: SearchOptions): Promise<RemoteCourseResult[]> {
-  const params = new URLSearchParams();
-  params.set('limit', String(options.limit ?? 12));
-  if (query.trim()) params.set('q', query.trim());
-  if (options.latitude != null) params.set('lat', String(options.latitude));
-  if (options.longitude != null) params.set('lon', String(options.longitude));
-
-  const response = await fetch(`/api/courses/search?${params.toString()}`, {
-    method: 'GET',
-    cache: 'no-store',
-  });
-
-  if (!response.ok) {
-    return [];
-  }
-
-  const data = (await response.json()) as { courses?: RemoteCourseResult[] };
-  const courses = data.courses ?? [];
-  const normalizedQuery = normalize(query);
-  if (!normalizedQuery) return courses;
-
-  return courses.filter((course) => {
-    const searchable = normalize(`${course.name} ${course.city} ${course.state}`);
-    return searchable.includes(normalizedQuery);
-  });
-}
-
 export async function searchCourses(query: string, options: SearchOptions = {}): Promise<CourseRecord[]> {
   const limit = options.limit ?? 12;
+  const normalizedQuery = normalize(query);
+  const savedCourses = await fetchSavedCourses(query, { ...options, limit: 250 });
 
-  const [savedCourses, remoteCourses] = await Promise.all([
-    fetchSavedCourses(query, { ...options, limit: 250 }),
-    fetchRemoteCourses(query, options),
-  ]);
-
-const normalizedQuery = normalize(query);
-
-const remoteWithSavedDetails = mergeSavedDetailsIntoRemoteCourses(remoteCourses, savedCourses);
-const combined = dedupeCourses([...remoteWithSavedDetails, ...savedCourses]);
+const combined = dedupeCourses(savedCourses).filter(hasSavedDetails);
 
 return combined
   .sort((a, b) => {
@@ -230,27 +172,10 @@ return combined
 
 export async function getNearbyCourses(options: SearchOptions = {}): Promise<CourseRecord[]> {
   const limit = options.limit ?? 12;
-  const hasLocation = options.latitude != null && options.longitude != null;
+  const savedCourses = await fetchSavedCourses('', { ...options, limit: 250 });
 
-  const [savedCourses, remoteCourses] = await Promise.all([
-    fetchSavedCourses('', { ...options, limit: 250 }),
-    hasLocation ? fetchRemoteCourses('', options) : Promise.resolve([]),
-  ]);
-
-  if (!hasLocation) {
-    return dedupeCourses(savedCourses)
-      .sort((a, b) => {
-        const aSaved = hasSavedDetails(a) ? 1 : 0;
-        const bSaved = hasSavedDetails(b) ? 1 : 0;
-        if (aSaved !== bSaved) return bSaved - aSaved;
-        return a.name.localeCompare(b.name);
-      })
-      .slice(0, limit);
-  }
-
-  const nearbyWithSavedDetails = mergeSavedDetailsIntoRemoteCourses(remoteCourses, savedCourses);
-
-  return dedupeCourses([...nearbyWithSavedDetails, ...savedCourses])
+  return dedupeCourses(savedCourses)
+    .filter(hasSavedDetails)
     .sort((a, b) => sortBySavedThenDistance(a, b, options))
     .slice(0, limit);
 }

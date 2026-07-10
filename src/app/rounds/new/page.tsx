@@ -296,7 +296,7 @@ function NewRoundPageContent() {
       const results = await getNearbyCourses();
       if (!cancelled) {
         setCourseResults(results);
-        setLocationStatus('Showing featured nearby-friendly courses.');
+        setLocationStatus('Showing saved courses with scorecard details.');
       }
     }
 
@@ -316,14 +316,14 @@ function NewRoundPageContent() {
         const results = await getNearbyCourses(location);
         if (!cancelled) {
           setCourseResults(results);
-          setLocationStatus('Showing courses closest to you first.');
+          setLocationStatus('Showing saved courses with scorecard details.');
         }
       },
       async () => {
         const results = await getNearbyCourses();
         if (!cancelled) {
           setCourseResults(results);
-          setLocationStatus('Location unavailable. Showing featured courses.');
+          setLocationStatus('Location unavailable. Showing saved courses with scorecard details.');
         }
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
@@ -743,7 +743,7 @@ function NewRoundPageContent() {
             <p className="mt-2 text-xs text-slate-500">
               {searchMode === 'nearby'
                 ? locationStatus
-                : 'Search results are ranked with nearby courses first when location is available.'}
+                : 'Search only shows courses with saved scorecard details.'}
             </p>
           </div>
 
@@ -770,6 +770,11 @@ function NewRoundPageContent() {
                   <span className="text-sm font-bold text-[#0f5132]">Select</span>
                 </button>
               ))}
+            </div>
+          ) : courseQuery.trim() ? (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+              No saved course match yet. Enter the course manually below and save its tee/rating details once; it will be
+              available for future rounds.
             </div>
           ) : null}
 
