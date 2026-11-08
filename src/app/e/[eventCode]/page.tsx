@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Card } from '@/components/shared/card';
 import { loadSharedRoundsByRyderEventCode, sharedRoundBundleToRoundState } from '@/lib/realtime/shared-rounds';
 import type { HoleState, Player, RoundState } from '@/types/round';
+import { scoreMatch } from '@/lib/events/match-play';
 
 type RyderRoundSummary = {
   roundCode: string;
@@ -38,11 +39,6 @@ function getPlayerNetForHole(round: RoundState, hole: HoleState, playerId: strin
 
 function getTeamForPlayer(round: RoundState, playerId: string, fallbackIndex = 0): 'team_one' | 'team_two' {
   return round.gameSettings.teamAssignments?.[playerId] ?? (fallbackIndex % 2 === 0 ? 'team_one' : 'team_two');
-}
-
-function formatLead(first: number, second: number, firstName: string, secondName: string) {
-  if (first === second) return 'All square';
-  return `${first > second ? firstName : secondName} leads ${Math.abs(first - second)}`;
 }
 
 function buildAutoSinglesPairings(round: RoundState, players: Player[]) {
@@ -99,12 +95,13 @@ function buildRyderRoundSummary(round: RoundState): RyderRoundSummary {
         }
       });
 
-      teamOnePoints += playerPoints;
-      teamTwoPoints += opponentPoints;
+      const match = scoreMatch(playerPoints, opponentPoints, holesComplete, round.totalHoles, player.name, opponent.name);
+      teamOnePoints += match.firstPoints;
+      teamTwoPoints += match.secondPoints;
       return [{
         label: `${player.name} vs ${opponent.name}`,
-        score: `${playerPoints} - ${opponentPoints}`,
-        status: `${formatLead(playerPoints, opponentPoints, player.name, opponent.name)} through ${holesComplete}`,
+        score: `${match.firstPoints} - ${match.secondPoints}`,
+        status: match.status,
       }];
     });
 
@@ -137,12 +134,13 @@ function buildRyderRoundSummary(round: RoundState): RyderRoundSummary {
       else if (winningTeams.has('team_two')) teamTwoPoints += 1;
     });
 
-    totalTeamOne += teamOnePoints;
-    totalTeamTwo += teamTwoPoints;
+    const match = scoreMatch(teamOnePoints, teamTwoPoints, holes.length, round.totalHoles, teamOneName, teamTwoName);
+    totalTeamOne += match.firstPoints;
+    totalTeamTwo += match.secondPoints;
     return {
       label: `Group ${groupNumber}`,
-      score: `${teamOnePoints} - ${teamTwoPoints}`,
-      status: `${formatLead(teamOnePoints, teamTwoPoints, teamOneName, teamTwoName)} through ${holes.length}`,
+      score: `${match.firstPoints} - ${match.secondPoints}`,
+      status: match.status,
     };
   });
 

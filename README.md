@@ -76,3 +76,15 @@ Expand the game details to review the original scoring calculations and finalize
 
 Run `npm test` for scoring and offline recovery checks, or `npm run test:offline` for just the
 queue tests. These tests use local mocks and do not write to Supabase.
+
+## Golf events and signups
+
+Run `supabase-golf-events.sql` once in the Supabase SQL editor. It adds events, private signups,
+and organizer-only functions (emails are never readable with the public key).
+
+- `/join/CODE` — invite page: schedule, course details, agenda, buy-in breakdown, signup form, roster.
+- `/join/CODE/organize#key=…` — organizer page (the key is saved on the device, then removed from
+  the address bar): signups with emails, team assignment, paid tracking, open/close signups, and
+  editing event details, golf days and the weekend agenda.
+
+Ryder Cup events score 1 point per match (½ each when halved); a match counts once it is decided.
