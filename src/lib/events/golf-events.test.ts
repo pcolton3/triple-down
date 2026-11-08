@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/supabase/client', () => ({ supabase: {} }));
-import { buildSchedule, buyInBreakdown, completeChoices, dayChoice, isTeamEvent, playerBuyIn, suggestGroupOrder, localToday, nextGolfDay, normalizeEvent, renumberDays, safeLink, splitUpcoming, suggestedBuyIn, validateDraft, type EventDay, type GolfEvent } from './golf-events';
+import { buildSchedule, buyInBreakdown, completeChoices, forgetSavedEvent, hideSavedEvent, readSavedEvents, rememberJoinedEvent, rememberMyEvent, dayChoice, isTeamEvent, playerBuyIn, suggestGroupOrder, localToday, nextGolfDay, normalizeEvent, renumberDays, safeLink, splitUpcoming, suggestedBuyIn, validateDraft, type EventDay, type GolfEvent } from './golf-events';
 
 const pots = [{ key: 'ctp', amount: 50 }, { key: 'skins', amount: 50 }];
 const days: EventDay[] = [
@@ -132,5 +132,29 @@ describe('signup choices', () => {
       { id: 'e', games: ['wolf', 'skins'] }, { id: 'f', games: ['vegas'] }, { id: 'g', games: ['wolf'] },
     ];
     expect(suggestGroupOrder(players).map((player) => player.id)).toEqual(['b', 'd', 'e', 'g', 'f', 'a', 'c']);
+  });
+});
+
+describe('events saved on this phone', () => {
+  it('hides an event until it is opened again, and forgets a deleted one completely', () => {
+    const data = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      get length() { return data.size; },
+      key: (index: number) => [...data.keys()][index] ?? null,
+      getItem: (key: string) => data.get(key) ?? null,
+      setItem: (key: string, value: string) => void data.set(key, value),
+      removeItem: (key: string) => void data.delete(key),
+    });
+    rememberMyEvent('BDAY27', 'Birthday Cup', 'secret');
+    rememberJoinedEvent('TRIP26', 'Golf Trip');
+    expect(readSavedEvents().map((entry) => entry.code).sort()).toEqual(['BDAY27', 'TRIP26']);
+    hideSavedEvent('TRIP26');
+    expect(readSavedEvents().map((entry) => entry.code)).toEqual(['BDAY27']);
+    rememberJoinedEvent('TRIP26', 'Golf Trip');
+    expect(readSavedEvents().map((entry) => entry.code).sort()).toEqual(['BDAY27', 'TRIP26']);
+    forgetSavedEvent('BDAY27');
+    expect(readSavedEvents().map((entry) => entry.code)).toEqual(['TRIP26']);
+    expect(data.has('triple-track-organizer:BDAY27')).toBe(false);
+    vi.unstubAllGlobals();
   });
 });

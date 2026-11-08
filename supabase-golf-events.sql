@@ -249,7 +249,24 @@ begin
 end;
 $$;
 
+-- Permanently deletes an event; signups and the organizer key go with it (on delete cascade).
+-- Scoring rounds started from the event are separate and are kept.
+create or replace function public.organizer_delete_golf_event(p_code text, p_key text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare v_id uuid;
+begin
+  select id into v_id from golf_events where code = upper(trim(p_code));
+  if v_id is null or not golf_event_key_ok(v_id, p_key) then raise exception 'Organizer link is not valid'; end if;
+  delete from golf_events where id = v_id;
+end;
+$$;
+
 grant execute on function public.create_golf_event(jsonb) to anon, authenticated;
+grant execute on function public.organizer_delete_golf_event(text, text) to anon, authenticated;
 grant execute on function public.signup_for_golf_event(text, text, text, numeric, jsonb) to anon, authenticated;
 grant execute on function public.golf_event_roster(text) to anon, authenticated;
 grant execute on function public.organizer_golf_event_signups(text, text) to anon, authenticated;

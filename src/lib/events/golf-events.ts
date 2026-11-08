@@ -168,6 +168,12 @@ export async function updateSignup(code: string, key: string, signupId: string, 
   rpcError(error);
 }
 
+/** Permanently deletes the event and its signups. Rounds already started from it are kept. */
+export async function deleteGolfEvent(code: string, key: string) {
+  const { error } = await supabase.rpc('organizer_delete_golf_event', { p_code: code, p_key: key });
+  rpcError(error);
+}
+
 export async function updateEvent(code: string, key: string, patch: Partial<Pick<GolfEvent, EditableField | 'signups_open'>>) {
   const { error } = await supabase.rpc('organizer_update_golf_event', { p_code: code, p_key: key, p_patch: patch });
   rpcError(error);
@@ -216,6 +222,7 @@ export function readMyEvents(): MyEvent[] {
 }
 
 export function rememberMyEvent(code: string, title: string, organizerKey?: string) {
+  setHidden(code, false);
   try {
     if (organizerKey) localStorage.setItem(organizerKeyStorageName(code), organizerKey);
     const list = readMyEvents().filter((entry) => entry.code !== code);
@@ -227,10 +234,51 @@ export function rememberMyEvent(code: string, title: string, organizerKey?: stri
 }
 
 const JOINED_EVENTS_KEY = 'triple-track-joined-events';
+const HIDDEN_EVENTS_KEY = 'triple-track-hidden-events';
+
+function readHidden(): string[] {
+  try {
+    const list = JSON.parse(localStorage.getItem(HIDDEN_EVENTS_KEY) ?? '[]');
+    return Array.isArray(list) ? list.filter((code) => typeof code === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function setHidden(code: string, hidden: boolean) {
+  try {
+    const next = new Set(readHidden());
+    if (hidden) next.add(code.toUpperCase());
+    else next.delete(code.toUpperCase());
+    localStorage.setItem(HIDDEN_EVENTS_KEY, JSON.stringify([...next]));
+  } catch {
+    /* Storage unavailable. */
+  }
+}
+
+/** Hides an event from "Your events" on this device. Opening it again brings it back. */
+export function hideSavedEvent(code: string) {
+  setHidden(code, true);
+}
+
+/** Removes every trace of an event from this device (used once it's been deleted). */
+export function forgetSavedEvent(code: string) {
+  const key = code.toUpperCase();
+  try {
+    localStorage.setItem(MY_EVENTS_KEY, JSON.stringify(readMyEvents().filter((entry) => entry.code.toUpperCase() !== key)));
+    localStorage.setItem(JOINED_EVENTS_KEY, JSON.stringify(readList(JOINED_EVENTS_KEY).filter((entry) => entry.code.toUpperCase() !== key)));
+    localStorage.removeItem(organizerKeyStorageName(key));
+    localStorage.removeItem(`${SIGNUP_KEY_PREFIX}${key}`);
+  } catch {
+    /* Storage unavailable. */
+  }
+  setHidden(key, false);
+}
 const SIGNUP_KEY_PREFIX = 'triple-track-signup:';
 
 /** Remembers on this device that the player signed up, so the event shows under "Your events". */
 export function rememberJoinedEvent(code: string, title: string) {
+  setHidden(code, false);
   try {
     const list = readList(JOINED_EVENTS_KEY).filter((entry) => entry.code !== code);
     list.unshift({ code, title, createdAt: new Date().toISOString() });
@@ -274,7 +322,8 @@ export function readSavedEvents(): SavedEvent[] {
   } catch {
     /* Storage unavailable: nothing saved on this device. */
   }
-  return [...saved.values()];
+  const hidden = new Set(readHidden());
+  return [...saved.values()].filter((entry) => !hidden.has(entry.code));
 }
 
 /** First and last calendar dates of an event (golf days and agenda), or null if it has none. */

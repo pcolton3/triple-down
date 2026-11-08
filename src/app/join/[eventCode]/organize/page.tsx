@@ -11,6 +11,8 @@ import { Card } from '@/components/shared/card';
 import { formatCurrency } from '@/lib/utils/currency';
 import {
   completeChoices,
+  deleteGolfEvent,
+  forgetSavedEvent,
   dayChoice,
   formatEventDate,
   isDayLocked,
@@ -53,6 +55,65 @@ function readKey(code: string) {
   }
 }
 
+
+/** Permanent delete, behind typing the event code. */
+function DeleteEventCard({ event, organizerKey, signupCount }: { event: GolfEvent; organizerKey: string; signupCount: number }) {
+  const [typed, setTyped] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState('');
+  const rounds = event.days.filter((day) => day.roundCode?.trim()).map((day) => day.roundCode);
+  const matches = typed.trim().toUpperCase() === event.code;
+
+  async function remove() {
+    if (!matches || deleting) return;
+    setDeleting(true);
+    setError('');
+    try {
+      await deleteGolfEvent(event.code, organizerKey);
+      forgetSavedEvent(event.code);
+      window.location.href = '/events';
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Could not delete the event.');
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <details className="rounded-2xl border border-red-200 bg-white p-4 shadow-sm">
+      <summary className="cursor-pointer font-bold text-red-700">Delete this event</summary>
+      <div className="mt-3 space-y-3 text-sm">
+        <p className="text-slate-700">
+          This permanently deletes <span className="font-semibold">{event.title}</span>
+          {signupCount ? ` and all ${signupCount} signup${signupCount === 1 ? '' : 's'}` : ''}. The invite link will stop working. This can&apos;t be undone.
+        </p>
+        {rounds.length ? (
+          <p className="text-slate-700">
+            Rounds already started ({rounds.join(', ')}) are kept, with their scores, side bets and settle-ups.
+          </p>
+        ) : null}
+        <label className="block">
+          <span className="mb-1 block font-medium">Type <span className="font-mono font-bold">{event.code}</span> to confirm</span>
+          <input
+            className="min-h-[48px] w-full rounded-xl border border-slate-300 px-3 py-3 font-mono uppercase"
+            value={typed}
+            autoCapitalize="characters"
+            autoCorrect="off"
+            onChange={(e) => setTyped(e.target.value)}
+          />
+        </label>
+        {error ? <p role="alert" className="text-red-700">{error}</p> : null}
+        <button
+          type="button"
+          disabled={!matches || deleting}
+          className="min-h-[48px] w-full rounded-xl bg-red-700 px-4 font-bold text-white disabled:opacity-40"
+          onClick={() => void remove()}
+        >
+          {deleting ? 'Deleting…' : 'Delete event permanently'}
+        </button>
+      </div>
+    </details>
+  );
+}
 
 export default function OrganizeEventPage() {
   const params = useParams<{ eventCode: string }>();
@@ -310,6 +371,8 @@ export default function OrganizeEventPage() {
       <BuyInCard event={preview} players={signups.length} />
 
       {notice ? <p role="status" className="rounded-xl bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">{notice}</p> : null}
+
+      <DeleteEventCard event={event} organizerKey={key} signupCount={signups.length} />
 
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur">
         <div className="mx-auto flex max-w-3xl gap-3">

@@ -8,7 +8,9 @@ import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
 import {
   formatEventDate,
+  forgetSavedEvent,
   formatTime,
+  hideSavedEvent,
   isTeamEvent,
   loadGolfEvent,
   localToday,
@@ -21,7 +23,7 @@ import {
 
 type Loaded = { saved: SavedEvent; event: GolfEvent };
 
-function EventCard({ saved, event, today }: Loaded & { today: string }) {
+function EventCard({ saved, event, today, onRemove }: Loaded & { today: string; onRemove: (code: string) => void }) {
   const next = nextGolfDay(event, today);
   const code = encodeURIComponent(event.code);
   return (
@@ -51,6 +53,15 @@ function EventCard({ saved, event, today }: Loaded & { today: string }) {
           </Link>
         ) : null}
       </div>
+      <button
+        type="button"
+        className="min-h-[40px] text-xs font-semibold text-slate-500 underline"
+        onClick={() => {
+          if (window.confirm(`Remove ${event.title} from your list on this phone? It isn't deleted, and opening its link again brings it back.${saved.organizer ? ' Keep your organizer link so you can still manage it.' : ''}`)) onRemove(event.code);
+        }}
+      >
+        Remove from my list
+      </button>
     </Card>
   );
 }
@@ -71,6 +82,7 @@ export default function YourEventsPage() {
       results.forEach((result, index) => {
         if (result.status === 'fulfilled') {
           if (result.value) loaded.push({ saved: saved[index], event: result.value });
+          else forgetSavedEvent(saved[index].code); // Deleted by its organizer.
         } else {
           errors += 1;
         }
@@ -87,6 +99,10 @@ export default function YourEventsPage() {
   }
 
   const { upcoming, past } = splitUpcoming(items ?? [], today);
+  function removeFromList(code: string) {
+    hideSavedEvent(code);
+    setItems((current) => (current ?? []).filter((item) => item.event.code !== code));
+  }
 
   return (
     <main className="mx-auto max-w-2xl space-y-4 px-4 py-6 pb-24">
@@ -107,7 +123,7 @@ export default function YourEventsPage() {
 
           <h2 className="px-1 pt-2 text-sm font-bold uppercase tracking-wide text-slate-500">Upcoming</h2>
           {upcoming.length ? (
-            upcoming.map((item) => <EventCard key={item.event.code} {...item} today={today} />)
+            upcoming.map((item) => <EventCard key={item.event.code} {...item} today={today} onRemove={removeFromList} />)
           ) : (
             <Card>
               <p className="text-slate-700">No upcoming events on this device yet.</p>
@@ -122,7 +138,7 @@ export default function YourEventsPage() {
               <button type="button" className="px-1 pt-2 text-sm font-bold uppercase tracking-wide text-slate-500 underline" onClick={() => setShowPast(!showPast)}>
                 {showPast ? 'Hide' : 'Show'} past events ({past.length})
               </button>
-              {showPast ? past.map((item) => <EventCard key={item.event.code} {...item} today={today} />) : null}
+              {showPast ? past.map((item) => <EventCard key={item.event.code} {...item} today={today} onRemove={removeFromList} />) : null}
             </section>
           ) : null}
         </>
