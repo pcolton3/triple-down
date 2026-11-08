@@ -167,6 +167,47 @@ export async function claimGroupScorekeeper(params: {
   return deviceId;
 }
 
+/**
+ * Moves scoring for a group to this device, e.g. when the scorekeeper's phone died or they
+ * switched from Safari to the installed app. Only succeeds if the group is still held by the
+ * device the caller saw, so two people taking over at once can't both win.
+ */
+export async function takeOverGroupScorekeeper(params: {
+  roundId: string;
+  groupNumber: number;
+  scorekeeperName: string;
+  expectedDeviceId: string | null;
+}) {
+  const deviceId = getDeviceId();
+  let query = supabase
+    .from('round_groups')
+    .update({ scorekeeper_name: params.scorekeeperName, scorekeeper_device_id: deviceId })
+    .eq('round_id', params.roundId)
+    .eq('group_number', params.groupNumber);
+  query = params.expectedDeviceId ? query.eq('scorekeeper_device_id', params.expectedDeviceId) : query.is('scorekeeper_device_id', null);
+  const { data, error } = await query.select('id');
+  if (error) throw error;
+  if ((data ?? []).length === 0) throw new Error(`Scoring for Group ${params.groupNumber} just changed hands. Reload and try again.`);
+  return deviceId;
+}
+
+/** Releases this device's claim so someone else can start scoring the group. */
+export async function releaseGroupScorekeeper(params: { roundId: string; groupNumber: number }) {
+  const { data, error } = await supabase
+    .from('round_groups')
+    .update({ scorekeeper_name: null, scorekeeper_device_id: null })
+    .eq('round_id', params.roundId)
+    .eq('group_number', params.groupNumber)
+    .eq('scorekeeper_device_id', getDeviceId())
+    .select('id');
+  if (error) throw error;
+  if ((data ?? []).length === 0) throw new Error('This phone is no longer scoring this group.');
+}
+
+export function currentDeviceId() {
+  return getDeviceId();
+}
+
 export function userCanEditGroup(group: {
   scorekeeper_device_id?: string | null;
   scorekeeperDeviceId?: string | null;

@@ -2,7 +2,7 @@
 
 import { SaveStatus } from '@/app/score-sync';
 import { cacheRound, cachedRound, rememberRound, corrections, recordCorrection, describeScores, type Correction } from '@/lib/offline/local-rounds';
-import { queueHole, flushScores } from '@/lib/offline/round-sync';
+import { queueHole, flushScores, syncError } from '@/lib/offline/round-sync';
 import type { HoleState } from '@/types/round';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
@@ -15,7 +15,8 @@ import {
   loadSharedRoundByCode,
   sharedRoundBundleToRoundState,
 } from '@/lib/realtime/shared-rounds';
-import { claimGroupScorekeeper, userCanEditGroup } from '@/lib/realtime/group-rounds';
+import { claimGroupScorekeeper, releaseGroupScorekeeper, takeOverGroupScorekeeper, userCanEditGroup } from '@/lib/realtime/group-rounds';
+import { discardPendingForGroup, pendingForGroup, QUEUE_EVENT, type PendingHole } from '@/lib/offline/score-queue';
 
 function formatUnknownError(error: unknown, fallback: string) {
   if (error instanceof Error) return error.message;
@@ -159,6 +160,8 @@ export default function GroupScoringPage() {
   const [scorekeeperName, setScorekeeperName] = useState('');
   const [claimStatus, setClaimStatus] = useState('');
   const [claiming, setClaiming] = useState(false);
+  const [stuckHoles, setStuckHoles] = useState<PendingHole[]>([]);
+  const [handoffOpen, setHandoffOpen] = useState(false);
   const [audit, setAudit] = useState<Correction[]>([]);
   const [busy, setBusy] = useState(false);
   const editingBaseline = useRef<HoleState | null>(null);
@@ -293,6 +296,61 @@ export default function GroupScoringPage() {
     }
   }
 
+  async function handleTakeOver() {
+    if (claiming) return;
+    const previous = group?.scorekeeperName ?? 'the current scorekeeper';
+    if (!window.confirm(`Take over scoring Group ${groupNumber} from ${previous}? Only do this if their phone died, they asked you to, or you switched to the installed app. Scores still waiting on their phone won't be sent.`)) return;
+    setClaiming(true);
+    try {
+      setClaimStatus('');
+      await takeOverGroupScorekeeper({
+        roundId: round.id,
+        groupNumber,
+        expectedDeviceId: group?.scorekeeperDeviceId ?? null,
+        scorekeeperName: scorekeeperName.trim() || group?.scorekeeperName || `Group ${groupNumber} Scorekeeper`,
+      });
+      await refreshRound();
+      setHandoffOpen(false);
+      setClaimStatus(`You're keeping score for Group ${groupNumber} ✓`);
+      void flushScores();
+    } catch (error) {
+      setClaimStatus(formatUnknownError(error, 'Unable to take over scoring.'));
+      try { await refreshRound(); } catch { /* Keep the take-over error. */ }
+    } finally {
+      setClaiming(false);
+    }
+  }
+
+  async function handleHandOff() {
+    if (claiming) return;
+    if (pendingForGroup(localStorage, round.id, groupNumber).length) {
+      window.alert('Some scores from this phone are still sending. Wait for the green "All scores saved" dot, then hand off.');
+      return;
+    }
+    if (!window.confirm(`Stop scoring Group ${groupNumber} on this phone? Anyone in the group can then tap Start scoring on their phone.`)) return;
+    setClaiming(true);
+    try {
+      await releaseGroupScorekeeper({ roundId: round.id, groupNumber });
+      await refreshRound();
+      setClaimStatus('Scoring handed off. Anyone can start scoring this group now.');
+    } catch (error) {
+      setClaimStatus(formatUnknownError(error, 'Unable to hand off scoring.'));
+    } finally {
+      setClaiming(false);
+    }
+  }
+
+  async function discardStuckHoles() {
+    if (!window.confirm(`Discard ${stuckHoles.length} unsent hole${stuckHoles.length === 1 ? '' : 's'} from this phone? The scores ${group?.scorekeeperName ?? 'the current scorekeeper'} entered will be kept.`)) return;
+    try {
+      discardPendingForGroup(localStorage, round.id, groupNumber);
+      window.dispatchEvent(new Event(QUEUE_EVENT));
+      await refreshRound();
+    } catch (error) {
+      setMessage(formatUnknownError(error, 'Unable to discard those scores.'));
+    }
+  }
+
   const persistHoleSnapshot = useCallback(async (holeNumber: number, currentHole?: number) => {
     const latestRound = useRoundStore.getState().round;
     const target = latestRound.holes.find((item) => (item.groupNumber ?? 1) === groupNumber && item.holeNumber === holeNumber);
@@ -383,6 +441,19 @@ export default function GroupScoringPage() {
     // Capture the original score when opening a hole, not after every keystroke.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadStatus, round.id, groupNumber, targetHoleNumber]);
+
+  useEffect(() => {
+    if (loadStatus !== 'ready') return;
+    const update = () => {
+      try { setStuckHoles(canEdit ? [] : pendingForGroup(localStorage, round.id, groupNumber)); } catch { setStuckHoles([]); }
+      // Scores were refused because another phone took over: reload so this screen stops offering edits.
+      if (canEdit && syncError().startsWith('Another phone is now scoring')) void refreshRound().catch(() => undefined);
+    };
+    update();
+    window.addEventListener(QUEUE_EVENT, update);
+    return () => window.removeEventListener(QUEUE_EVENT, update);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadStatus, canEdit, round.id, groupNumber]);
 
   useEffect(() => {
     if (!canEdit || isEditingPastHole) return;
@@ -604,10 +675,57 @@ export default function GroupScoringPage() {
           {claimStatus ? <p role="status" className="mt-3 text-sm text-slate-600">{claimStatus}</p> : null}
         </section>
       ) : canEdit ? (
-        claimStatus ? <p role="status" className="rounded-xl bg-green-50 px-4 py-3 text-sm font-semibold text-green-800">{claimStatus}</p> : null
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-green-50 px-4 py-2 text-sm font-semibold text-green-800">
+          <span role="status">{claimStatus || `You're keeping score for Group ${groupNumber} ✓`}</span>
+          <button type="button" className="min-h-[40px] shrink-0 px-1 text-xs font-bold underline" disabled={claiming} onClick={() => void handleHandOff()}>
+            Hand off
+          </button>
+        </div>
       ) : (
         <section className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
-          <span className="font-semibold text-slate-800">{group?.scorekeeperName ?? 'Someone else'}</span> is keeping score for this group. You&apos;re watching live.
+          <p>
+            <span className="font-semibold text-slate-800">{group?.scorekeeperName ?? 'Someone else'}</span> is keeping score for this group. You&apos;re watching live.
+          </p>
+          {stuckHoles.length ? (
+            <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-amber-900">
+              <p className="font-semibold">
+                {stuckHoles.length} hole{stuckHoles.length === 1 ? '' : 's'} from this phone didn&apos;t send, because scoring moved to another phone.
+              </p>
+              <ul className="mt-2 space-y-1 text-xs">
+                {stuckHoles.map((entry) => (
+                  <li key={entry.hole.holeNumber}>Hole {entry.hole.holeNumber}: {describeScores(entry.hole, round.players)}</li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs">Tell {group?.scorekeeperName ?? 'the scorekeeper'} these scores, then discard them. Or take scoring back to send them.</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Button type="button" variant="secondary" disabled={claiming} onClick={() => void handleTakeOver()}>Take back &amp; send</Button>
+                <Button type="button" variant="secondary" onClick={() => void discardStuckHoles()}>Discard</Button>
+              </div>
+            </div>
+          ) : null}
+          {!stuckHoles.length ? (
+            handoffOpen ? (
+              <div className="mt-3 space-y-2">
+                <input
+                  className="min-h-[48px] w-full rounded-xl border border-slate-300 bg-white px-3 py-3"
+                  value={scorekeeperName}
+                  placeholder="Your name (optional)"
+                  onChange={(event) => setScorekeeperName(event.target.value)}
+                />
+                <div className="flex gap-2">
+                  <Button type="button" className="flex-1" disabled={claiming} onClick={() => void handleTakeOver()}>
+                    {claiming ? 'Taking over…' : 'Take over scoring'}
+                  </Button>
+                  <Button type="button" variant="secondary" onClick={() => setHandoffOpen(false)}>Cancel</Button>
+                </div>
+              </div>
+            ) : (
+              <button type="button" className="mt-2 min-h-[44px] text-sm font-semibold text-[#0f5132] underline" onClick={() => setHandoffOpen(true)}>
+                Need to take over scoring?
+              </button>
+            )
+          ) : null}
+          {claimStatus ? <p role="status" className="mt-2 text-sm text-slate-600">{claimStatus}</p> : null}
         </section>
       )}
 

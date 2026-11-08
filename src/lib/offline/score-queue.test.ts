@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HoleState, RoundState } from '@/types/round';
-import { acknowledge, overlayPending, pendingKey, putPending, readPending, type PendingHole } from './score-queue';
+import { acknowledge, discardPendingForGroup, overlayPending, pendingForGroup, pendingKey, putPending, readPending, type PendingHole } from './score-queue';
 import { paymentKey } from './payments';
 
 class MemoryStorage implements Storage {
@@ -92,7 +92,7 @@ describe('durable score queue', () => {
   });
   it('does not write scores when scorekeeper ownership has changed', async () => {
     mocks.single.mockResolvedValue({ data: { scorekeeper_device_id: 'another-device', current_hole: 1 }, error: null });
-    await expect(sendPending(entry())).rejects.toThrow('scorekeeper changed');
+    await expect(sendPending(entry())).rejects.toThrow('Another phone is now scoring Group 1');
     expect(mocks.updateHole).not.toHaveBeenCalled();
   });
   it('does not move group progress backward while syncing a correction', async () => {
@@ -104,5 +104,19 @@ describe('durable score queue', () => {
     const line = { id: 'banker:1:p1:p2', label: 'Paul pays Joe', amount: 20 };
     expect(paymentKey('one', line)).not.toBe(paymentKey('two', line));
     expect(paymentKey('one', line)).not.toBe(paymentKey('one', { ...line, amount: 21 }));
+  });
+});
+
+describe('unsent holes after scoring moves to another phone', () => {
+  it('lists and discards only the chosen group in the chosen round', () => {
+    const storage = new MemoryStorage();
+    putPending(storage, entry());
+    putPending(storage, entry({ hole: { ...hole, holeNumber: 2 } }));
+    putPending(storage, entry({ groupNumber: 2 }));
+    putPending(storage, entry({ roundId: 'other-round' }));
+    expect(pendingForGroup(storage, 'round-id', 1).map((item) => item.hole.holeNumber)).toEqual([1, 2]);
+    discardPendingForGroup(storage, 'round-id', 1);
+    expect(pendingForGroup(storage, 'round-id', 1)).toEqual([]);
+    expect(readPending(storage).map((item) => [item.roundId, item.groupNumber])).toEqual([['round-id', 2], ['other-round', 1]]);
   });
 });

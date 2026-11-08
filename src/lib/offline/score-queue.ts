@@ -48,3 +48,13 @@ export function overlayPending(round: RoundState, entries: PendingHole[]): Round
     } : undefined,
   };
 }
+
+/** Unsent holes for one group on this device. */
+export function pendingForGroup(storage: Storage, roundId: string, groupNumber: number) {
+  return readPending(storage).filter((entry) => entry.roundId === roundId && entry.groupNumber === groupNumber);
+}
+
+/** Drops this device's unsent holes for a group (after scoring moved to another phone). */
+export function discardPendingForGroup(storage: Storage, roundId: string, groupNumber: number) {
+  pendingForGroup(storage, roundId, groupNumber).forEach((entry) => storage.removeItem(pendingKey(entry)));
+}

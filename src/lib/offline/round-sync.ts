@@ -29,7 +29,7 @@ export function queueHole(round: RoundState, groupNumber: number, hole: HoleStat
 export async function sendPending(entry: PendingHole) {
   const { data: group, error } = await supabase.from('round_groups').select('scorekeeper_device_id,current_hole').eq('round_id', entry.roundId).eq('group_number', entry.groupNumber).single();
   if (error) throw error;
-  if (group.scorekeeper_device_id !== entry.deviceId) throw new Error(`Group ${entry.groupNumber} scorekeeper changed. Pending scores remain on this device; ask the organizer to resolve ownership.`);
+  if (group.scorekeeper_device_id !== entry.deviceId) throw new Error(`Another phone is now scoring Group ${entry.groupNumber}, so scores from this phone weren't sent. Open the group to review them.`);
   const common = { roundId: entry.roundId, groupNumber: entry.groupNumber, holeNumber: entry.hole.holeNumber };
   await updateSharedHole({ ...common, bankerPlayerKey: entry.hole.bankerPlayerId, bankerGrossScore: entry.hole.bankerGrossScore, bankerPressed: entry.hole.bankerPressed, isSaved: false });
   await replaceSharedHoleMatchups({ ...common, matchups: entry.hole.matchups });
