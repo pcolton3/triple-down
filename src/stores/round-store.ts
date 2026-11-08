@@ -1,5 +1,7 @@
 'use client';
 
+import { overlayPending, readPending } from '@/lib/offline/score-queue';
+
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { settleBankerHole } from '@/domain/banker/settle-banker-hole';
@@ -1361,7 +1363,8 @@ export const useRoundStore = create<RoundStore>()(
         }),
 
       hydrateRound: (round) => {
-        const hydratedRound = ensureMultiFoursomeRound(round);
+        const withPending = typeof window === 'undefined' ? round : overlayPending(round, readPending(localStorage));
+        const hydratedRound = ensureMultiFoursomeRound(withPending);
         set({ round: hydratedRound, ledger: recalcLedger(hydratedRound) });
       },
 

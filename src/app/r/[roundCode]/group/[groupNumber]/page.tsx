@@ -1,5 +1,9 @@
 'use client';
 
+import { SaveStatus } from '@/app/score-sync';
+import { cacheRound, cachedRound, rememberRound, corrections, recordCorrection, describeScores, type Correction } from '@/lib/offline/local-rounds';
+import { queueHole, flushScores } from '@/lib/offline/round-sync';
+import type { HoleState } from '@/types/round';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -9,12 +13,9 @@ import { formatCurrency } from '@/lib/utils/currency';
 import {
   createSharedRoundFromLocalRound,
   loadSharedRoundByCode,
-  replaceSharedHoleMatchups,
   sharedRoundBundleToRoundState,
-  updateSharedCtpResult,
-  updateSharedHole,
 } from '@/lib/realtime/shared-rounds';
-import { claimGroupScorekeeper, updateGroupCurrentHole, userCanEditGroup } from '@/lib/realtime/group-rounds';
+import { claimGroupScorekeeper, userCanEditGroup } from '@/lib/realtime/group-rounds';
 
 function formatUnknownError(error: unknown, fallback: string) {
   if (error instanceof Error) return error.message;
@@ -33,17 +34,24 @@ function NumberField({
   placeholder,
   blankWhenZero = false,
   disabled = false,
+  par,
 }: {
   value: number | null;
   onChange: (value: number | null) => void;
   placeholder?: string;
   blankWhenZero?: boolean;
   disabled?: boolean;
+  par?: number;
 }) {
   const displayValue = value == null ? '' : blankWhenZero && value === 0 ? '' : value;
 
   return (
+    <div className="flex min-w-0 items-center gap-1">
+      {par ? <button type="button" aria-label="Decrease gross score" disabled={disabled || (value != null && value <= 1)} className="min-h-[48px] min-w-[44px] rounded-xl border border-slate-300 font-bold disabled:opacity-40" onClick={() => onChange(Math.max(1, (value ?? par + 1) - 1))}>−</button> : null}
     <input
+      aria-label={par ? "Gross score" : placeholder}
+      min={par ? 1 : 0}
+      step={par ? 1 : 0.01}
       type="number"
       inputMode="numeric"
       value={displayValue}
@@ -51,9 +59,16 @@ function NumberField({
       placeholder={placeholder}
       onFocus={(event) => event.currentTarget.select()}
       onMouseUp={(event) => event.preventDefault()}
-      onChange={(event) => onChange(event.target.value === '' ? null : Number(event.target.value))}
-      className="min-h-[52px] w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-lg font-bold tabular-nums shadow-sm disabled:bg-slate-100 disabled:text-slate-500"
+      onChange={(event) => {
+        const raw = event.target.value;
+        const next = Number(raw);
+        if (!raw) onChange(null);
+        else if (Number.isFinite(next) && (!par || Number.isInteger(next)) && next >= (par ? 1 : 0)) onChange(next);
+      }}
+      className="min-h-[52px] min-w-0 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-lg font-bold tabular-nums shadow-sm disabled:bg-slate-100 disabled:text-slate-500"
     />
+      {par ? <button type="button" aria-label="Increase gross score" disabled={disabled} className="min-h-[48px] min-w-[44px] rounded-xl border border-slate-300 font-bold disabled:opacity-40" onClick={() => onChange(value == null ? par : value + 1)}>+</button> : null}
+    </div>
   );
 }
 
@@ -94,7 +109,6 @@ export default function GroupScoringPage() {
     Number.isInteger(requestedHoleNumber) && requestedHoleNumber >= 1 && requestedHoleNumber <= 18
       ? requestedHoleNumber
       : null;
-  const isEditingPastHole = editHoleNumber != null;
   const {
     round,
     hydrateRound,
@@ -116,8 +130,9 @@ export default function GroupScoringPage() {
   const [loadError, setLoadError] = useState('');
   const [scorekeeperName, setScorekeeperName] = useState('');
   const [claimStatus, setClaimStatus] = useState('');
-  const autosaveTimer = useRef<number | null>(null);
-  const lastAutosaveKey = useRef('');
+  const [audit, setAudit] = useState<Correction[]>([]);
+  const [busy, setBusy] = useState(false);
+  const editingBaseline = useRef<HoleState | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -129,6 +144,7 @@ export default function GroupScoringPage() {
       try {
         setLoadStatus('loading');
         setLoadError('');
+        if (!navigator.onLine) throw new Error('Offline');
         const bundle = await loadSharedRoundByCode(requestedCode);
         if (cancelled) return;
 
@@ -138,11 +154,20 @@ export default function GroupScoringPage() {
         }
 
         hydrateRound(sharedRoundBundleToRoundState(bundle));
+        try { cacheRound(useRoundStore.getState().round); } catch { setMessage('Could not cache this round for offline reopening. Keep this page open.'); }
         setLoadStatus('ready');
       } catch (error) {
         if (cancelled) return;
-        setLoadStatus('idle');
-        setLoadError(formatUnknownError(error, 'Unable to load this round from Supabase.'));
+        let cached = null;
+        try { cached = cachedRound(requestedCode); } catch { /* Fall through to a readable load error. */ }
+        if (cached) {
+          hydrateRound(cached);
+          setLoadStatus('ready');
+          setLoadError('Using the saved round on this device. Changes will sync when a connection is available.');
+        } else {
+          setLoadStatus('idle');
+          setLoadError(formatUnknownError(error, 'Unable to load this round. Connect once to make it available offline.'));
+        }
       }
     }
 
@@ -189,11 +214,12 @@ export default function GroupScoringPage() {
     roundHoles.find((item) => (item.groupNumber ?? 1) === groupNumber && item.holeNumber === targetHoleNumber) ??
     roundHoles.find((item) => item.holeNumber === targetHoleNumber) ??
     roundHoles[0];
+  const isEditingPastHole = editHoleNumber != null || Boolean(hole?.isSaved);
   const banker = groupPlayers.find((player) => player.id === hole?.bankerPlayerId) ?? groupPlayers[0] ?? roundPlayers[0];
   const isFinalHole = hole?.holeNumber === round.totalHoles;
   const pressAction = hole?.par === 3 ? 'Triple' : 'Double';
   const isClaimed = Boolean(group?.scorekeeperDeviceId);
-  const canEdit = group ? userCanEditGroup(group) : false;
+  const canEdit = loadStatus === 'ready' && round.roundCode.toUpperCase() === params.roundCode.toUpperCase() && Boolean(group && userCanEditGroup(group));
 
   async function refreshRound() {
     const bundle = await loadSharedRoundByCode(round.roundCode);
@@ -237,72 +263,66 @@ export default function GroupScoringPage() {
   const persistHoleSnapshot = useCallback(async (holeNumber: number, currentHole?: number) => {
     const latestRound = useRoundStore.getState().round;
     const target = latestRound.holes.find((item) => (item.groupNumber ?? 1) === groupNumber && item.holeNumber === holeNumber);
-    if (!target || latestRound.id.startsWith('round-')) return;
-
-    await updateSharedHole({
-      roundId: latestRound.id,
-      groupNumber,
-      holeNumber: target.holeNumber,
-      bankerPlayerKey: target.bankerPlayerId,
-      bankerGrossScore: target.bankerGrossScore,
-      bankerPressed: target.bankerPressed,
-      isSaved: target.isSaved,
-    });
-
-    await replaceSharedHoleMatchups({
-      roundId: latestRound.id,
-      groupNumber,
-      holeNumber: target.holeNumber,
-      matchups: target.matchups,
-    });
-
-    if (target.par === 3) {
-      await updateSharedCtpResult({
-        roundId: latestRound.id,
-        groupNumber,
-        holeNumber: target.holeNumber,
-        winnerPlayerKey: target.ctpWinnerPlayerId ?? null,
-      });
-    }
-
-    if (currentHole != null) {
-      await updateGroupCurrentHole({ roundId: latestRound.id, groupNumber, currentHole });
-    }
+    if (!target || latestRound.id.startsWith('round-')) throw new Error('Load the shared round before saving.');
+    queueHole(latestRound, groupNumber, target, currentHole);
+    // The durable queue owns retries; moving holes does not depend on connectivity.
+    void flushScores();
   }, [groupNumber]);
 
   async function handleUpdate() {
-    if (!canEdit) return;
-    if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current);
-    const result = updateHole(groupNumber, targetHoleNumber);
-    if (result.ok) {
+    if (!canEdit || busy) return;
+    setBusy(true);
+    try {
+      const before = editingBaseline.current;
+      const result = updateHole(groupNumber, targetHoleNumber);
+      if (!result.ok) { setMessage(result.message ?? 'Unable to save correction.'); return; }
       await persistHoleSnapshot(targetHoleNumber);
-      await refreshRound();
-    }
-    setMessage(
-      result.message ??
-        (result.ok
-          ? isEditingPastHole
-            ? `Group ${groupNumber} hole ${hole.holeNumber} correction saved.`
-            : `Hole ${hole.holeNumber} updated.`
-          : 'Unable to update this hole.')
-    );
+      const after = useRoundStore.getState().round.holes.find((item) => (item.groupNumber ?? 1) === groupNumber && item.holeNumber === targetHoleNumber)!;
+      if (before && JSON.stringify(before) !== JSON.stringify(after)) {
+        recordCorrection({ id: crypto.randomUUID(), roundId: round.id, group: groupNumber, actor: group.scorekeeperName ?? 'Scorekeeper', at: new Date().toISOString(), before, after: structuredClone(after) });
+        setAudit(corrections(round.id, groupNumber));
+      }
+      editingBaseline.current = structuredClone(after);
+      setMessage('Correction saved on this device. Check sync status below.');
+    } catch (error) { setMessage(formatUnknownError(error, 'Unable to save correction. Keep this page open and retry.')); }
+    finally { setBusy(false); }
   }
 
   async function handleNext() {
-    if (!canEdit) return;
-    if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current);
-    const completedHoleNumber = hole.holeNumber;
-    const result = nextHole(groupNumber);
-    if (result.ok && !isFinalHole) window.scrollTo({ top: 0, behavior: 'smooth' });
-    if (result.ok) {
+    if (!canEdit || busy) return;
+    setBusy(true);
+    const before = structuredClone(useRoundStore.getState().round);
+    try {
+      const completedHoleNumber = hole.holeNumber;
+      const result = nextHole(groupNumber);
+      if (!result.ok) { setMessage(result.message ?? 'Enter every gross score before continuing.'); return; }
       await persistHoleSnapshot(completedHoleNumber, isFinalHole ? completedHoleNumber : completedHoleNumber + 1);
-    }
-    if (result.ok && isFinalHole) {
-      router.push(`/r/${round.roundCode}`);
-      return;
-    }
-    if (result.ok) await refreshRound();
-    setMessage(result.message ?? (result.ok ? `Moved to Hole ${hole.holeNumber + 1}.` : 'Unable to move to the next hole.'));
+      if (isFinalHole) { router.push(`/r/${round.roundCode}`); return; }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setMessage(`Hole ${completedHoleNumber} saved on this device.`);
+    } catch (error) {
+      hydrateRound(before);
+      setMessage(formatUnknownError(error, 'Unable to save. Keep this page open and retry.'));
+    } finally { setBusy(false); }
+  }
+
+  async function undoCorrection(entry: Correction) {
+    if (!canEdit || busy) return;
+    setBusy(true);
+    try {
+      const latest = useRoundStore.getState().round;
+      const current = latest.holes.find((item) => (item.groupNumber ?? 1) === groupNumber && item.holeNumber === entry.after.holeNumber);
+      if (JSON.stringify(current) !== JSON.stringify(entry.after)) throw new Error('This hole has newer changes. Open its history to review before editing.');
+      const restored = { ...latest, holes: latest.holes.map((item) => item === current ? structuredClone(entry.before) : item) };
+      queueHole(restored, groupNumber, entry.before);
+      hydrateRound(restored);
+      recordCorrection({ id: crypto.randomUUID(), roundId: round.id, group: groupNumber, actor: group.scorekeeperName ?? 'Scorekeeper', at: new Date().toISOString(), before: entry.after, after: entry.before, undoes: entry.id });
+      editingBaseline.current = structuredClone(entry.before);
+      setAudit(corrections(round.id, groupNumber));
+      void flushScores();
+      setMessage('Correction undone. Check sync status below.');
+    } catch (error) { setMessage(formatUnknownError(error, 'Unable to undo correction.')); }
+    finally { setBusy(false); }
   }
 
   async function copyEventLink() {
@@ -312,41 +332,30 @@ export default function GroupScoringPage() {
   }
 
   useEffect(() => {
-    if (!canEdit || !hole || round.id.startsWith('round-')) return;
-    const autosaveKey = JSON.stringify({
-      roundId: round.id,
-      groupNumber,
-      holeNumber: hole.holeNumber,
-      bankerPlayerId: hole.bankerPlayerId,
-      bankerGrossScore: hole.bankerGrossScore,
-      bankerPressed: hole.bankerPressed,
-      isSaved: hole.isSaved,
-      ctpWinnerPlayerId: hole.ctpWinnerPlayerId,
-      matchups: hole.matchups.map((matchup) => ({
-        playerId: matchup.playerId,
-        baseWager: matchup.baseWager,
-        pressed: matchup.pressed,
-        grossScore: matchup.grossScore,
-      })),
+    if (loadStatus !== 'ready' || round.roundCode.toUpperCase() !== params.roundCode.toUpperCase() || !hole) return;
+    try {
+      rememberRound(round, groupNumber, currentHoleNumber);
+      setAudit(corrections(round.id, groupNumber));
+      editingBaseline.current = structuredClone(hole);
+    } catch { setMessage('Device storage is unavailable. Keep this page open until scores are synced.'); }
+    // Capture the original score when opening a hole, not after every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadStatus, round.id, groupNumber, targetHoleNumber]);
+
+  useEffect(() => {
+    if (!canEdit || isEditingPastHole) return;
+    return useRoundStore.subscribe((next, previous) => {
+      if (next.round.id !== round.id || previous.round.id !== round.id) return;
+      const changed = next.round.holes.filter((item) => (item.groupNumber ?? 1) === groupNumber && JSON.stringify(item) !== JSON.stringify(previous.round.holes.find((old) => (old.groupNumber ?? 1) === groupNumber && old.holeNumber === item.holeNumber)));
+      try {
+        for (const changedHole of changed) queueHole(next.round, groupNumber, changedHole);
+        const current = next.round.multiFoursome?.groups.find((item) => item.groupNumber === groupNumber)?.currentHole ?? next.round.currentHole;
+        rememberRound(next.round, groupNumber, current);
+      } catch (error) { setMessage(formatUnknownError(error, 'Unable to save on this device. Keep this page open and retry.')); }
     });
+  }, [canEdit, groupNumber, isEditingPastHole, round.id]);
 
-    if (lastAutosaveKey.current === autosaveKey) return;
-    lastAutosaveKey.current = autosaveKey;
-
-    if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current);
-    autosaveTimer.current = window.setTimeout(() => {
-      void persistHoleSnapshot(hole.holeNumber).catch((error) => {
-        console.error('Unable to autosave hole.', error);
-        setMessage(formatUnknownError(error, 'Unable to autosave this hole.'));
-      });
-    }, 700);
-
-    return () => {
-      if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current);
-    };
-  }, [canEdit, groupNumber, hole, persistHoleSnapshot, round.id]);
-
-  if (!hole || !banker) {
+  if (!hole || !banker || loadStatus !== 'ready' || round.roundCode.toUpperCase() !== params.roundCode.toUpperCase()) {
     const title =
       loadStatus === 'not_found'
         ? 'Round Not Found'
@@ -393,17 +402,7 @@ export default function GroupScoringPage() {
   const groupProgress = Math.round((savedGroupHoles / Math.max(1, round.totalHoles)) * 100);
 
   return (
-    <main className="mx-auto max-w-lg space-y-4 px-4 py-4 pb-28">
-      {loadStatus === 'loading' ? (
-        <section className="rounded-2xl border border-[#68aef7] bg-white p-4 text-sm text-slate-600">
-          Loading round {params.roundCode}...
-        </section>
-      ) : null}
-      {loadStatus === 'not_found' ? (
-        <section className="rounded-2xl border border-[#68aef7] bg-white p-4 text-sm text-slate-600">
-          No round was found for code {params.roundCode}.
-        </section>
-      ) : null}
+    <main className="mx-auto max-w-lg space-y-4 px-4 py-4 pb-44">
       {loadError ? (
         <section className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {loadError}
@@ -539,7 +538,7 @@ export default function GroupScoringPage() {
           </Button>
         </div>
         <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Gross</label>
-        <NumberField value={hole.bankerGrossScore} disabled={!canEdit} onChange={(value) => setBankerGrossScore(value, groupNumber, targetHoleNumber)} placeholder="Gross" blankWhenZero />
+        <NumberField value={hole.bankerGrossScore} disabled={!canEdit} onChange={(value) => setBankerGrossScore(value, groupNumber, targetHoleNumber)} placeholder="Gross" par={hole.par} blankWhenZero />
       </section>
       ) : null}
 
@@ -585,6 +584,7 @@ export default function GroupScoringPage() {
                       : setPlayerGrossScore(player.id, value, groupNumber, targetHoleNumber)
                   }
                   placeholder="Gross"
+                  par={hole.par}
                   blankWhenZero
                 />
                 <p className="mt-3 text-sm text-slate-500">Counts for leaderboard and any side games this golfer joined.</p>
@@ -612,14 +612,14 @@ export default function GroupScoringPage() {
                   </Button>
                 ) : null}
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-3">
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Bet</label>
                   <NumberField value={playsBanker ? matchup.baseWager : null} disabled={!canEdit || !playsBanker} onChange={(value) => setWager(player.id, value ?? 0, groupNumber, targetHoleNumber)} placeholder={playsBanker ? 'Bet' : 'N/A'} blankWhenZero />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Gross</label>
-                  <NumberField value={matchup.grossScore} disabled={!canEdit} onChange={(value) => setPlayerGrossScore(player.id, value, groupNumber, targetHoleNumber)} placeholder="Gross" blankWhenZero />
+                  <NumberField value={matchup.grossScore} disabled={!canEdit} onChange={(value) => setPlayerGrossScore(player.id, value, groupNumber, targetHoleNumber)} placeholder="Gross" par={hole.par} blankWhenZero />
                 </div>
               </div>
               <p className="mt-3 text-sm text-slate-500">
@@ -677,13 +677,27 @@ export default function GroupScoringPage() {
       </section>
       ) : null}
 
+      {audit.length ? <details className="rounded-2xl border border-slate-200 bg-white p-4">
+        <summary className="cursor-pointer font-bold">Correction history on this device ({audit.length})</summary>
+        <p className="mt-2 text-xs text-slate-500">Records and undo are available on this device. Share scores through the event leaderboard.</p>
+        {audit.slice().reverse().map((entry, index) => <div key={entry.id} className="mt-3 border-t pt-3 text-sm">
+          <p className="font-semibold">Hole {entry.after.holeNumber} · {entry.actor} {entry.undoes ? 'undid a correction' : 'saved a correction'}</p>
+          <p>{new Date(entry.at).toLocaleString()}</p>
+          <p className="mt-1">Before: {describeScores(entry.before, round.players)}</p>
+          <p>After: {describeScores(entry.after, round.players)}</p>
+          {index === 0 && canEdit && !entry.undoes ? <Button variant="secondary" disabled={busy} onClick={() => void undoCorrection(entry)}>Undo correction</Button> : null}
+        </div>)}
+      </details> : null}
+
       {message ? <p className="rounded-xl bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">{message}</p> : null}
 
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 py-3 shadow-[0_-8px_20px_rgba(15,23,42,0.08)] backdrop-blur">
-        <div className="mx-auto flex max-w-lg gap-3">
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_20px_rgba(15,23,42,0.08)] backdrop-blur">
+        <div className="mx-auto max-w-lg">
+        {canEdit ? <SaveStatus roundId={round.id} group={groupNumber} dirty={isEditingPastHole && JSON.stringify(hole) !== JSON.stringify(editingBaseline.current)} onRetry={() => { if (isEditingPastHole) void handleUpdate(); else void persistHoleSnapshot(targetHoleNumber).catch((error) => setMessage(formatUnknownError(error, "Unable to retry saving."))); }} /> : null}
+        <div className="flex gap-3">
         {isEditingPastHole ? (
           <>
-          <Button className="flex-1" disabled={!canEdit} onClick={() => void handleUpdate()}>
+          <Button className="flex-1" disabled={!canEdit || busy} onClick={() => void handleUpdate()}>
             Save Correction
           </Button>
           <Link className="flex-1 rounded-xl border border-[#2f8df3] px-4 py-3 text-center font-semibold text-[#2f8df3]" href={`/r/${round.roundCode}/history`}>
@@ -691,10 +705,11 @@ export default function GroupScoringPage() {
           </Link>
           </>
         ) : (
-          <Button className="flex-1" disabled={!canEdit} onClick={() => void handleNext()}>
-            {isFinalHole ? 'Finish Group' : 'Next'}
+          <Button className="flex-1" disabled={!canEdit || busy} onClick={() => void handleNext()}>
+            {busy ? 'Saving…' : isFinalHole ? 'Save & Finish Group' : 'Save & Next Hole'}
           </Button>
         )}
+        </div>
         </div>
       </div>
     </main>

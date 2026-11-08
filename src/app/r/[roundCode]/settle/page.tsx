@@ -1,5 +1,7 @@
 'use client';
 
+import { SettlementSummary, type PaymentLine } from '@/app/settlement-summary';
+import { readPending } from '@/lib/offline/score-queue';
 import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { useRoundStore } from '@/stores/round-store';
@@ -125,6 +127,8 @@ export default function SettlePage() {
   const [handicapPostStatus, setHandicapPostStatus] = useState('');
   const [settlementSnapshot, setSettlementSnapshot] = useState<SettlementSnapshot | null>(null);
   const [snapshotStatus, setSnapshotStatus] = useState('');
+  const [loadStatus, setLoadStatus] = useState('Loading settlement…');
+  const [loaded, setLoaded] = useState(false);
   const routeRoundCode = params.roundCode?.toUpperCase() || round.roundCode;
   const bankerSettlementGroups = settlements.reduce<Array<{ groupNumber: number; items: typeof settlements }>>(
     (groups, item) => {
@@ -161,6 +165,8 @@ export default function SettlePage() {
 
     async function loadRound() {
       if (!routeRoundCode) return;
+      setLoaded(false);
+      try {
       const [bundle, snapshot] = await Promise.all([
         loadSharedRoundByCode(routeRoundCode),
         loadSettlementSnapshot(routeRoundCode),
@@ -168,7 +174,12 @@ export default function SettlePage() {
       if (!cancelled && bundle) {
         hydrateRound(sharedRoundBundleToRoundState(bundle));
       }
-      if (!cancelled) setSettlementSnapshot(snapshot);
+      if (!cancelled) {
+        setSettlementSnapshot(snapshot);
+        setLoaded(Boolean(bundle));
+        if (!bundle) setLoadStatus('Round not found.');
+      }
+      } catch { if (!cancelled) setLoadStatus('Unable to load settlement. Reconnect and reload to see current payouts.'); }
     }
 
     void loadRound();
@@ -306,6 +317,7 @@ export default function SettlePage() {
 
   async function handleFinalizeSettlement() {
     try {
+      if (readPending(localStorage).some((entry) => entry.roundId === round.id)) throw new Error('Sync all pending scores on this device before finalizing settlement.');
       setSnapshotStatus('Saving final settlement...');
       const snapshot = buildSnapshot();
       const saved = await saveSettlementSnapshot({
@@ -349,6 +361,26 @@ export default function SettlePage() {
     }
   }
 
+  if (!loaded || round.roundCode.toUpperCase() !== routeRoundCode.toUpperCase()) return <main className="mx-auto max-w-3xl px-4 py-8" role="status">{loadStatus}</main>;
+
+  const payoutSnapshot = settlementSnapshot ?? buildSnapshot();
+  const paymentLines: PaymentLine[] = payoutSnapshot.bankerSettlements.map((item) => ({
+    id: `banker:${item.groupNumber}:${item.fromPlayerId}:${item.toPlayerId}`,
+    label: `${item.fromPlayerName} pays ${item.toPlayerName} (Banker · Group ${item.groupNumber})`,
+    amount: item.amount,
+  }));
+  const pots = [
+    ['Skins', payoutSnapshot.skins], ['Closest to the pin', payoutSnapshot.ctp], ['Low net', payoutSnapshot.lowNet],
+    ['Nassau', payoutSnapshot.nassau ?? []], ['Stableford', payoutSnapshot.stableford ?? []],
+    ['Birdie pot', payoutSnapshot.birdiePot ?? []], ['Eagle pot', payoutSnapshot.eaglePot ?? []],
+  ] as const;
+  pots.forEach(([game, winners]) => winners.filter((winner) => winner.amount > 0).forEach((winner) => paymentLines.push({ id: `${game}:${winner.playerId}`, label: `Pot holder pays ${winner.playerName} (${game})`, amount: winner.amount })));
+
+  (payoutSnapshot.holeInOne ?? []).forEach((winner) => {
+    if (winner.payerCount <= 0 || winner.amount <= 0) return;
+    payoutSnapshot.finalScoring.filter((player) => player.playerId !== winner.playerId).forEach((payer) => paymentLines.push({ id: `ace:${payer.playerId}:${winner.playerId}`, label: `${payer.playerName} pays ${winner.playerName} (Hole in one)`, amount: winner.amount / winner.payerCount }));
+  });
+
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
       <div className="mb-6 flex items-center justify-between gap-4">
@@ -366,6 +398,11 @@ export default function SettlePage() {
         </div>
       </div>
 
+      <SettlementSummary roundId={round.id} title={round.title} complete={Boolean(settlementSnapshot) || roundComplete} lines={paymentLines} />
+      {snapshotStatus ? <p role="status" className="mb-4 text-sm">{snapshotStatus}</p> : null}
+      {!settlementSnapshot ? <button type="button" disabled={!roundComplete} className="mb-4 rounded-xl bg-[#0f5132] px-4 py-3 font-semibold text-white disabled:opacity-40" onClick={() => void handleFinalizeSettlement()}>Finalize settlement</button> : null}
+      <details className="rounded-2xl border border-slate-200 p-3">
+      <summary className="mb-4 cursor-pointer font-bold">Game-by-game calculations and score details</summary>
       {settlementSnapshot ? (
         <>
           <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
@@ -874,6 +911,7 @@ export default function SettlePage() {
       </section>
         </>
       )}
+      </details>
     </main>
   );
 }

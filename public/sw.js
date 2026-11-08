@@ -1,4 +1,4 @@
-const CACHE_NAME = 'triple-track-v1';
+const CACHE_NAME = 'triple-track-v2';
 const APP_SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {
@@ -38,12 +38,21 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(request)
       .then((response) => {
-        if (request.mode === 'navigate') {
+        if (response.ok && (request.mode === 'navigate' || request.headers.get('RSC') === '1')) {
           const copy = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
         }
         return response;
       })
-      .catch(() => caches.match(request).then((cached) => cached || caches.match('/')))
+      .catch(async () => {
+        const cached = await caches.match(request);
+        if (cached) return cached;
+        if (request.mode === 'navigate') {
+          const visitedPage = await caches.match(request, { ignoreSearch: true });
+          if (visitedPage) return visitedPage;
+        }
+        if (request.mode === 'navigate') return (await caches.match('/')) || Response.error();
+        return Response.error();
+      })
   );
 });

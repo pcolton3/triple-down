@@ -1,3 +1,4 @@
+import { ScoreSync } from '@/app/score-sync';
 import type { Metadata } from 'next';
 import '@/app/globals.css';
 import { SiteHeader } from '@/components/layout/site-header';
@@ -41,6 +42,7 @@ export default function RootLayout({
         <SiteHeader />
         {children}
         <RegisterServiceWorker />
+        <ScoreSync />
       </body>
     </html>
   );

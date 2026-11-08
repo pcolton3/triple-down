@@ -1,14 +1,18 @@
 'use client';
 
+import { readRecent, type RecentRound } from '@/lib/offline/local-rounds';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { InstallAppButton } from '@/components/pwa/install-app-button';
 import { Button } from '@/components/shared/button';
 
 export function Hero() {
   const router = useRouter();
   const [roundCode, setRoundCode] = useState('');
+
+  const [recent, setRecent] = useState<RecentRound | null>(null);
+  useEffect(() => { try { setRecent(readRecent()); } catch { /* Joining still works if storage is unavailable. */ } }, []);
 
   function handleJoin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -52,6 +56,13 @@ export function Hero() {
         </Link>
       </div>
 
+      {recent ? (
+        <a href={`/r/${encodeURIComponent(recent.code)}/group/${recent.group}`} className="mx-auto mt-5 block max-w-md rounded-2xl border border-[#c9d8c7] bg-white p-4 shadow-sm">
+          <span className="block font-bold text-[#0f5132]">Resume your round →</span>
+          <span className="mt-1 block text-sm text-slate-600">{recent.title} · {recent.course}</span>
+          <span className="mt-1 block text-sm font-semibold">Group {recent.group} · Hole {recent.hole}</span>
+        </a>
+      ) : null}
       <InstallAppButton />
 
       <div className="mt-10 grid gap-3 md:grid-cols-3">
