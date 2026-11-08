@@ -10,6 +10,7 @@ import { saveCourseTee, savedCourseKey } from '@/lib/realtime/saved-course-tees'
 import { BEEZER_EXTRA_GAMES, type BeezerExtraGameKey } from '@/lib/games/catalog';
 import { GamePicker } from '@/components/round/game-picker';
 import { moneyLabel } from '@/lib/games/help';
+import { optionalGames, PlayerGames, toggleExcluded } from '@/components/round/player-games';
 import { useRoundStore } from '@/stores/round-store';
 import type { Player, RoundState } from '@/types/round';
 
@@ -115,6 +116,7 @@ export default function EditRoundSetupPage() {
   const [ryderCupFormat, setRyderCupFormat] = useState<'team_match' | 'singles_match'>(round.gameSettings.ryderCupFormat ?? 'team_match');
   const [teamAssignments, setTeamAssignments] = useState<Record<string, 'team_one' | 'team_two'>>(round.gameSettings.teamAssignments ?? {});
   const [singlesPairings, setSinglesPairings] = useState<Record<string, string>>(round.gameSettings.singlesPairings ?? {});
+  const [excludedPlayers, setExcludedPlayers] = useState<Record<string, string[]>>(round.gameSettings.excludedPlayers ?? {});
   const [courseRating, setCourseRating] = useState(round.gameSettings.courseRating == null ? '' : String(round.gameSettings.courseRating));
   const [slopeRating, setSlopeRating] = useState(round.gameSettings.slopeRating == null ? '' : String(round.gameSettings.slopeRating));
   const [teeColor, setTeeColor] = useState(round.gameSettings.teeColor ?? '');
@@ -150,7 +152,7 @@ export default function EditRoundSetupPage() {
   const moneyJson = JSON.stringify([
     bankerEnabled, skinsEnabled, lowNetEnabled, ctpEnabled, nassauEnabled, stablefordEnabled, birdiePotEnabled, eaglePotEnabled, holeInOneEnabled,
     teamMatchPlayEnabled, skinsPot, lowNetPot, ctpPot, nassauPot, stablefordPot, birdiePot, eaglePot, teamMatchPlayUnit,
-    teamAssignments, singlesPairings, ryderCupFormat,
+    teamAssignments, singlesPairings, ryderCupFormat, excludedPlayers,
     playerDrafts.map((player) => [player.handicap, player.bankerParticipant, player.skinsParticipant, player.ctpParticipant, player.lowNetParticipant]),
   ]);
   const allJson = JSON.stringify([
@@ -236,6 +238,7 @@ export default function EditRoundSetupPage() {
     setRyderCupFormat(round.gameSettings.ryderCupFormat ?? 'team_match');
     setTeamAssignments(round.gameSettings.teamAssignments ?? {});
     setSinglesPairings(round.gameSettings.singlesPairings ?? {});
+    setExcludedPlayers(round.gameSettings.excludedPlayers ?? {});
     setCourseRating(round.gameSettings.courseRating == null ? '' : String(round.gameSettings.courseRating));
     setSlopeRating(round.gameSettings.slopeRating == null ? '' : String(round.gameSettings.slopeRating));
     setTeeColor(round.gameSettings.teeColor ?? '');
@@ -347,6 +350,7 @@ export default function EditRoundSetupPage() {
           ryderCupFormat,
           teamAssignments: finalTeamAssignments,
           singlesPairings: finalSinglesPairings,
+          excludedPlayers: Object.fromEntries(optionalGameList.map((game) => [game.key, excludedPlayers[game.key] ?? []]).filter(([, ids]) => ids.length)),
           courseRating: numberOrNull(courseRating),
           slopeRating: numberOrNull(slopeRating),
           teeColor: teeColor.trim() || null,
@@ -388,19 +392,10 @@ export default function EditRoundSetupPage() {
     }
   }
 
-  const participation = (player: PlayerDraft) =>
-    [
-      bankerEnabled && player.bankerParticipant ? 'Banker' : null,
-      skinsEnabled && player.skinsParticipant ? 'Skins' : null,
-      ctpEnabled && player.ctpParticipant ? 'CTP' : null,
-      lowNetEnabled && player.lowNetParticipant ? 'Low Net' : null,
-    ].filter(Boolean).join(', ') || 'no side games';
-  const checkbox = (player: PlayerDraft, field: 'bankerParticipant' | 'skinsParticipant' | 'ctpParticipant' | 'lowNetParticipant', label: string) => (
-    <label key={field} className="flex min-h-[48px] items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold">
-      <input type="checkbox" className="h-5 w-5 accent-[#0f5132]" checked={player[field]} onChange={() => updatePlayerDraft(player.id, field, !player[field])} />
-      {label}
-    </label>
-  );
+  const optionalGameList = optionalGames({
+    nassauEnabled, stablefordEnabled, birdiePotEnabled, eaglePotEnabled, holeInOneEnabled,
+    wolfEnabled, vegasEnabled, bingoBangoBongoEnabled, matchPlayEnabled, extraGames,
+  });
 
   return (
     <main className="mx-auto max-w-3xl space-y-4 px-4 py-6 pb-32">
@@ -465,19 +460,20 @@ export default function EditRoundSetupPage() {
             <Field label="Handicap">
               <input type="number" inputMode="decimal" step="0.1" className={inputClass} value={player.handicap} onFocus={(event) => event.currentTarget.select()} onChange={(event) => updatePlayerDraft(player.id, 'handicap', event.target.value)} />
             </Field>
-            {bankerEnabled || skinsEnabled || ctpEnabled || lowNetEnabled ? (
-              <details className="sm:col-span-2">
-                <summary className="cursor-pointer text-sm font-semibold text-slate-600">
-                  Plays: {participation(player)} <span className="font-normal text-slate-500">(change)</span>
-                </summary>
-                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {bankerEnabled ? checkbox(player, 'bankerParticipant', 'Banker') : null}
-                  {skinsEnabled ? checkbox(player, 'skinsParticipant', 'Skins') : null}
-                  {ctpEnabled ? checkbox(player, 'ctpParticipant', 'CTP') : null}
-                  {lowNetEnabled ? checkbox(player, 'lowNetParticipant', 'Low Net') : null}
-                </div>
-              </details>
-            ) : null}
+            <PlayerGames
+              className="sm:col-span-2"
+              options={[
+                ...(bankerEnabled ? [{ key: 'banker', label: 'Banker', checked: player.bankerParticipant, onToggle: () => updatePlayerDraft(player.id, 'bankerParticipant', !player.bankerParticipant) }] : []),
+                ...(skinsEnabled ? [{ key: 'skins', label: 'Skins', checked: player.skinsParticipant, onToggle: () => updatePlayerDraft(player.id, 'skinsParticipant', !player.skinsParticipant) }] : []),
+                ...(ctpEnabled ? [{ key: 'ctp', label: 'CTP', checked: player.ctpParticipant, onToggle: () => updatePlayerDraft(player.id, 'ctpParticipant', !player.ctpParticipant) }] : []),
+                ...(lowNetEnabled ? [{ key: 'low_net', label: 'Low Net', checked: player.lowNetParticipant, onToggle: () => updatePlayerDraft(player.id, 'lowNetParticipant', !player.lowNetParticipant) }] : []),
+                ...optionalGameList.map((game) => ({
+                  ...game,
+                  checked: !(excludedPlayers[game.key] ?? []).includes(player.id),
+                  onToggle: () => setExcludedPlayers((current) => toggleExcluded(current, game.key, player.id)),
+                })),
+              ]}
+            />
             {teamMatchPlayEnabled ? (
               <div className="sm:col-span-2">
                 <span className="mb-2 block text-sm font-medium">Ryder Cup team</span>

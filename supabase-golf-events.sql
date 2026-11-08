@@ -45,6 +45,9 @@ create table if not exists public.golf_event_signups (
   updated_at timestamptz not null default now()
 );
 
+-- choices: { days: { "1": { playing: true, games: ["banker","skins"] }, ... } }
+alter table public.golf_event_signups add column if not exists choices jsonb not null default '{}'::jsonb;
+
 create unique index if not exists golf_event_signups_event_email
   on public.golf_event_signups (event_id, lower(email));
 
@@ -108,7 +111,10 @@ begin
 end;
 $$;
 
-create or replace function public.signup_for_golf_event(p_code text, p_name text, p_email text, p_handicap numeric)
+-- Older 4-argument version is replaced by one that also takes the player's day/game choices.
+drop function if exists public.signup_for_golf_event(text, text, text, numeric);
+
+create or replace function public.signup_for_golf_event(p_code text, p_name text, p_email text, p_handicap numeric, p_choices jsonb default null)
 returns text
 language plpgsql
 security definer
@@ -117,7 +123,10 @@ as $$
 declare
   v_event golf_events;
   v_count integer;
-  v_existing uuid;
+  v_existing golf_event_signups;
+  v_choices jsonb;
+  v_day jsonb;
+  v_key text;
 begin
   select * into v_event from golf_events where code = upper(trim(p_code));
   if not found then raise exception 'Event not found'; end if;
@@ -125,31 +134,50 @@ begin
   if length(trim(coalesce(p_name, ''))) not between 2 and 60 then raise exception 'Enter your name'; end if;
   if trim(coalesce(p_email, '')) !~* '^[^@\s]+@[^@\s]+\.[^@\s]+$' or length(p_email) > 120 then raise exception 'Enter a valid email'; end if;
   if p_handicap is null or p_handicap < -10 or p_handicap > 54 then raise exception 'Handicap must be between -10 and 54'; end if;
+  if p_choices is not null and (jsonb_typeof(p_choices) <> 'object' or pg_column_size(p_choices) > 20000) then raise exception 'Game choices are not valid'; end if;
 
-  select id into v_existing from golf_event_signups where event_id = v_event.id and lower(email) = lower(trim(p_email));
-  if v_existing is not null then
-    update golf_event_signups set name = trim(p_name), handicap = round(p_handicap, 1), updated_at = now() where id = v_existing;
+  select * into v_existing from golf_event_signups where event_id = v_event.id and lower(email) = lower(trim(p_email));
+
+  v_choices := coalesce(p_choices, v_existing.choices, '{}'::jsonb);
+  if jsonb_typeof(v_choices->'days') is distinct from 'object' then v_choices := jsonb_set(v_choices, '{days}', '{}'::jsonb); end if;
+  -- Once a day's round has started, that day's choices are locked; only the organizer can change them.
+  for v_day in select * from jsonb_array_elements(coalesce(v_event.days, '[]'::jsonb)) loop
+    if coalesce(v_day->>'roundCode', '') <> '' then
+      v_key := v_day->>'day';
+      if v_existing.id is null then
+        v_choices := jsonb_set(v_choices, array['days', v_key], '{"playing": false, "games": []}'::jsonb);
+      elsif v_existing.choices->'days' ? v_key then
+        v_choices := jsonb_set(v_choices, array['days', v_key], v_existing.choices->'days'->v_key);
+      else
+        v_choices := v_choices #- array['days', v_key];
+      end if;
+    end if;
+  end loop;
+
+  if v_existing.id is not null then
+    update golf_event_signups set name = trim(p_name), handicap = round(p_handicap, 1), choices = v_choices, updated_at = now() where id = v_existing.id;
     return 'updated';
   end if;
 
   select count(*) into v_count from golf_event_signups where event_id = v_event.id;
   if v_count >= coalesce(v_event.max_players, 200) then raise exception 'This event is full'; end if;
 
-  insert into golf_event_signups (event_id, name, email, handicap)
-  values (v_event.id, trim(p_name), lower(trim(p_email)), round(p_handicap, 1));
+  insert into golf_event_signups (event_id, name, email, handicap, choices)
+  values (v_event.id, trim(p_name), lower(trim(p_email)), round(p_handicap, 1), v_choices);
   return 'added';
 end;
 $$;
 
 -- Public roster: names, handicaps and teams only, never emails.
+drop function if exists public.golf_event_roster(text);
 create or replace function public.golf_event_roster(p_code text)
-returns table (name text, handicap numeric, team text)
+returns table (name text, handicap numeric, team text, choices jsonb)
 language sql
 security definer
 set search_path = public
 stable
 as $$
-  select s.name, s.handicap, s.team
+  select s.name, s.handicap, s.team, s.choices
   from golf_event_signups s join golf_events e on e.id = s.event_id
   where e.code = upper(trim(p_code))
   order by s.created_at;
@@ -170,7 +198,7 @@ begin
 end;
 $$;
 
--- p_patch keys (all optional): team ('team_one' | 'team_two' | null), paid (bool), remove (bool)
+-- p_patch keys (all optional): team ('team_one' | 'team_two' | null), paid (bool), remove (bool), handicap, choices (jsonb)
 create or replace function public.organizer_update_golf_signup(p_code text, p_key text, p_signup_id uuid, p_patch jsonb)
 returns void
 language plpgsql
@@ -189,6 +217,7 @@ begin
     team = case when p_patch ? 'team' then nullif(p_patch->>'team', '') else team end,
     paid = case when p_patch ? 'paid' then (p_patch->>'paid')::boolean else paid end,
     handicap = case when p_patch ? 'handicap' then round((p_patch->>'handicap')::numeric, 1) else handicap end,
+    choices = case when p_patch ? 'choices' and jsonb_typeof(p_patch->'choices') = 'object' then p_patch->'choices' else choices end,
     updated_at = now()
   where id = p_signup_id and event_id = v_id;
 end;
@@ -221,7 +250,7 @@ end;
 $$;
 
 grant execute on function public.create_golf_event(jsonb) to anon, authenticated;
-grant execute on function public.signup_for_golf_event(text, text, text, numeric) to anon, authenticated;
+grant execute on function public.signup_for_golf_event(text, text, text, numeric, jsonb) to anon, authenticated;
 grant execute on function public.golf_event_roster(text) to anon, authenticated;
 grant execute on function public.organizer_golf_event_signups(text, text) to anon, authenticated;
 grant execute on function public.organizer_update_golf_signup(text, text, uuid, jsonb) to anon, authenticated;

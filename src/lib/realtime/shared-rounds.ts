@@ -237,7 +237,7 @@ function isMissingSchemaError(error: unknown) {
 }
 
 function buildRoundGameRows(roundId: string, round: RoundState) {
-  return [
+  return withExclusions(round, [
     { round_id: roundId, game_type: 'banker', pot_amount: 0, enabled: round.gameSettings.bankerEnabled !== false, settings: {} },
     {
       round_id: roundId,
@@ -349,7 +349,13 @@ function buildRoundGameRows(roundId: string, round: RoundState) {
       enabled: round.gameSettings.extraGames?.[game.key] === true,
       settings: { unit: round.gameSettings.extraGameUnits?.[game.key] ?? 0 },
     })),
-  ];
+  ]);
+}
+
+/** Stores each game's opt-outs alongside its other settings, so no extra table is needed. */
+function withExclusions<T extends { game_type: string; settings: Record<string, unknown> }>(round: RoundState, rows: T[]) {
+  const excluded = round.gameSettings.excludedPlayers ?? {};
+  return rows.map((row) => (excluded[row.game_type]?.length ? { ...row, settings: { ...row.settings, excluded: excluded[row.game_type] } } : row));
 }
 
 export async function createSharedRoundFromLocalRound(round: RoundState) {
@@ -717,6 +723,11 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
     teamMatchPlaySettings.singlesPairings && typeof teamMatchPlaySettings.singlesPairings === 'object'
       ? (teamMatchPlaySettings.singlesPairings as Record<string, string>)
       : {};
+  const excludedPlayers = Object.fromEntries(
+    bundle.games
+      .filter((game) => Array.isArray(game.settings?.excluded) && (game.settings.excluded as unknown[]).length)
+      .map((game) => [game.game_type, (game.settings.excluded as unknown[]).filter((id): id is string => typeof id === 'string')])
+  );
   const ctpByGroupHole = new Map(
     bundle.ctpResults.map((ctp) => [`${ctp.group_number ?? 1}:${ctp.hole_number}`, ctp.winner_player_key])
   );
@@ -831,6 +842,7 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
           : 'team_match',
       teamAssignments,
       singlesPairings,
+      excludedPlayers,
       courseRating: typeof handicapSettings.courseRating === 'number' ? handicapSettings.courseRating : null,
       slopeRating: typeof handicapSettings.slopeRating === 'number' ? handicapSettings.slopeRating : null,
       teeColor: typeof handicapSettings.teeColor === 'string' ? handicapSettings.teeColor : null,

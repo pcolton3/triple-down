@@ -18,12 +18,17 @@ export const EVENT_GAMES: GameDefinition[] = [
   { key: 'birdie_pot', label: 'Birdie pot', kind: 'pot', blurb: 'Pot splits across every birdie made.' },
   { key: 'eagle_pot', label: 'Eagle pot', kind: 'pot', blurb: 'Pot splits across every eagle made.' },
   { key: 'hole_in_one', label: 'Hole-in-one pot', kind: 'pot', blurb: 'Pays only if someone makes an ace.' },
-  { key: 'nassau', label: 'Nassau', kind: 'group', blurb: 'Front, back and overall bets inside each group.' },
+  { key: 'nassau', label: 'Nassau', kind: 'pot', blurb: 'Best net front 9, back 9 and total; the pot splits three ways.' },
   { key: 'match_play', label: 'Match play bet', kind: 'group', blurb: 'Head-to-head bet inside each group.' },
   { key: 'wolf', label: 'Wolf', kind: 'group', blurb: 'Rotating wolf picks a partner or goes alone.' },
   { key: 'vegas', label: 'Vegas', kind: 'group', blurb: 'Team scores combine into two-digit numbers.' },
   { key: 'bingo_bango_bongo', label: 'Bingo Bango Bongo', kind: 'group', blurb: 'Points for first on, closest, and first in.' },
   { key: 'banker', label: 'Banker', kind: 'group', blurb: 'Rotating banker takes on the group each hole.' },
+  { key: 'best_ball', label: 'Best Ball', kind: 'group', blurb: 'Two teams of two in your foursome, best net ball per hole.' },
+  { key: 'sixes', label: 'Sixes', kind: 'group', blurb: 'Foursome partners rotate every 6 holes.' },
+  { key: 'rabbit', label: 'Rabbit', kind: 'group', blurb: 'Hold the rabbit at the turn and at 18 to win.' },
+  { key: 'aces_and_deuces', label: 'Aces and Deuces', kind: 'group', blurb: 'Low score on a hole collects, high score pays.' },
+  { key: 'medal_play', label: 'Medal Play', kind: 'group', blurb: 'Net strokes inside your group, settled per stroke.' },
 ];
 
 export function gameDefinition(key: string): GameDefinition {
@@ -78,7 +83,11 @@ export type GolfEvent = {
   max_players: number | null;
 };
 
-export type RosterEntry = { name: string; handicap: number; team: TeamKey | null };
+/** What one player signed up for on one golf day. Missing days mean "playing, every game". */
+export type DayChoice = { playing: boolean; games: string[] };
+export type SignupChoices = { days?: Record<string, DayChoice> };
+
+export type RosterEntry = { name: string; handicap: number; team: TeamKey | null; choices?: SignupChoices };
 
 export type Signup = RosterEntry & {
   id: string;
@@ -137,8 +146,13 @@ export async function loadRoster(code: string): Promise<RosterEntry[]> {
   return ((data ?? []) as RosterEntry[]).map((entry) => ({ ...entry, handicap: Number(entry.handicap) }));
 }
 
-export async function signUp(code: string, name: string, email: string, handicap: number) {
-  const { data, error } = await supabase.rpc('signup_for_golf_event', { p_code: code, p_name: name, p_email: email, p_handicap: handicap });
+export async function signUp(code: string, name: string, email: string, handicap: number, choices?: SignupChoices) {
+  const base = { p_code: code, p_name: name, p_email: email, p_handicap: handicap };
+  let { data, error } = await supabase.rpc('signup_for_golf_event', choices ? { ...base, p_choices: choices } : base);
+  // Before the game-choices SQL is run, the database only has the older function: still sign them up.
+  if (error && choices && /could not find the function|does not exist/i.test(error.message ?? '')) {
+    ({ data, error } = await supabase.rpc('signup_for_golf_event', base));
+  }
   rpcError(error);
   return data as 'added' | 'updated';
 }
@@ -149,7 +163,7 @@ export async function loadSignups(code: string, key: string): Promise<Signup[]> 
   return ((data ?? []) as Signup[]).map((entry) => ({ ...entry, handicap: Number(entry.handicap) }));
 }
 
-export async function updateSignup(code: string, key: string, signupId: string, patch: { team?: TeamKey | null; paid?: boolean; handicap?: number; remove?: boolean }) {
+export async function updateSignup(code: string, key: string, signupId: string, patch: { team?: TeamKey | null; paid?: boolean; handicap?: number; remove?: boolean; choices?: SignupChoices }) {
   const { error } = await supabase.rpc('organizer_update_golf_signup', { p_code: code, p_key: key, p_signup_id: signupId, p_patch: patch });
   rpcError(error);
 }
@@ -308,7 +322,8 @@ export function suggestedBuyIn(event: Pick<GolfEvent, 'team_bet' | 'days'>) {
 }
 
 /** Per-player buy-in breakdown and the resulting pots for a given field size. */
-export function buyInBreakdown(event: Pick<GolfEvent, 'buy_in' | 'team_bet' | 'days'>, players: number) {
+export function buyInBreakdown(event: Pick<GolfEvent, 'buy_in' | 'team_bet' | 'days'>, players: number, roster?: Array<{ choices?: SignupChoices }>) {
+  const inGame = (day: EventDay, key: string) => (roster ? roster.filter((entry) => dayChoice(event, entry.choices, day.day).games.includes(key)).length : players);
   const teamBet = isTeamEvent(event) ? event.team_bet : 0;
   const lines = [
     ...(teamBet > 0 ? [{ label: 'Team bet (winning team splits)', perPlayer: teamBet, pot: teamBet * players }] : []),
@@ -316,7 +331,7 @@ export function buyInBreakdown(event: Pick<GolfEvent, 'buy_in' | 'team_bet' | 'd
       potGames(day).map((game) => ({
         label: `${event.days.length > 1 ? `Day ${day.day} ` : ''}${gameDefinition(game.key).label.toLowerCase()}`,
         perPlayer: game.amount,
-        pot: game.amount * players,
+        pot: game.amount * inGame(day, game.key),
       }))
     ),
   ];
@@ -385,4 +400,48 @@ export function buildSchedule(event: Pick<GolfEvent, 'days' | 'agenda'>) {
   const byDate = new Map<string, Entry[]>();
   entries.forEach((entry) => byDate.set(entry.date, [...(byDate.get(entry.date) ?? []), entry]));
   return Array.from(byDate.entries()).map(([date, items]) => ({ date, items }));
+}
+
+/** A player's choice for one day, defaulting to playing every game that day. */
+export function dayChoice(event: Pick<GolfEvent, 'days'>, choices: SignupChoices | undefined, dayNumber: number): DayChoice {
+  const day = event.days.find((item) => item.day === dayNumber);
+  const all = (day?.games ?? []).map((game) => game.key);
+  const saved = choices?.days?.[String(dayNumber)];
+  if (!saved) return { playing: true, games: all };
+  return { playing: saved.playing !== false, games: saved.playing === false ? [] : (saved.games ?? []).filter((key) => all.includes(key)) };
+}
+
+/** Full choices for every day, filling in defaults, so what's saved matches what the player saw. */
+export function completeChoices(event: Pick<GolfEvent, 'days'>, choices?: SignupChoices): SignupChoices {
+  return { days: Object.fromEntries(event.days.map((day) => [String(day.day), dayChoice(event, choices, day.day)])) };
+}
+
+export function isDayLocked(day: Pick<EventDay, 'roundCode'>) {
+  return Boolean(day.roundCode?.trim());
+}
+
+/** What one player owes: the team bet (team events) plus only the pot games they joined. */
+export function playerBuyIn(event: Pick<GolfEvent, 'days' | 'team_bet'>, choices?: SignupChoices) {
+  const days = event.days.map((day) => ({ day, choice: dayChoice(event, choices, day.day) }));
+  const playsAnyDay = days.some(({ choice }) => choice.playing);
+  const teamBet = isTeamEvent(event) && playsAnyDay ? event.team_bet : 0;
+  return teamBet + days.reduce((total, { day, choice }) => total + potGames(day).filter((game) => choice.games.includes(game.key)).reduce((sum, game) => sum + game.amount, 0), 0);
+}
+
+/** Games where the whole foursome has to be playing for it to work. */
+export const FOURSOME_GAMES = ['wolf', 'vegas', 'sixes', 'best_ball'];
+
+/**
+ * Orders a day's players so foursomes keep people playing the same four-player games together
+ * (Wolf, Vegas, Sixes, Best Ball). Rounds make groups of 4 in this order.
+ */
+export function suggestGroupOrder<T extends { games: string[] }>(players: T[]): T[] {
+  const signature = (player: T) => FOURSOME_GAMES.filter((key) => player.games.includes(key)).join(',');
+  const withGames = players.filter((player) => signature(player));
+  const without = players.filter((player) => !signature(player));
+  const buckets = new Map<string, T[]>();
+  withGames.forEach((player) => buckets.set(signature(player), [...(buckets.get(signature(player)) ?? []), player]));
+  // Largest matching sets first, so as many full foursomes as possible line up.
+  const ordered = [...buckets.values()].sort((a, b) => b.length - a.length).flat();
+  return [...ordered, ...without];
 }

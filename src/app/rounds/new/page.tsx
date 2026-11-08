@@ -14,6 +14,9 @@ import { loadSavedCourseTees, saveCourseTee, savedCourseKey, type SavedCourseTee
 import { BEEZER_EXTRA_GAMES, type BeezerExtraGameKey } from '@/lib/games/catalog';
 import { gameHelp, moneyLabel } from '@/lib/games/help';
 import { GamePicker } from '@/components/round/game-picker';
+import { buildEventRoundPrefill } from '@/lib/events/event-rounds';
+import { loadGolfEvent, loadSignups, organizerKeyStorageName, updateEvent } from '@/lib/events/golf-events';
+import { optionalGames, PlayerGames, toggleExcluded } from '@/components/round/player-games';
 import type { CourseRecord } from '@/types/course';
 import type { HoleConfig } from '@/types/round';
 
@@ -109,6 +112,7 @@ function NewRoundPageContent() {
   const [ryderCupFormat, setRyderCupFormat] = useState<'team_match' | 'singles_match'>('team_match');
   const [teamAssignments, setTeamAssignments] = useState<Record<string, 'team_one' | 'team_two'>>({});
   const [singlesPairings, setSinglesPairings] = useState<Record<string, string>>({});
+  const [excludedPlayers, setExcludedPlayers] = useState<Record<string, string[]>>({});
   const [courseRating, setCourseRating] = useState('');
   const [slopeRating, setSlopeRating] = useState('');
   const [teeColor, setTeeColor] = useState('');
@@ -136,6 +140,8 @@ function NewRoundPageContent() {
   const [created, setCreated] = useState<{ code: string; title: string; groupCount: number } | null>(null);
   const [shareStatus, setShareStatus] = useState('');
   const draftReady = useRef(false);
+  const [eventLink, setEventLink] = useState<{ code: string; day: number; key: string } | null>(null);
+  const [eventLinkError, setEventLinkError] = useState('');
 
   // Everything the organizer typed, so a reload or lost signal doesn't wipe the form.
   const draftFields: Record<string, [unknown, (value: never) => void]> = {
@@ -152,10 +158,14 @@ function NewRoundPageContent() {
     matchPlayUnit: [matchPlayUnit, setMatchPlayUnit], teamMatchPlayUnit: [teamMatchPlayUnit, setTeamMatchPlayUnit],
     extraGames: [extraGames, setExtraGames], extraGameUnits: [extraGameUnits, setExtraGameUnits],
     teamOneName: [teamOneName, setTeamOneName], teamTwoName: [teamTwoName, setTeamTwoName], ryderCupFormat: [ryderCupFormat, setRyderCupFormat],
-    teamAssignments: [teamAssignments, setTeamAssignments], singlesPairings: [singlesPairings, setSinglesPairings],
+    teamAssignments: [teamAssignments, setTeamAssignments], singlesPairings: [singlesPairings, setSinglesPairings], excludedPlayers: [excludedPlayers, setExcludedPlayers],
     courseRating: [courseRating, setCourseRating], slopeRating: [slopeRating, setSlopeRating], teeColor: [teeColor, setTeeColor], pcc: [pcc, setPcc],
     playerCount: [playerCount, setPlayerCount], players: [players, setPlayers], firstBankerPlayerId: [firstBankerPlayerId, setFirstBankerPlayerId],
   };
+  const optionalGameList = optionalGames({
+    nassauEnabled, stablefordEnabled, birdiePotEnabled, eaglePotEnabled, holeInOneEnabled,
+    wolfEnabled, vegasEnabled, bingoBangoBongoEnabled, matchPlayEnabled, extraGames,
+  });
   const draftJson = JSON.stringify(Object.fromEntries(Object.entries(draftFields).map(([key, [value]]) => [key, value])));
   const effectiveGroupSize: 4 | 5 = players.length <= 4 ? 4 : players.length === 5 ? 5 : 4;
 
@@ -215,8 +225,8 @@ function NewRoundPageContent() {
   }, []);
 
   useEffect(() => {
-    // A Ryder prefill link sets up its own round, so don't mix in an older draft.
-    if (!searchParams.get('ryderEventCode')) {
+    // Ryder and event links set up their own round, so don't mix in an older draft.
+    if (!searchParams.get('ryderEventCode') && !searchParams.get('event')) {
       try {
         const saved = JSON.parse(localStorage.getItem(DRAFT_KEY) ?? 'null') as { savedAt: number; fields: Record<string, unknown> } | null;
         const fields = saved?.fields;
@@ -319,6 +329,74 @@ function NewRoundPageContent() {
     return () => {
       cancelled = true;
     };
+  }, [searchParams]);
+
+  useEffect(() => {
+    const code = searchParams.get('event')?.toUpperCase();
+    const dayNumber = Number(searchParams.get('day'));
+    if (!code || !Number.isInteger(dayNumber) || dayNumber < 1) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        let key = '';
+        try { key = localStorage.getItem(organizerKeyStorageName(code)) ?? ''; } catch { /* handled below */ }
+        if (!key) throw new Error('Open this from the event organizer page on the phone that has your organizer link.');
+        setPrefillStatus(`Loading ${code} signups…`);
+        const [event, signups] = await Promise.all([loadGolfEvent(code), loadSignups(code, key)]);
+        if (cancelled) return;
+        if (!event) throw new Error(`No event was found for ${code}.`);
+        const prefill = buildEventRoundPrefill(event, signups, dayNumber);
+        if (!prefill.players.length) throw new Error(`Nobody has signed up to play Day ${dayNumber} yet.`);
+        const g = prefill.settings;
+        setTitle(prefill.title);
+        setCourseName(prefill.courseName);
+        setCourseQuery(prefill.courseName);
+        setPlayers(prefill.players.map((player) => ({
+          ...player,
+          bankerParticipant: player.bankerParticipant !== false,
+          skinsParticipant: player.skinsParticipant !== false,
+          ctpParticipant: player.ctpParticipant !== false,
+          lowNetParticipant: player.lowNetParticipant !== false,
+        })));
+        setPlayerCount(prefill.players.length);
+        setFirstBankerPlayerId(prefill.players.find((player) => player.bankerParticipant !== false)?.id ?? prefill.players[0].id);
+        setDefaultBet(prefill.defaultBet);
+        setBankerEnabled(g.bankerEnabled === true);
+        setSkinsEnabled(g.skinsEnabled === true); setSkinsPot(g.skinsPot ?? 0);
+        setCtpEnabled(g.ctpEnabled === true); setCtpPot(g.ctpPot ?? 0);
+        setLowNetEnabled(g.lowNetEnabled === true); setLowNetPot(g.lowNetPot ?? 0);
+        setNassauEnabled(g.nassauEnabled === true); setNassauPot(g.nassauPot ?? 0);
+        setStablefordEnabled(g.stablefordEnabled === true); setStablefordPot(g.stablefordPot ?? 0);
+        setBirdiePotEnabled(g.birdiePotEnabled === true); setBirdiePot(g.birdiePot ?? 0);
+        setEaglePotEnabled(g.eaglePotEnabled === true); setEaglePot(g.eaglePot ?? 0);
+        setHoleInOneEnabled(g.holeInOneEnabled === true);
+        setWolfEnabled(g.wolfEnabled === true); setWolfUnit(g.wolfUnit ?? 0);
+        setVegasEnabled(g.vegasEnabled === true); setVegasUnit(g.vegasUnit ?? 0);
+        setBingoBangoBongoEnabled(g.bingoBangoBongoEnabled === true); setBingoBangoBongoUnit(g.bingoBangoBongoUnit ?? 0);
+        setMatchPlayEnabled(g.matchPlayEnabled === true); setMatchPlayUnit(g.matchPlayUnit ?? 0);
+        setExtraGames(g.extraGames ?? {});
+        setExtraGameUnits(g.extraGameUnits ?? {});
+        setExcludedPlayers(g.excludedPlayers);
+        setTeamMatchPlayEnabled(Boolean(prefill.teamMatch));
+        if (prefill.teamMatch) {
+          setRyderCupFormat(prefill.teamMatch.format);
+          setRyderEventCode(prefill.teamMatch.eventCode);
+          setRyderEventDay(prefill.teamMatch.day);
+          setTeamOneName(prefill.teamMatch.teamOneName);
+          setTeamTwoName(prefill.teamMatch.teamTwoName);
+          setTeamAssignments(g.teamAssignments ?? {});
+        }
+        setEventLink({ code, day: dayNumber, key });
+        setPrefillStatus(
+          [`Filled in from ${event.title} Day ${dayNumber}: ${prefill.players.length} golfers with the games they chose, in suggested foursomes.`, 'Search for the course below to load pars.', ...prefill.notes].join(' ')
+        );
+      } catch (error) {
+        if (!cancelled) setPrefillStatus(error instanceof Error ? error.message : 'Could not load the event.');
+      }
+    })();
+    return () => { cancelled = true; };
+    // Prefill once when opened from the event page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   useEffect(() => {
@@ -708,6 +786,10 @@ function NewRoundPageContent() {
         ryderCupFormat,
         teamAssignments: finalTeamAssignments,
         singlesPairings: finalSinglesPairings,
+        // Only keep opt-outs for games that are on and golfers who are in the round.
+        excludedPlayers: Object.fromEntries(
+          optionalGameList.map((game) => [game.key, (excludedPlayers[game.key] ?? []).filter((id) => playerIds.has(id))]).filter(([, ids]) => ids.length)
+        ),
         courseRating: courseRating.trim() ? Number(courseRating) || null : null,
         slopeRating: slopeRating.trim() ? Number(slopeRating) || null : null,
         teeColor: teeColor.trim() || null,
@@ -751,6 +833,18 @@ function NewRoundPageContent() {
       console.error('Unable to save golfers for later.', error);
     }
 
+    if (eventLink) {
+      try {
+        const latest = await loadGolfEvent(eventLink.code);
+        if (latest) {
+          await updateEvent(eventLink.code, eventLink.key, {
+            days: latest.days.map((day) => (day.day === eventLink.day ? { ...day, roundCode: finalRoundCode } : day)),
+          });
+        }
+      } catch (error) {
+        setEventLinkError(`The round was created, but it couldn't be linked to the event (${error instanceof Error ? error.message : 'unknown error'}). Day ${eventLink.day} choices stay open until you start it again.`);
+      }
+    }
     try { localStorage.removeItem(DRAFT_KEY); } catch { /* Storage unavailable. */ }
     setCreated({ code: finalRoundCode, title: title.trim() || 'Saturday Group', groupCount: Math.max(1, ...groupPlayers.map((item) => item.groupNumber)) });
     setIsCreating(false);
@@ -800,6 +894,7 @@ function NewRoundPageContent() {
             {shareStatus ? <p role="status" className="text-center text-sm font-semibold text-[#0f5132]">{shareStatus}</p> : null}
           </Card>
         )}
+        {eventLinkError ? <p role="alert" className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">{eventLinkError}</p> : null}
         <Button className="w-full py-4" onClick={() => router.push(`/r/${created.code}/group/1`)}>Start scoring Group 1</Button>
         <Link href={`/r/${created.code}`} className="block text-center text-sm font-semibold text-[#0f5132] underline">Go to the leaderboard instead</Link>
       </main>
@@ -1122,66 +1217,20 @@ function NewRoundPageContent() {
                             placeholder="0"
                           />
                         </div>
-                        {bankerEnabled || skinsEnabled || ctpEnabled || lowNetEnabled ? (
-                        <details className="sm:col-span-3">
-                          <summary className="cursor-pointer text-sm font-semibold text-slate-600">
-                            Plays:{' '}
-                            {[
-                              bankerEnabled && player.bankerParticipant !== false ? 'Banker' : null,
-                              skinsEnabled && player.skinsParticipant !== false ? 'Skins' : null,
-                              ctpEnabled && player.ctpParticipant !== false ? 'CTP' : null,
-                              lowNetEnabled && player.lowNetParticipant !== false ? 'Low Net' : null,
-                            ].filter(Boolean).join(', ') || 'no side games'}{' '}
-                            <span className="font-normal text-slate-500">(change)</span>
-                          </summary>
-                          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                            {bankerEnabled ? (
-                            <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
-                              <input
-                                type="checkbox"
-                                className="mr-2 h-4 w-4"
-                                checked={player.bankerParticipant !== false}
-                                onChange={() => togglePlayerBanker(player.id)}
-                              />
-                              Banker
-                            </label>
-                            ) : null}
-                            {skinsEnabled ? (
-                            <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
-                              <input
-                                type="checkbox"
-                                className="mr-2 h-4 w-4"
-                                checked={player.skinsParticipant !== false}
-                                onChange={() => togglePlayerGame(player.id, 'skinsParticipant')}
-                              />
-                              Skins
-                            </label>
-                            ) : null}
-                            {ctpEnabled ? (
-                            <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
-                              <input
-                                type="checkbox"
-                                className="mr-2 h-4 w-4"
-                                checked={player.ctpParticipant !== false}
-                                onChange={() => togglePlayerGame(player.id, 'ctpParticipant')}
-                              />
-                              CTP
-                            </label>
-                            ) : null}
-                            {lowNetEnabled ? (
-                            <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
-                              <input
-                                type="checkbox"
-                                className="mr-2 h-4 w-4"
-                                checked={player.lowNetParticipant !== false}
-                                onChange={() => togglePlayerGame(player.id, 'lowNetParticipant')}
-                              />
-                              Low Net
-                            </label>
-                            ) : null}
-                          </div>
-                        </details>
-                        ) : null}
+                        <PlayerGames
+                          className="sm:col-span-3"
+                          options={[
+                            ...(bankerEnabled ? [{ key: 'banker', label: 'Banker', checked: player.bankerParticipant !== false, onToggle: () => togglePlayerBanker(player.id) }] : []),
+                            ...(skinsEnabled ? [{ key: 'skins', label: 'Skins', checked: player.skinsParticipant !== false, onToggle: () => togglePlayerGame(player.id, 'skinsParticipant') }] : []),
+                            ...(ctpEnabled ? [{ key: 'ctp', label: 'CTP', checked: player.ctpParticipant !== false, onToggle: () => togglePlayerGame(player.id, 'ctpParticipant') }] : []),
+                            ...(lowNetEnabled ? [{ key: 'low_net', label: 'Low Net', checked: player.lowNetParticipant !== false, onToggle: () => togglePlayerGame(player.id, 'lowNetParticipant') }] : []),
+                            ...optionalGameList.map((game) => ({
+                              ...game,
+                              checked: !(excludedPlayers[game.key] ?? []).includes(player.id),
+                              onToggle: () => setExcludedPlayers((current) => toggleExcluded(current, game.key, player.id)),
+                            })),
+                          ]}
+                        />
                         {players.length > 1 ? (
                           <div className="sm:col-span-3 flex justify-end">
                             <button type="button" className="min-h-[44px] px-2 text-sm font-semibold text-red-700 underline" onClick={() => removeGolfer(player.id)}>

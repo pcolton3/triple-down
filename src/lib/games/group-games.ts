@@ -99,6 +99,12 @@ export function gameEnabled(round: RoundState, key: GroupGameKey) {
   return settings.extraGames?.[key] === true;
 }
 
+/** The group's players who haven't opted out of this game. */
+export function gamePlayers(round: RoundState, key: GroupGameKey, players: Player[]) {
+  const excluded = new Set(round.gameSettings?.excludedPlayers?.[key] ?? []);
+  return excluded.size ? players.filter((player) => !excluded.has(player.id)) : players;
+}
+
 export function gameUnit(round: RoundState, key: GroupGameKey) {
   const settings = round.gameSettings ?? {};
   const value =
@@ -237,7 +243,7 @@ function scoreGame(round: RoundState, key: GroupGameKey, groupNumber: number, pl
   const holes = groupHoles(round, groupNumber);
   const done = holes.filter((hole) => complete(hole, players));
   const needs = (count: number) => {
-    notes.push(`${label} needs a group of ${count}; Group ${groupNumber} has ${players.length}.`);
+    notes.push(`${label} needs ${count} players in the game; Group ${groupNumber} has ${players.length} playing it, so it's skipped there.`);
     return { debts: [], pots: [], notes };
   };
 
@@ -409,7 +415,8 @@ export function computeGroupGames(round: RoundState): GroupGameResult[] {
   const results: GroupGameResult[] = [];
   const groups = roundGroups(round);
   SCORED_GROUP_GAMES.filter((key) => gameEnabled(round, key)).forEach((key) => {
-    groups.forEach(({ groupNumber, players }) => {
+    groups.forEach(({ groupNumber, players: everyone }) => {
+      const players = gamePlayers(round, key, everyone);
       if (!players.length) return;
       const { debts, pots, notes } = scoreGame(round, key, groupNumber, players);
       const amounts = new Map(players.map((player) => [player.id, 0]));

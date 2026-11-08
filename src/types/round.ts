@@ -81,6 +81,8 @@ export type RoundGameSettings = {
   ryderCupFormat?: 'team_match' | 'singles_match';
   teamAssignments?: Record<string, 'team_one' | 'team_two'>;
   singlesPairings?: Record<string, string>;
+  /** Player ids who opted out of a game, keyed by game type (e.g. 'wolf', 'nassau'). Banker, skins, CTP and low net use the player flags instead. */
+  excludedPlayers?: Record<string, string[]>;
   courseRating?: number | null;
   slopeRating?: number | null;
   teeColor?: string | null;

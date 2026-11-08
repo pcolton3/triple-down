@@ -333,6 +333,12 @@ function getBankerParticipantIds(players: Player[], playerIds: string[]) {
   return playerIds.filter((playerId) => players.find((player) => player.id === playerId)?.bankerParticipant !== false);
 }
 
+/** Players who haven't opted out of a game (e.g. from their event signup). */
+export function playersInGame(round: RoundState, gameKey: string) {
+  const excluded = new Set(round.gameSettings?.excludedPlayers?.[gameKey] ?? []);
+  return excluded.size ? round.players.filter((player) => !excluded.has(player.id)) : round.players;
+}
+
 function playerParticipatesInSkins(player?: Player) {
   return player?.skinsParticipant !== false;
 }
@@ -949,13 +955,13 @@ function buildNassauSummary(round: RoundState): NassauSummary {
     { label: 'Total', holes: Array.from({ length: round.totalHoles }, (_, index) => index + 1) },
   ];
   const segmentPot = pot / segmentConfigs.length;
-  const payouts = new Map(round.players.map((player) => [
+  const payouts = new Map(playersInGame(round, 'nassau').map((player) => [
     player.id,
     { playerId: player.id, playerName: player.name, amount: 0, wins: [] as string[] },
   ]));
 
   const segments = segmentConfigs.map((segment) => {
-    const totals = round.players
+    const totals = playersInGame(round, 'nassau')
       .map((player) => {
         let netTotal = 0;
         let holesCounted = 0;
@@ -1009,7 +1015,7 @@ function buildStablefordSummary(round: RoundState): StablefordSummary {
   const pot = round.gameSettings?.stablefordPot ?? 0;
   if (!stablefordEnabled(round)) return { pot, standings: [], payouts: [] };
 
-  const standings = round.players
+  const standings = playersInGame(round, 'stableford')
     .map((player) => {
       const points = round.holes.reduce((sum, hole) => {
         if (!hole.isSaved) return sum;
@@ -1038,14 +1044,14 @@ function buildBirdiePotSummary(round: RoundState): BirdiePotSummary {
   const pot = round.gameSettings?.birdiePot ?? 0;
   if (!birdiePotEnabled(round)) return { pot, valuePerBirdie: 0, payouts: [] };
 
-  const birdiesByPlayer = new Map(round.players.map((player) => [
+  const birdiesByPlayer = new Map(playersInGame(round, 'birdie_pot').map((player) => [
     player.id,
     { playerId: player.id, playerName: player.name, birdies: 0, amount: 0, holes: [] as number[] },
   ]));
 
   round.holes.forEach((hole) => {
     if (!hole.isSaved) return;
-    round.players.forEach((player) => {
+    playersInGame(round, 'birdie_pot').forEach((player) => {
       const gross = getPlayerGrossForHole(hole, player.id);
       if (gross !== hole.par - 1) return;
       const entry = birdiesByPlayer.get(player.id);
@@ -1068,14 +1074,14 @@ function buildEaglePotSummary(round: RoundState): EaglePotSummary {
   const pot = round.gameSettings?.eaglePot ?? 0;
   if (!eaglePotEnabled(round)) return { pot, valuePerEagle: 0, payouts: [] };
 
-  const eaglesByPlayer = new Map(round.players.map((player) => [
+  const eaglesByPlayer = new Map(playersInGame(round, 'eagle_pot').map((player) => [
     player.id,
     { playerId: player.id, playerName: player.name, eagles: 0, amount: 0, holes: [] as number[] },
   ]));
 
   round.holes.forEach((hole) => {
     if (!hole.isSaved) return;
-    round.players.forEach((player) => {
+    playersInGame(round, 'eagle_pot').forEach((player) => {
       const gross = getPlayerGrossForHole(hole, player.id);
       if (gross !== hole.par - 2) return;
       const entry = eaglesByPlayer.get(player.id);
@@ -1098,14 +1104,14 @@ function buildHoleInOneSummary(round: RoundState): HoleInOneSummary {
   const aceValue = 100;
   if (!holeInOneEnabled(round)) return { aceValue, payouts: [] };
 
-  const acesByPlayer = new Map(round.players.map((player) => [
+  const acesByPlayer = new Map(playersInGame(round, 'hole_in_one').map((player) => [
     player.id,
-    { playerId: player.id, playerName: player.name, amount: 0, holes: [] as number[], aces: 0, payerCount: Math.max(0, round.players.length - 1) },
+    { playerId: player.id, playerName: player.name, amount: 0, holes: [] as number[], aces: 0, payerCount: Math.max(0, playersInGame(round, 'hole_in_one').length - 1) },
   ]));
 
   round.holes.forEach((hole) => {
     if (!hole.isSaved) return;
-    round.players.forEach((player) => {
+    playersInGame(round, 'hole_in_one').forEach((player) => {
       const gross = getPlayerGrossForHole(hole, player.id);
       if (gross !== 1) return;
       const entry = acesByPlayer.get(player.id);
@@ -1351,6 +1357,7 @@ export const useRoundStore = create<RoundStore>()(
                 ryderCupFormat: input.gameSettings?.ryderCupFormat ?? 'team_match',
                 teamAssignments: input.gameSettings?.teamAssignments ?? {},
                 singlesPairings: input.gameSettings?.singlesPairings ?? {},
+                excludedPlayers: input.gameSettings?.excludedPlayers ?? {},
                 courseRating: input.gameSettings?.courseRating ?? null,
                 slopeRating: input.gameSettings?.slopeRating ?? null,
                 teeColor: input.gameSettings?.teeColor ?? null,

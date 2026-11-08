@@ -5,12 +5,18 @@ import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BuyInCard, EventSchedule } from '@/components/events/event-details';
 import { EventEditor, cleanDraft } from '@/components/events/event-editor';
+import { ChoicesEditor, choicesSummary } from '@/components/events/signup-choices';
 import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
 import { formatCurrency } from '@/lib/utils/currency';
 import {
+  completeChoices,
+  dayChoice,
+  formatEventDate,
+  isDayLocked,
   isTeamEvent,
   loadGolfEvent,
+  playerBuyIn,
   loadSignups,
   organizerKeyStorageName as keyStorageName,
   rememberMyEvent,
@@ -22,6 +28,7 @@ import {
   type EventDraft,
   type GolfEvent,
   type Signup,
+  type SignupChoices,
   type TeamKey,
 } from '@/lib/events/golf-events';
 
@@ -88,10 +95,11 @@ export default function OrganizeEventPage() {
       sumOne: sum(team('team_one')),
       sumTwo: sum(team('team_two')),
       paid,
-      collected: paid * (event?.buy_in ?? 0),
-      outstanding: (signups.length - paid) * (event?.buy_in ?? 0),
+      collected: event ? signups.filter((signup) => signup.paid).reduce((total, signup) => total + playerBuyIn(event, signup.choices), 0) : 0,
+      outstanding: event ? signups.filter((signup) => !signup.paid).reduce((total, signup) => total + playerBuyIn(event, signup.choices), 0) : 0,
     };
-  }, [event?.buy_in, signups]);
+  }, [event, signups]);
+  const [editingChoices, setEditingChoices] = useState<{ id: string; value: SignupChoices } | null>(null);
 
   async function run(action: () => Promise<void>, success = '') {
     setBusy(true);
@@ -157,6 +165,45 @@ export default function OrganizeEventPage() {
         <p className="text-xs text-slate-500">This organizer page is saved on this device. Keep your organizer link private; anyone with it can edit the event.</p>
       </Card>
 
+      {event.days.length ? (
+        <Card className="space-y-3">
+          <h2 className="text-xl font-bold">Rounds</h2>
+          <p className="text-sm text-slate-600">
+            Start each day&apos;s scoring round from here. It fills in that day&apos;s players, the games each one chose, and suggested foursomes that keep Wolf and Vegas players together. Once a round starts, players can&apos;t change that day&apos;s games.
+          </p>
+          {event.days.map((day) => {
+            const playing = signups.filter((signup) => dayChoice(event, signup.choices, day.day).playing).length;
+            return (
+              <div key={day.day} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-3">
+                <div className="min-w-0">
+                  <p className="font-semibold">
+                    Day {day.day}
+                    {day.date ? ` · ${formatEventDate(day.date, { weekday: 'short', month: 'short', day: 'numeric' })}` : ''}
+                    {day.course ? ` · ${day.course}` : ''}
+                  </p>
+                  <p className="text-sm text-slate-600">{playing} playing</p>
+                </div>
+                {isDayLocked(day) ? (
+                  <Link href={`/r/${day.roundCode}`} className="inline-flex min-h-[44px] items-center rounded-xl border border-[#c9d8c7] bg-white px-4 text-sm font-bold text-[#0f5132]">
+                    Open round {day.roundCode}
+                  </Link>
+                ) : dirty ? (
+                  <p className="text-sm text-amber-700">Save event changes first</p>
+                ) : (
+                  <Link
+                    href={`/rounds/new?event=${encodeURIComponent(event.code)}&day=${day.day}`}
+                    className={`inline-flex min-h-[44px] items-center rounded-xl px-4 text-sm font-bold ${playing ? 'bg-[#0f5132] text-white' : 'pointer-events-none bg-slate-200 text-slate-500'}`}
+                    aria-disabled={!playing}
+                  >
+                    Start Day {day.day} round
+                  </Link>
+                )}
+              </div>
+            );
+          })}
+        </Card>
+      ) : null}
+
       <Card>
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-xl font-bold">Players ({signups.length})</h2>
@@ -189,6 +236,29 @@ export default function OrganizeEventPage() {
                 <div className="min-w-0">
                   <p className="font-semibold">{signup.name} <span className="font-normal text-slate-500">· {signup.handicap}</span></p>
                   <p className="truncate text-sm text-slate-500">{signup.email}</p>
+                  {event.days.length ? (
+                    <p className="mt-1 text-sm text-slate-700">
+                      <span className="font-semibold">Owes {formatCurrency(playerBuyIn(event, signup.choices))}</span> · {choicesSummary(event, signup.choices)}{' '}
+                      <button type="button" className="min-h-[36px] font-semibold text-[#0f5132] underline" onClick={() => setEditingChoices(editingChoices?.id === signup.id ? null : { id: signup.id, value: completeChoices(event, signup.choices) })}>
+                        {editingChoices?.id === signup.id ? 'Close' : 'Edit games'}
+                      </button>
+                    </p>
+                  ) : null}
+                  {editingChoices?.id === signup.id ? (
+                    <div className="mt-2 space-y-2">
+                      <ChoicesEditor event={event} value={editingChoices.value} allowLocked onChange={(value) => setEditingChoices({ id: signup.id, value })} />
+                      {event.days.some(isDayLocked) ? <p className="text-xs text-amber-700">Changing a day whose round has started won&apos;t change that round. Edit the round itself too.</p> : null}
+                      <Button
+                        disabled={busy}
+                        onClick={() => void run(async () => {
+                          await updateSignup(code, key, signup.id, { choices: completeChoices(event, editingChoices.value) });
+                          setEditingChoices(null);
+                        }, `${signup.name}'s games saved.`)}
+                      >
+                        Save {signup.name}&apos;s games
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   {teamEvent ? (

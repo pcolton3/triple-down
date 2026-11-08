@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/supabase/client', () => ({ supabase: {} }));
-import { buildSchedule, buyInBreakdown, isTeamEvent, localToday, nextGolfDay, normalizeEvent, renumberDays, safeLink, splitUpcoming, suggestedBuyIn, validateDraft, type EventDay, type GolfEvent } from './golf-events';
+import { buildSchedule, buyInBreakdown, completeChoices, dayChoice, isTeamEvent, playerBuyIn, suggestGroupOrder, localToday, nextGolfDay, normalizeEvent, renumberDays, safeLink, splitUpcoming, suggestedBuyIn, validateDraft, type EventDay, type GolfEvent } from './golf-events';
 
 const pots = [{ key: 'ctp', amount: 50 }, { key: 'skins', amount: 50 }];
 const days: EventDay[] = [
@@ -24,7 +24,7 @@ describe('buyInBreakdown', () => {
   });
 
   it('leaves group games and non-team team bets out of the buy-in', () => {
-    const casual: EventDay[] = [{ day: 1, date: '2027-05-01', format: 'stroke_play', games: [{ key: 'skins', amount: 20 }, { key: 'nassau', amount: 5 }] }];
+    const casual: EventDay[] = [{ day: 1, date: '2027-05-01', format: 'stroke_play', games: [{ key: 'skins', amount: 20 }, { key: 'wolf', amount: 5 }] }];
     expect(suggestedBuyIn({ team_bet: 100, days: casual })).toBe(20);
     expect(isTeamEvent({ days: casual })).toBe(false);
     expect(buyInBreakdown({ buy_in: 20, team_bet: 100, days: casual }, 4).lines).toEqual([{ label: 'net skins', perPlayer: 20, pot: 80 }]);
@@ -93,5 +93,44 @@ describe('your events', () => {
     expect(nextGolfDay({ days }, '2027-04-28')?.day).toBe(2);
     expect(nextGolfDay({ days }, '2027-05-01')).toBeNull();
     expect(localToday(new Date(2026, 0, 5))).toBe('2026-01-05');
+  });
+});
+
+describe('signup choices', () => {
+  const event = {
+    team_bet: 100,
+    days: [
+      { day: 1, date: '2027-04-27', format: 'team_match' as const, games: [{ key: 'skins', amount: 50 }, { key: 'ctp', amount: 50 }, { key: 'banker', amount: 5 }] },
+      { day: 2, date: '2027-04-28', format: 'casual' as const, games: [{ key: 'skins', amount: 20 }] },
+    ],
+  };
+
+  it('defaults to playing every game, and fills in defaults when saving', () => {
+    expect(dayChoice(event, undefined, 1)).toEqual({ playing: true, games: ['skins', 'ctp', 'banker'] });
+    expect(completeChoices(event, { days: { '2': { playing: false, games: [] } } }).days).toEqual({
+      '1': { playing: true, games: ['skins', 'ctp', 'banker'] },
+      '2': { playing: false, games: [] },
+    });
+  });
+
+  it('charges only for the pot games a player joined', () => {
+    expect(playerBuyIn(event, undefined)).toBe(220); // team bet + 50 + 50 + 20
+    expect(playerBuyIn(event, { days: { '1': { playing: true, games: ['banker'] }, '2': { playing: false, games: [] } } })).toBe(100);
+    expect(playerBuyIn(event, { days: { '1': { playing: false, games: [] }, '2': { playing: false, games: [] } } })).toBe(0);
+  });
+
+  it('sizes pots by who is actually in them', () => {
+    const roster = [{}, { choices: { days: { '1': { playing: true, games: ['ctp'] } } } }];
+    const lines = buyInBreakdown({ buy_in: 220, ...event }, 2, roster).lines;
+    expect(lines.find((line) => line.label === 'Day 1 net skins')?.pot).toBe(50);
+    expect(lines.find((line) => line.label === 'Day 1 closest to the pin')?.pot).toBe(100);
+  });
+
+  it('keeps players of four-player games together when ordering groups', () => {
+    const players = [
+      { id: 'a', games: ['skins'] }, { id: 'b', games: ['wolf'] }, { id: 'c', games: [] }, { id: 'd', games: ['wolf'] },
+      { id: 'e', games: ['wolf', 'skins'] }, { id: 'f', games: ['vegas'] }, { id: 'g', games: ['wolf'] },
+    ];
+    expect(suggestGroupOrder(players).map((player) => player.id)).toEqual(['b', 'd', 'e', 'g', 'f', 'a', 'c']);
   });
 });

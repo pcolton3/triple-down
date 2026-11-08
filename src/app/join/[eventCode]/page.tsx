@@ -6,13 +6,14 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { BuyInCard, EventSchedule, eventDateRange } from '@/components/events/event-details';
 import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
-import { isTeamEvent, loadGolfEvent, loadRoster, rememberJoinedEvent, signUp, type GolfEvent, type RosterEntry } from '@/lib/events/golf-events';
+import { completeChoices, isTeamEvent, loadGolfEvent, loadRoster, rememberJoinedEvent, signUp, type GolfEvent, type RosterEntry, type SignupChoices } from '@/lib/events/golf-events';
+import { ChoicesEditor } from '@/components/events/signup-choices';
 
 const inputClass = 'min-h-[48px] w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-base';
 
 function readSaved(code: string) {
   try {
-    return JSON.parse(localStorage.getItem(`triple-track-signup:${code}`) ?? 'null') as { name: string; email: string; handicap: string } | null;
+    return JSON.parse(localStorage.getItem(`triple-track-signup:${code}`) ?? 'null') as { name: string; email: string; handicap: string; choices?: SignupChoices } | null;
   } catch {
     return null;
   }
@@ -31,6 +32,7 @@ export default function JoinEventPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const [signedUp, setSignedUp] = useState(false);
+  const [choices, setChoices] = useState<SignupChoices>({});
 
   const refresh = useCallback(async () => {
     const [nextEvent, nextRoster] = await Promise.all([loadGolfEvent(code), loadRoster(code)]);
@@ -47,6 +49,7 @@ export default function JoinEventPage() {
       setName(saved.name);
       setEmail(saved.email);
       setHandicap(saved.handicap);
+      if (saved.choices) setChoices(saved.choices);
       setSignedUp(true);
     }
     refresh().catch((error: Error) => {
@@ -65,9 +68,10 @@ export default function JoinEventPage() {
     setSaving(true);
     setMessage(null);
     try {
-      const result = await signUp(code, name, email, handicapValue);
+      const finalChoices = event ? completeChoices(event, choices) : undefined;
+      const result = await signUp(code, name, email, handicapValue, finalChoices);
       try {
-        localStorage.setItem(`triple-track-signup:${code}`, JSON.stringify({ name: name.trim(), email: email.trim(), handicap }));
+        localStorage.setItem(`triple-track-signup:${code}`, JSON.stringify({ name: name.trim(), email: email.trim(), handicap, choices: finalChoices }));
       } catch {
         /* Signup is saved on the server either way. */
       }
@@ -128,6 +132,13 @@ export default function JoinEventPage() {
               <input className={inputClass} required type="number" inputMode="decimal" step="0.1" min={-10} max={54} value={handicap} onChange={(e) => setHandicap(e.target.value)} />
               <span className="mt-1 block text-xs text-slate-500">Used for net scoring. Example: 12.4</span>
             </label>
+            {event.days.length ? (
+              <div>
+                <p className="mb-2 text-sm font-semibold">Your days &amp; games</p>
+                <ChoicesEditor event={event} value={choices} onChange={setChoices} disabled={saving} />
+                {signedUp ? <p className="mt-2 text-xs text-slate-500">You can change these until that day&apos;s round starts. Tap Update my details to save.</p> : null}
+              </div>
+            ) : null}
             <Button type="submit" className="w-full" disabled={saving}>
               {saving ? 'Saving…' : signedUp ? 'Update my details' : "I'm in"}
             </Button>
@@ -148,7 +159,7 @@ export default function JoinEventPage() {
       </Card>
 
       <EventSchedule event={event} />
-      <BuyInCard event={event} players={roster.length} />
+      <BuyInCard event={event} players={roster.length} roster={roster} />
 
       <Card>
         <h2 className="mb-2 text-xl font-bold">

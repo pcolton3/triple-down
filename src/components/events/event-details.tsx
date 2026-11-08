@@ -7,6 +7,7 @@ import {
   groupGames,
   potGames,
   buyInBreakdown,
+  type SignupChoices,
   formatEventDate,
   formatTime,
   mapsLink,
@@ -88,16 +89,16 @@ export function EventSchedule({ event }: { event: GolfEvent }) {
   );
 }
 
-export function BuyInCard({ event, players }: { event: GolfEvent; players: number }) {
-  const breakdown = buyInBreakdown(event, players);
+export function BuyInCard({ event, players, roster }: { event: GolfEvent; players: number; roster?: Array<{ choices?: SignupChoices }> }) {
+  const breakdown = buyInBreakdown(event, players, roster);
   const sideBets = event.days.flatMap((day) => groupGames(day).map((game) => ({ day, game })));
   if (!event.buy_in && !sideBets.length) return null;
   return (
     <Card>
-      <h2 className="text-xl font-bold">{event.buy_in ? `Buy-in: ${formatCurrency(event.buy_in)} per player` : 'No buy-in'}</h2>
+      <h2 className="text-xl font-bold">{event.buy_in ? `Buy-in: up to ${formatCurrency(event.buy_in)} per player` : 'No buy-in'}</h2>
       {event.buy_in && players > 0 ? (
         <p className="mb-3 text-sm text-slate-500">
-          Pots shown for {players} player{players === 1 ? '' : 's'} signed up so far.
+          You only pay for the games you join. Pots shown for the {players} player{players === 1 ? '' : 's'} signed up so far.
         </p>
       ) : (
         <div className="mb-3" />

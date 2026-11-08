@@ -378,8 +378,9 @@ export default function SettlePage() {
   }));
   (payoutSnapshot.holeInOne ?? []).forEach((winner) => {
     if (winner.payerCount <= 0 || winner.amount <= 0) return;
+    const aceOptOuts = new Set(round.gameSettings.excludedPlayers?.hole_in_one ?? []);
     payoutSnapshot.finalScoring
-      .filter((player) => player.playerId !== winner.playerId)
+      .filter((player) => player.playerId !== winner.playerId && !aceOptOuts.has(player.playerId))
       .forEach((payer) => debts.push({ fromId: payer.playerId, fromName: payer.playerName, toId: winner.playerId, toName: winner.playerName, amount: winner.amount / winner.payerCount, reason: 'Hole in one' }));
   });
   const pots = [

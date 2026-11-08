@@ -143,9 +143,22 @@ describe('score-only extras', () => {
   it('notes when a game needs a different group size', () => {
     const round = makeRound([[4, 4, 4]], { games: { wolf: 1, nines: 1 }, roster: players.slice(0, 3) });
     const results = computeGroupGames(round);
-    expect(results.find((result) => result.key === 'wolf')!.notes[0]).toContain('needs a group of 4');
+    expect(results.find((result) => result.key === 'wolf')!.notes[0]).toContain('needs 4 players in the game');
     // Nines works for three: 3 beats 4,4 → 5 vs 2 and 2 points.
     const nines = makeRound([[3, 4, 4]], { games: { nines: 1 }, roster: players.slice(0, 3) });
     expect(standing(nines, 'nines')).toEqual({ a: 6, b: -3, c: -3 });
+  });
+});
+
+describe('opt-outs', () => {
+  it('leaves opted-out players out of a game and skips four-player games that drop below 4', () => {
+    const round = makeRound([[3, 4, 4, 4], [4, 4, 4, 5]], { games: { match_play: 10, wolf: 1 } });
+    round.gameSettings.excludedPlayers = { match_play: ['d'], wolf: ['d'] };
+    const match = computeGroupGames(round).find((result) => result.key === 'match_play')!;
+    // Di sat out, so only Al, Bo and Cy play each other: Al beats both, Bo and Cy halve.
+    expect(Object.fromEntries(match.standings.map((item) => [item.playerId, item.amount]))).toEqual({ a: 20, b: -10, c: -10 });
+    const wolf = computeGroupGames(round).find((result) => result.key === 'wolf')!;
+    expect(wolf.notes[0]).toContain('Group 1 has 3 playing it');
+    expect(wolf.debts).toEqual([]);
   });
 });
