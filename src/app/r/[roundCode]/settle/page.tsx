@@ -3,6 +3,8 @@
 import { collectPotWins, netDebts, type Debt } from '@/lib/offline/net-payments';
 import { computeGroupGames } from '@/lib/games/group-games';
 import { GroupGameStandings } from '@/components/round/group-game-inputs';
+import { SideBetsCard } from '@/components/round/side-bets-card';
+import { sideBetDebts, type SideBet } from '@/lib/games/side-bets';
 
 import { SettlementSummary, type PaymentLine } from '@/app/settlement-summary';
 import { readPending } from '@/lib/offline/score-queue';
@@ -245,6 +247,7 @@ export default function SettlePage() {
   const holeInOneWinnerRows = holeInOneSummary.payouts.filter((item) => item.amount > 0);
 
   const groupGameResults = computeGroupGames(round);
+  const [sideBets, setSideBets] = useState<SideBet[]>([]);
 
   function buildSnapshot(): SettlementSnapshot {
     return {
@@ -318,7 +321,7 @@ export default function SettlePage() {
         amount: total.amount,
       })) : [],
       bankerSettlements: bankerGameEnabled ? settlements : [],
-      groupGames: { debts: groupGameResults.flatMap((result) => result.debts), pots: groupGameResults.flatMap((result) => result.pots) },
+      groupGames: { debts: [...groupGameResults.flatMap((result) => result.debts), ...sideBetDebts(round, sideBets)], pots: groupGameResults.flatMap((result) => result.pots) },
     };
   }
 
@@ -426,6 +429,9 @@ export default function SettlePage() {
       </div>
 
       <SettlementSummary roundId={round.id} title={round.title} complete={Boolean(settlementSnapshot) || roundComplete} lines={paymentLines} />
+      <div className="mb-4">
+        <SideBetsCard round={round} onBetsChange={setSideBets} />
+      </div>
       {snapshotStatus ? <p role="status" className="mb-4 text-sm">{snapshotStatus}</p> : null}
       {!settlementSnapshot && !roundComplete ? (
         <p className="mb-2 text-sm text-slate-600">

@@ -528,3 +528,34 @@ begin
 end $$;
 
 notify pgrst, 'reload schema';
+
+-- Side bets between two golfers in a round (any groups). Honor-system acceptance:
+-- a bet only counts once the other golfer accepts, and accepted bets can't be changed.
+create table if not exists public.round_side_bets (
+  id uuid primary key default gen_random_uuid(),
+  round_id uuid not null references public.rounds(id) on delete cascade,
+  kind text not null check (kind in ('low_net_18', 'low_net_front', 'low_net_back', 'low_gross_18', 'match_play_net')),
+  amount numeric not null check (amount > 0 and amount <= 10000),
+  proposer_key text not null,
+  opponent_key text not null check (opponent_key <> proposer_key),
+  status text not null default 'pending' check (status in ('pending', 'accepted', 'declined', 'cancelled')),
+  proposer_device_id text,
+  created_at timestamptz not null default now(),
+  responded_at timestamptz
+);
+create index if not exists round_side_bets_round_idx on public.round_side_bets (round_id);
+alter table public.round_side_bets enable row level security;
+drop policy if exists round_side_bets_public_read on public.round_side_bets;
+create policy round_side_bets_public_read on public.round_side_bets for select using (true);
+drop policy if exists round_side_bets_public_insert on public.round_side_bets;
+create policy round_side_bets_public_insert on public.round_side_bets for insert with check (status = 'pending');
+drop policy if exists round_side_bets_public_update on public.round_side_bets;
+create policy round_side_bets_public_update on public.round_side_bets for update
+  using (status = 'pending') with check (status in ('accepted', 'declined', 'cancelled'));
+-- Live updates for side bets (the app also refreshes every 20 seconds if this isn't available).
+do $$ begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'round_side_bets') then
+    alter publication supabase_realtime add table public.round_side_bets;
+  end if;
+end $$;

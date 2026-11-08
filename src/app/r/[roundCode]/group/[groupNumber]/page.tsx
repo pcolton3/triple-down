@@ -949,6 +949,10 @@ export default function GroupScoringPage() {
       ) : null}
 
       <GroupGameStandings results={groupGameResults} />
+      <Link href={`/r/${round.roundCode}#side-bets`} className="flex min-h-[48px] items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-[#0f5132] shadow-sm">
+        <span>Side bets with anyone in the round</span>
+        <span aria-hidden>→</span>
+      </Link>
 
       {audit.length ? <details className="rounded-2xl border border-slate-200 bg-white p-4">
         <summary className="cursor-pointer font-bold">Correction history on this device ({audit.length})</summary>
