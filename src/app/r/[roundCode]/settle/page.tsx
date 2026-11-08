@@ -1,6 +1,8 @@
 'use client';
 
 import { collectPotWins, netDebts, type Debt } from '@/lib/offline/net-payments';
+import { computeGroupGames } from '@/lib/games/group-games';
+import { GroupGameStandings } from '@/components/round/group-game-inputs';
 
 import { SettlementSummary, type PaymentLine } from '@/app/settlement-summary';
 import { readPending } from '@/lib/offline/score-queue';
@@ -242,6 +244,8 @@ export default function SettlePage() {
   const eaglePotWinnerRows = eaglePotSummary.payouts.filter((item) => item.amount > 0);
   const holeInOneWinnerRows = holeInOneSummary.payouts.filter((item) => item.amount > 0);
 
+  const groupGameResults = computeGroupGames(round);
+
   function buildSnapshot(): SettlementSnapshot {
     return {
       roundCode: routeRoundCode,
@@ -314,6 +318,7 @@ export default function SettlePage() {
         amount: total.amount,
       })) : [],
       bankerSettlements: bankerGameEnabled ? settlements : [],
+      groupGames: { debts: groupGameResults.flatMap((result) => result.debts), pots: groupGameResults.flatMap((result) => result.pots) },
     };
   }
 
@@ -382,9 +387,11 @@ export default function SettlePage() {
     ['Nassau', payoutSnapshot.nassau ?? []], ['Stableford', payoutSnapshot.stableford ?? []],
     ['Birdie pot', payoutSnapshot.birdiePot ?? []], ['Eagle pot', payoutSnapshot.eaglePot ?? []],
   ] as const;
-  const potCollections = collectPotWins(
-    pots.flatMap(([game, winners]) => winners.map((winner) => ({ playerId: winner.playerId, playerName: winner.playerName, amount: winner.amount, game })))
-  );
+  debts.push(...(payoutSnapshot.groupGames?.debts ?? []));
+  const potCollections = collectPotWins([
+    ...pots.flatMap(([game, winners]) => winners.map((winner) => ({ playerId: winner.playerId, playerName: winner.playerName, amount: winner.amount, game }))),
+    ...(payoutSnapshot.groupGames?.pots ?? []),
+  ]);
   const paymentLines: PaymentLine[] = [
     ...netDebts(debts).map((transfer) => ({
       id: `pair:${transfer.fromId}:${transfer.toId}`,
@@ -427,6 +434,14 @@ export default function SettlePage() {
       {!settlementSnapshot ? <button type="button" disabled={!roundComplete} className="mb-4 rounded-xl bg-[#0f5132] px-4 py-3 font-semibold text-white disabled:opacity-40" onClick={() => void handleFinalizeSettlement()}>Finalize settlement</button> : null}
       <details className="rounded-2xl border border-slate-200 p-3">
       <summary className="mb-4 cursor-pointer font-bold">Game-by-game calculations and score details</summary>
+      {groupGameResults.length ? (
+        <div className="mb-4">
+          <GroupGameStandings
+            open
+            results={groupGameResults.map((result) => ({ ...result, label: (round.multiFoursome?.groups.length ?? 1) > 1 ? `${result.label} · Group ${result.groupNumber}` : result.label }))}
+          />
+        </div>
+      ) : null}
       {settlementSnapshot ? (
         <>
           <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">

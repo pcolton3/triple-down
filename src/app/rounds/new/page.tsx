@@ -12,7 +12,7 @@ import { createSharedRoundFromLocalRound, loadSharedRoundsByRyderEventCode, shar
 import { loadSavedGolfers, saveGolfersForLater, type SavedGolfer } from '@/lib/realtime/saved-golfers';
 import { loadSavedCourseTees, saveCourseTee, savedCourseKey, type SavedCourseTee } from '@/lib/realtime/saved-course-tees';
 import { BEEZER_EXTRA_GAMES, type BeezerExtraGameKey } from '@/lib/games/catalog';
-import { gameHelp } from '@/lib/games/help';
+import { gameHelp, moneyLabel } from '@/lib/games/help';
 import { GamePicker } from '@/components/round/game-picker';
 import type { CourseRecord } from '@/types/course';
 import type { HoleConfig } from '@/types/round';
@@ -183,7 +183,7 @@ function NewRoundPageContent() {
     bingoBangoBongoEnabled ? 'Bingo Bango Bongo' : null,
     vegasEnabled ? 'Vegas' : null,
     matchPlayEnabled ? 'Match Play' : null,
-    teamMatchPlayEnabled ? 'Team Match Play' : null,
+    teamMatchPlayEnabled ? 'Team Match Play / Ryder Cup' : null,
     ...BEEZER_EXTRA_GAMES.filter((game) => extraGames[game.key]).map((game) => game.label),
   ].filter(Boolean);
   const gameOptions: Array<{ label: string; checked: boolean; onToggle: () => void }> = [
@@ -1319,25 +1319,25 @@ function NewRoundPageContent() {
             ) : null}
             {wolfEnabled ? (
             <div>
-              <label className="mb-1 block text-sm font-medium">Wolf $ per point (for reference)</label>
+              <label className="mb-1 block text-sm font-medium">Wolf $ per point</label>
               <NumberField value={wolfUnit} onChange={setWolfUnit} placeholder="0" />
             </div>
             ) : null}
             {bingoBangoBongoEnabled ? (
             <div>
-              <label className="mb-1 block text-sm font-medium">Bingo Bango Bongo $ per point (for reference)</label>
+              <label className="mb-1 block text-sm font-medium">Bingo Bango Bongo $ per point</label>
               <NumberField value={bingoBangoBongoUnit} onChange={setBingoBangoBongoUnit} placeholder="0" />
             </div>
             ) : null}
             {vegasEnabled ? (
             <div>
-              <label className="mb-1 block text-sm font-medium">Vegas $ per point (for reference)</label>
+              <label className="mb-1 block text-sm font-medium">Vegas $ per point</label>
               <NumberField value={vegasUnit} onChange={setVegasUnit} placeholder="0" />
             </div>
             ) : null}
             {matchPlayEnabled ? (
             <div>
-              <label className="mb-1 block text-sm font-medium">Match play $ per match (for reference)</label>
+              <label className="mb-1 block text-sm font-medium">Match play $ per match</label>
               <NumberField value={matchPlayUnit} onChange={setMatchPlayUnit} placeholder="0" />
             </div>
             ) : null}
@@ -1349,7 +1349,7 @@ function NewRoundPageContent() {
             ) : null}
             {BEEZER_EXTRA_GAMES.filter((game) => extraGames[game.key]).map((game) => (
               <div key={game.key}>
-                <label className="mb-1 block text-sm font-medium">{game.label} $ (for reference)</label>
+                <label className="mb-1 block text-sm font-medium">{moneyLabel(game.label)}</label>
                 <NumberField
                   value={extraGameUnits[game.key] ?? 0}
                   onChange={(value) => setExtraGameUnits((current) => ({ ...current, [game.key]: value }))}

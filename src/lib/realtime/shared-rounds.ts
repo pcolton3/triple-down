@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase/client';
-import type { HoleState, RoundState } from '@/types/round';
+import type { HoleGameData, HoleState, RoundState } from '@/types/round';
+import type { Debt, PotWin } from '@/lib/offline/net-payments';
 import { createRoundGroups } from '@/lib/realtime/group-rounds';
 import { BEEZER_EXTRA_GAMES, type BeezerExtraGameKey } from '@/lib/games/catalog';
 
@@ -46,6 +47,7 @@ type RoundHoleRow = {
   banker_gross_score: number | null;
   banker_pressed: boolean;
   is_saved: boolean;
+  game_data?: HoleGameData | null;
   created_at: string;
   updated_at: string;
 };
@@ -192,6 +194,8 @@ export type SettlementSnapshot = {
   eaglePot?: Array<{ playerId: string; playerName: string; amount: number; eagles: number; holes: number[] }>;
   holeInOne?: Array<{ playerId: string; playerName: string; amount: number; aces: number; holes: number[]; payerCount: number }>;
   bankerPositions: Array<{ playerId: string; name: string; amount: number }>;
+  /** Wolf, Vegas and other in-group games: player debts and group pot wins. */
+  groupGames?: { debts: Debt[]; pots: PotWin[] };
   bankerSettlements: Array<{
     groupNumber: number;
     fromPlayerId: string;
@@ -744,6 +748,7 @@ export function sharedRoundBundleToRoundState(bundle: SharedRoundBundle): RoundS
       bankerPressed: hole.banker_pressed,
       isSaved: hole.is_saved,
       ctpWinnerPlayerId: ctpByGroupHole.get(`${groupNumber}:${hole.hole_number}`) ?? null,
+      ...(hole.game_data && Object.keys(hole.game_data).length ? { gameData: hole.game_data } : {}),
       matchups: matchupPlayerKeys.map((playerKey) => {
         const matchup = holeMatchupsByPlayerKey.get(playerKey);
         const player = players.find((item) => item.id === playerKey);
@@ -927,6 +932,20 @@ export async function updateSharedRoundCurrentHole(roundId: string, currentHole:
     .eq('id', roundId);
 
   if (error) throw error;
+}
+
+/**
+ * Saves per-hole game picks (wolf partner, Bingo Bango Bongo). Quietly skips if the
+ * game_data column hasn't been added yet, so scores always sync.
+ */
+export async function updateSharedHoleGameData(params: { roundId: string; groupNumber?: number; holeNumber: number; gameData: HoleGameData }) {
+  const { error } = await supabase
+    .from('round_holes')
+    .update({ game_data: params.gameData })
+    .eq('round_id', params.roundId)
+    .eq('group_number', params.groupNumber ?? 1)
+    .eq('hole_number', params.holeNumber);
+  if (error && !isMissingSchemaError(error)) throw error;
 }
 
 export async function updateSharedHole(params: {

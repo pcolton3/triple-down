@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase/client';
-import { replaceSharedHoleMatchups, updateSharedCtpResult, updateSharedHole } from '@/lib/realtime/shared-rounds';
+import { replaceSharedHoleMatchups, updateSharedCtpResult, updateSharedHole, updateSharedHoleGameData } from '@/lib/realtime/shared-rounds';
 import { updateGroupCurrentHole } from '@/lib/realtime/group-rounds';
 import { acknowledge, pendingKey, putPending, QUEUE_EVENT, readPending, type PendingHole } from './score-queue';
 import type { HoleState, RoundState } from '@/types/round';
@@ -34,6 +34,7 @@ export async function sendPending(entry: PendingHole) {
   await updateSharedHole({ ...common, bankerPlayerKey: entry.hole.bankerPlayerId, bankerGrossScore: entry.hole.bankerGrossScore, bankerPressed: entry.hole.bankerPressed, isSaved: false });
   await replaceSharedHoleMatchups({ ...common, matchups: entry.hole.matchups });
   if (entry.hole.par === 3) await updateSharedCtpResult({ ...common, winnerPlayerKey: entry.hole.ctpWinnerPlayerId ?? null });
+  if (entry.hole.gameData) await updateSharedHoleGameData({ ...common, gameData: entry.hole.gameData });
   // Mark the hole complete only after every score write succeeds.
   await updateSharedHole({ ...common, isSaved: entry.hole.isSaved });
   if (entry.currentHole != null && entry.currentHole > group.current_hole) {

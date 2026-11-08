@@ -16,6 +16,17 @@ export type MatchupDraft = {
   bankerParticipant?: boolean;
 };
 
+/** Per-hole picks for games that need more than scores. Team choice lives on hole 1 for the whole round. */
+export type HoleGameData = {
+  /** Wolf: the partner the wolf picked, or 'lone' for lone wolf. */
+  wolfChoice?: string | null;
+  bingoPlayerId?: string | null;
+  bangoPlayerId?: string | null;
+  bongoPlayerId?: string | null;
+  /** Team games (Vegas, Best Ball…): who partners the group's first player. */
+  teamPartnerOfFirst?: string | null;
+};
+
 export type HoleState = {
   groupNumber?: number;
   holeNumber: number;
@@ -27,6 +38,7 @@ export type HoleState = {
   matchups: MatchupDraft[];
   isSaved: boolean;
   ctpWinnerPlayerId?: string | null;
+  gameData?: HoleGameData;
 };
 
 export type HoleConfig = {

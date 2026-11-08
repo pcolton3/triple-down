@@ -17,7 +17,7 @@ export function GamePicker({ options }: { options: GameOption[] }) {
         <input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-[#0f5132]" checked={option.checked} onChange={option.onToggle} />
         <span className="min-w-0">
           <span className="block font-semibold">{option.label}</span>
-          {help.summary && !isExtra(option.label) ? (
+          {help.summary && !help.summary.startsWith('Recorded with the round') ? (
             <span className="mt-0.5 block text-xs text-slate-600">
               {help.summary}
               {help.money ? ` ${help.money}` : ''}

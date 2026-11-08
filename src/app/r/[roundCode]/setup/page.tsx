@@ -9,6 +9,7 @@ import { loadSharedRoundByCode, sharedRoundBundleToRoundState, updateSharedRound
 import { saveCourseTee, savedCourseKey } from '@/lib/realtime/saved-course-tees';
 import { BEEZER_EXTRA_GAMES, type BeezerExtraGameKey } from '@/lib/games/catalog';
 import { GamePicker } from '@/components/round/game-picker';
+import { moneyLabel } from '@/lib/games/help';
 import { useRoundStore } from '@/stores/round-store';
 import type { Player, RoundState } from '@/types/round';
 
@@ -525,14 +526,14 @@ export default function EditRoundSetupPage() {
           {stablefordEnabled ? <MoneyField label="Stableford pot (total $)" value={stablefordPot} onChange={setStablefordPot} /> : null}
           {birdiePotEnabled ? <MoneyField label="Birdie pot (total $)" value={birdiePot} onChange={setBirdiePot} /> : null}
           {eaglePotEnabled ? <MoneyField label="Eagle pot (total $)" value={eaglePot} onChange={setEaglePot} /> : null}
-          {wolfEnabled ? <MoneyField label="Wolf $ per point (for reference)" value={wolfUnit} onChange={setWolfUnit} /> : null}
-          {bingoBangoBongoEnabled ? <MoneyField label="Bingo Bango Bongo $ per point (for reference)" value={bingoBangoBongoUnit} onChange={setBingoBangoBongoUnit} /> : null}
-          {vegasEnabled ? <MoneyField label="Vegas $ per point (for reference)" value={vegasUnit} onChange={setVegasUnit} /> : null}
-          {matchPlayEnabled ? <MoneyField label="Match play $ per match (for reference)" value={matchPlayUnit} onChange={setMatchPlayUnit} /> : null}
+          {wolfEnabled ? <MoneyField label="Wolf $ per point" value={wolfUnit} onChange={setWolfUnit} /> : null}
+          {bingoBangoBongoEnabled ? <MoneyField label="Bingo Bango Bongo $ per point" value={bingoBangoBongoUnit} onChange={setBingoBangoBongoUnit} /> : null}
+          {vegasEnabled ? <MoneyField label="Vegas $ per point" value={vegasUnit} onChange={setVegasUnit} /> : null}
+          {matchPlayEnabled ? <MoneyField label="Match play $ per match" value={matchPlayUnit} onChange={setMatchPlayUnit} /> : null}
           {BEEZER_EXTRA_GAMES.filter((game) => extraGames[game.key]).map((game) => (
             <MoneyField
               key={game.key}
-              label={`${game.label} $ (for reference)`}
+              label={moneyLabel(game.label)}
               value={extraGameUnits[game.key] ?? '0'}
               onChange={(value) => setExtraGameUnits((current) => ({ ...current, [game.key]: value }))}
             />

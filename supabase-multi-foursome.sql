@@ -262,6 +262,10 @@ create table if not exists public.saved_golfers (
 alter table public.saved_golfers
   add column if not exists posted_rounds integer not null default 0;
 
+-- Per-hole picks for Wolf / Bingo Bango Bongo, and team choice on hole 1: { wolfChoice, bingoPlayerId, ... }
+alter table public.round_holes
+  add column if not exists game_data jsonb not null default '{}'::jsonb;
+
 -- Venmo / Cash App / PayPal usernames for settle-up pay buttons: { venmo, cashapp, paypal }
 alter table public.saved_golfers
   add column if not exists payment_handles jsonb not null default '{}'::jsonb;

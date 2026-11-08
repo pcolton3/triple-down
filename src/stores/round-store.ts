@@ -8,7 +8,7 @@ import { settleBankerHole } from '@/domain/banker/settle-banker-hole';
 import { isGrossBirdieOrBetter } from '@/domain/banker/birdie';
 import { buildLedgerEntries, type LedgerEntry } from '@/domain/banker/ledger';
 import type { BankerMatchupResult } from '@/domain/banker/types';
-import type { CreateRoundInput, HoleConfig, HoleState, Player, RoundState } from '@/types/round';
+import type { CreateRoundInput, HoleConfig, HoleGameData, HoleState, Player, RoundState } from '@/types/round';
 import { buildGroupsForPlayers } from '@/lib/groups/group-utils';
 
 type MatchupSummary = {
@@ -167,6 +167,7 @@ type RoundStore = {
   getCurrentHoleSummary: (groupNumber?: number, holeNumber?: number) => CurrentHoleSummary;
   getSettleUp: () => SettleUpItem[];
   setCtpWinner: (holeNumber: number, playerId: string | null, groupNumber?: number) => void;
+  setHoleGameData: (groupNumber: number, holeNumber: number, patch: HoleGameData) => void;
   getGrossTotals: () => GrossTotalItem[];
   getSkinsSummary: () => SkinsSummary;
   getLowNetSummary: () => LowNetSummary;
@@ -1517,6 +1518,16 @@ export const useRoundStore = create<RoundStore>()(
           };
           return { round, ledger: recalcLedger(round) };
         }),
+
+      setHoleGameData: (groupNumber, holeNumber, patch) =>
+        set((state) => ({
+          round: {
+            ...state.round,
+            holes: state.round.holes.map((hole) =>
+              hole.holeNumber === holeNumber && (hole.groupNumber ?? 1) === groupNumber ? { ...hole, gameData: { ...hole.gameData, ...patch } } : hole
+            ),
+          },
+        })),
 
       getGrossTotals: () => buildGrossTotals(get().round),
 

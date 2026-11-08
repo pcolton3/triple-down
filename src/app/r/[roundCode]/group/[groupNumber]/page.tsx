@@ -10,6 +10,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/shared/button';
 import { useRoundStore } from '@/stores/round-store';
 import { formatCurrency } from '@/lib/utils/currency';
+import { GroupGameInputs, GroupGameStandings } from '@/components/round/group-game-inputs';
+import { computeGroupGames } from '@/lib/games/group-games';
 import {
   createSharedRoundFromLocalRound,
   loadSharedRoundByCode,
@@ -152,6 +154,7 @@ export default function GroupScoringPage() {
     getCurrentHoleSummary,
     getGroupBankerPreviewTotals,
     setCtpWinner,
+    setHoleGameData,
   } = useRoundStore();
   const [message, setMessage] = useState('');
   const [copiedEventLink, setCopiedEventLink] = useState(false);
@@ -534,6 +537,15 @@ export default function GroupScoringPage() {
   const savedGroupHoles = roundHoles.filter((item) => (item.groupNumber ?? 1) === groupNumber && item.isSaved).length;
   const groupProgress = Math.round((savedGroupHoles / Math.max(1, round.totalHoles)) * 100);
 
+  const groupGameResults = computeGroupGames(round).filter((result) => result.groupNumber === groupNumber);
+  function changeGameData(holeNumber: number, patch: Parameters<typeof setHoleGameData>[2]) {
+    setHoleGameData(groupNumber, holeNumber, patch);
+    // Team picks live on hole 1; when correcting a different hole, send hole 1 straight away.
+    if (isEditingPastHole && holeNumber !== targetHoleNumber) {
+      void persistHoleSnapshot(holeNumber).catch((error) => setMessage(formatUnknownError(error, 'Unable to save the team change.')));
+    }
+  }
+
   const holeStrip = (
       <nav aria-label="Holes" className="-mx-4 overflow-x-auto px-4">
         <div className="flex gap-1.5 pb-1">
@@ -604,6 +616,7 @@ export default function GroupScoringPage() {
             </div>
           </section>
         ) : null}
+        <GroupGameStandings results={groupGameResults} open />
         <Link href={`/r/${round.roundCode}/settle`} className="block rounded-xl bg-[#0f5132] px-4 py-4 text-center text-lg font-bold text-white">
           {everyoneDone ? 'Settle up →' : 'See payouts so far →'}
         </Link>
@@ -817,6 +830,8 @@ export default function GroupScoringPage() {
         </section>
       ) : null}
 
+      <GroupGameInputs round={round} groupNumber={groupNumber} hole={hole} canEdit={canEdit} onChange={changeGameData} />
+
       <section className="space-y-3">
         {isScoreOnlyGroup ? (
           groupPlayers.map((player) => {
@@ -932,6 +947,8 @@ export default function GroupScoringPage() {
         </div>
       </section>
       ) : null}
+
+      <GroupGameStandings results={groupGameResults} />
 
       {audit.length ? <details className="rounded-2xl border border-slate-200 bg-white p-4">
         <summary className="cursor-pointer font-bold">Correction history on this device ({audit.length})</summary>
