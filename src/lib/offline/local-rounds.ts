@@ -32,3 +32,16 @@ export function describeScores(hole: HoleState, players: RoundState['players']) 
   const bets = hole.matchups.filter((item) => item.bankerParticipant !== false).map((item) => `${players.find((player) => player.id === item.playerId)?.name ?? item.playerId} bet ${item.baseWager}${item.pressed ? ' (pressed)' : ''}`).join(', ');
   return `${scores}. Banker: ${banker}${hole.bankerPressed ? ' (pressed)' : ''}. ${bets}${hole.ctpWinnerPlayerId ? `. CTP: ${players.find((player) => player.id === hole.ctpWinnerPlayerId)?.name ?? hole.ctpWinnerPlayerId}` : ''}`;
 }
+
+/** Clears a deleted round from this phone: cached copy, "Resume your round", unsent scores, corrections. */
+export function forgetRound(roundCode: string, roundId: string) {
+  const code = roundCode.toUpperCase();
+  localStorage.removeItem(`${ROUND_PREFIX}${code}`);
+  if (readRecent()?.code.toUpperCase() === code) localStorage.removeItem('triple-track-recent');
+  const doomed: string[] = [];
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (key && (key.startsWith(`triple-track-pending:${roundId}:`) || key.startsWith(`triple-track-corrections:${roundId}:`) || key.startsWith(`triple-track-paid:${roundId}:`) || key === `triple-track-me:${roundId}`)) doomed.push(key);
+  }
+  doomed.forEach((key) => localStorage.removeItem(key));
+}

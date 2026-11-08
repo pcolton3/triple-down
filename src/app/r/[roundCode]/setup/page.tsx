@@ -5,7 +5,8 @@ import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
-import { loadSharedRoundByCode, sharedRoundBundleToRoundState, updateSharedRoundSetup } from '@/lib/realtime/shared-rounds';
+import { deleteSharedRound, loadSharedRoundByCode, roundDeletePermission, sharedRoundBundleToRoundState, updateSharedRoundSetup } from '@/lib/realtime/shared-rounds';
+import { forgetRound } from '@/lib/offline/local-rounds';
 import { saveCourseTee, savedCourseKey } from '@/lib/realtime/saved-course-tees';
 import { BEEZER_EXTRA_GAMES, type BeezerExtraGameKey } from '@/lib/games/catalog';
 import { GamePicker } from '@/components/round/game-picker';
@@ -69,6 +70,74 @@ function MoneyField({ label, value, onChange }: { label: string; value: string; 
 function getGroupLabel(round: RoundState, playerId: string) {
   const assignment = round.multiFoursome?.groupPlayers.find((item) => item.playerId === playerId);
   return assignment ? `Group ${assignment.groupNumber}` : 'Group 1';
+}
+
+/** Permanent delete, behind typing the round code. The database also checks who may delete and blocks finalized rounds. */
+function DeleteRoundCard({ round }: { round: RoundState }) {
+  const [permission, setPermission] = useState<{ allowed: boolean; finalized: boolean } | null>(null);
+  const [typed, setTyped] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState('');
+  const code = round.roundCode.toUpperCase();
+
+  useEffect(() => {
+    roundDeletePermission(code).then(setPermission).catch(() => setPermission({ allowed: true, finalized: false }));
+  }, [code]);
+
+  async function remove() {
+    if (typed.trim().toUpperCase() !== code || deleting) return;
+    setDeleting(true);
+    setError('');
+    try {
+      await deleteSharedRound(code);
+      try { forgetRound(code, round.id); } catch { /* storage unavailable */ }
+      window.location.href = '/';
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Could not delete the round.');
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <details className="rounded-2xl border border-red-200 bg-white p-4 shadow-sm">
+      <summary className="cursor-pointer font-bold text-red-700">Delete this round</summary>
+      <div className="mt-3 space-y-3 text-sm">
+        {!permission ? (
+          <p className="text-slate-500" role="status">Checking…</p>
+        ) : permission.finalized ? (
+          <p className="text-slate-700">This round&apos;s settle-up has been finalized, so it&apos;s kept as the record of who paid whom and can&apos;t be deleted.</p>
+        ) : !permission.allowed ? (
+          <p className="text-slate-700">Only the phone that created this round can delete it.</p>
+        ) : (
+          <>
+            <p className="text-slate-700">
+              This permanently deletes <span className="font-semibold">{round.title}</span> for everyone: all scores, groups, side bets and payouts. This can&apos;t be undone.
+              {round.ryderEventCode ? ' If it was started from an event day, that day reopens so it can be started again.' : ''}
+            </p>
+            <label className="block">
+              <span className="mb-1 block font-medium">Type <span className="font-mono font-bold">{code}</span> to confirm</span>
+              <input
+                className="min-h-[48px] w-full rounded-xl border border-slate-300 px-3 py-3 font-mono uppercase"
+                value={typed}
+                autoCapitalize="characters"
+                autoCorrect="off"
+                onChange={(event) => setTyped(event.target.value)}
+              />
+            </label>
+            {error ? <p role="alert" className="text-red-700">{error}</p> : null}
+            <button
+              type="button"
+              disabled={typed.trim().toUpperCase() !== code || deleting}
+              className="min-h-[48px] w-full rounded-xl bg-red-700 px-4 font-bold text-white disabled:opacity-40"
+              onClick={() => void remove()}
+            >
+              {deleting ? 'Deleting…' : 'Delete round permanently'}
+            </button>
+          </>
+        )}
+      </div>
+    </details>
+  );
 }
 
 export default function EditRoundSetupPage() {
@@ -561,6 +630,8 @@ export default function EditRoundSetupPage() {
           </div>
         ) : null}
       </Card>
+
+      <DeleteRoundCard round={round} />
 
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_20px_rgba(15,23,42,0.08)] backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center gap-3">

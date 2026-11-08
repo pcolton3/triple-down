@@ -559,3 +559,45 @@ do $$ begin
     alter publication supabase_realtime add table public.round_side_bets;
   end if;
 end $$;
+
+-- Round deletion. The phone that created a round can delete it (rounds created before this
+-- column existed can be deleted by anyone). Rounds with a finalized settle-up can't be deleted.
+alter table public.rounds add column if not exists creator_device_id text;
+
+create or replace function public.delete_round(p_round_code text, p_device_id text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare v_round rounds;
+begin
+  select * into v_round from rounds where round_code = upper(trim(p_round_code));
+  if not found then raise exception 'Round not found'; end if;
+  if v_round.creator_device_id is not null and v_round.creator_device_id is distinct from p_device_id then
+    raise exception 'Only the phone that created this round can delete it.';
+  end if;
+  if exists (select 1 from round_settlement_snapshots where round_id = v_round.id) then
+    raise exception 'This round''s settle-up has been finalized, so it can''t be deleted.';
+  end if;
+  delete from round_side_bets where round_id = v_round.id;
+  delete from round_skins_results where round_id = v_round.id;
+  delete from round_low_net_results where round_id = v_round.id;
+  delete from round_ctp_results where round_id = v_round.id;
+  delete from round_participants where round_id = v_round.id;
+  delete from round_matchups where round_id = v_round.id;
+  delete from round_holes where round_id = v_round.id;
+  delete from round_group_players where round_id = v_round.id;
+  delete from round_groups where round_id = v_round.id;
+  delete from round_games where round_id = v_round.id;
+  delete from round_players where round_id = v_round.id;
+  delete from rounds where id = v_round.id;
+  -- Reopen any event day that was started as this round.
+  update golf_events set days = (
+    select coalesce(jsonb_agg(case when d->>'roundCode' = v_round.round_code then d - 'roundCode' else d end order by ord), '[]'::jsonb)
+    from jsonb_array_elements(days) with ordinality as t(d, ord)
+  )
+  where days @> jsonb_build_array(jsonb_build_object('roundCode', v_round.round_code));
+end;
+$$;
+grant execute on function public.delete_round(text, text) to anon, authenticated;

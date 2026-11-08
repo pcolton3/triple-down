@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase/client';
 import type { HoleGameData, HoleState, RoundState } from '@/types/round';
 import type { Debt, PotWin } from '@/lib/offline/net-payments';
-import { createRoundGroups } from '@/lib/realtime/group-rounds';
+import { createRoundGroups, currentDeviceId } from '@/lib/realtime/group-rounds';
 import { BEEZER_EXTRA_GAMES, type BeezerExtraGameKey } from '@/lib/games/catalog';
 
 type RoundRow = {
@@ -17,6 +17,7 @@ type RoundRow = {
   default_bet: number;
   status: 'active' | 'complete' | 'archived';
   created_by: string | null;
+  creator_device_id?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -382,6 +383,11 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
   if (roundError) throw new Error(formatSupabaseError(roundError, 'Unable to save round.'));
   const typedRoundRow = roundRow as RoundRow;
   const roundId = typedRoundRow.id;
+  // Remember which phone created the round so only it can delete it. Set once; skipped if the column isn't there yet.
+  if (!typedRoundRow.creator_device_id) {
+    const { error: creatorError } = await supabase.from('rounds').update({ creator_device_id: currentDeviceId() }).eq('id', roundId).is('creator_device_id', null);
+    if (creatorError && !isMissingSchemaError(creatorError)) console.error('Unable to record round creator.', creatorError);
+  }
 
   if (round.multiFoursome) {
     await createRoundGroups({
@@ -1093,4 +1099,26 @@ function getDeviceId() {
   const id = crypto.randomUUID();
   window.localStorage.setItem(key, id);
   return id;
+}
+
+/** Whether this phone may delete the round: it created it, or the round predates creator tracking. */
+export async function roundDeletePermission(roundCode: string): Promise<{ allowed: boolean; finalized: boolean }> {
+  const code = roundCode.toUpperCase();
+  const { data, error } = await supabase.from('rounds').select('id,creator_device_id').eq('round_code', code).maybeSingle();
+  // Before the delete SQL is run there's no creator column; let the delete itself explain what's missing.
+  if (error && isMissingSchemaError(error)) return { allowed: true, finalized: false };
+  if (error) throw new Error(formatSupabaseError(error, 'Unable to check this round.'));
+  const row = data as { id: string; creator_device_id?: string | null } | null;
+  if (!row) return { allowed: false, finalized: false };
+  const snapshot = await loadSettlementSnapshot(code).catch(() => null);
+  return { allowed: !row.creator_device_id || row.creator_device_id === currentDeviceId(), finalized: Boolean(snapshot) };
+}
+
+/** Permanently deletes a round and everything in it. The database enforces who can and when. */
+export async function deleteSharedRound(roundCode: string) {
+  const { error } = await supabase.rpc('delete_round', { p_round_code: roundCode.toUpperCase(), p_device_id: currentDeviceId() });
+  if (error) {
+    if (/could not find the function|does not exist/i.test(error.message ?? '')) throw new Error('Deleting rounds is not set up in the database yet. Run the delete-round SQL in Supabase.');
+    throw new Error(error.message || 'Unable to delete this round.');
+  }
 }
