@@ -126,7 +126,7 @@ export function BuyInCard({ event, players }: { event: GolfEvent; players: numbe
               .map(({ day, game }) => `${event.days.length > 1 ? `Day ${day.day} ` : ''}${gameDefinition(game.key).label}: ${formatCurrency(game.amount)} per bet`)
               .join(' · ')}
           </p>
-          <p className="mt-1 text-xs text-slate-500">Played inside each group and settled in the app after the round.</p>
+          <p className="mt-1 text-xs text-slate-500">Played inside each group. Banker is settled in the app; settle the others between yourselves.</p>
         </div>
       ) : null}
     </Card>

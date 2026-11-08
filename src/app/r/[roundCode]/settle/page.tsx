@@ -1,5 +1,7 @@
 'use client';
 
+import { collectPotWins, netDebts, type Debt } from '@/lib/offline/net-payments';
+
 import { SettlementSummary, type PaymentLine } from '@/app/settlement-summary';
 import { readPending } from '@/lib/offline/score-queue';
 import { useParams } from 'next/navigation';
@@ -365,22 +367,36 @@ export default function SettlePage() {
   if (!loaded || round.roundCode.toUpperCase() !== routeRoundCode.toUpperCase()) return <main className="mx-auto max-w-3xl px-4 py-8" role="status">{loadStatus}</main>;
 
   const payoutSnapshot = settlementSnapshot ?? buildSnapshot();
-  const paymentLines: PaymentLine[] = payoutSnapshot.bankerSettlements.map((item) => ({
-    id: `banker:${item.groupNumber}:${item.fromPlayerId}:${item.toPlayerId}`,
-    label: `${item.fromPlayerName} pays ${item.toPlayerName} (Banker · Group ${item.groupNumber})`,
-    amount: item.amount,
+  // Player-to-player debts (Banker, hole-in-one) are netted per pair across every group.
+  const debts: Debt[] = payoutSnapshot.bankerSettlements.map((item) => ({
+    fromId: item.fromPlayerId, fromName: item.fromPlayerName, toId: item.toPlayerId, toName: item.toPlayerName, amount: item.amount, reason: 'Banker',
   }));
+  (payoutSnapshot.holeInOne ?? []).forEach((winner) => {
+    if (winner.payerCount <= 0 || winner.amount <= 0) return;
+    payoutSnapshot.finalScoring
+      .filter((player) => player.playerId !== winner.playerId)
+      .forEach((payer) => debts.push({ fromId: payer.playerId, fromName: payer.playerName, toId: winner.playerId, toName: winner.playerName, amount: winner.amount / winner.payerCount, reason: 'Hole in one' }));
+  });
   const pots = [
     ['Skins', payoutSnapshot.skins], ['Closest to the pin', payoutSnapshot.ctp], ['Low net', payoutSnapshot.lowNet],
     ['Nassau', payoutSnapshot.nassau ?? []], ['Stableford', payoutSnapshot.stableford ?? []],
     ['Birdie pot', payoutSnapshot.birdiePot ?? []], ['Eagle pot', payoutSnapshot.eaglePot ?? []],
   ] as const;
-  pots.forEach(([game, winners]) => winners.filter((winner) => winner.amount > 0).forEach((winner) => paymentLines.push({ id: `${game}:${winner.playerId}`, label: `Pot holder pays ${winner.playerName} (${game})`, amount: winner.amount })));
-
-  (payoutSnapshot.holeInOne ?? []).forEach((winner) => {
-    if (winner.payerCount <= 0 || winner.amount <= 0) return;
-    payoutSnapshot.finalScoring.filter((player) => player.playerId !== winner.playerId).forEach((payer) => paymentLines.push({ id: `ace:${payer.playerId}:${winner.playerId}`, label: `${payer.playerName} pays ${winner.playerName} (Hole in one)`, amount: winner.amount / winner.payerCount }));
-  });
+  const potCollections = collectPotWins(
+    pots.flatMap(([game, winners]) => winners.map((winner) => ({ playerId: winner.playerId, playerName: winner.playerName, amount: winner.amount, game })))
+  );
+  const paymentLines: PaymentLine[] = [
+    ...netDebts(debts).map((transfer) => ({
+      id: `pair:${transfer.fromId}:${transfer.toId}`,
+      label: `${transfer.fromName} pays ${transfer.toName} (${transfer.reasons.join(' + ')})`,
+      amount: transfer.amount,
+    })),
+    ...potCollections.map((collection) => ({
+      id: `pot:${collection.playerId}`,
+      label: `${collection.playerName} collects from the pot money (${collection.games.map((game) => `${game.game} ${formatCurrency(game.amount)}`).join(' · ')})`,
+      amount: collection.amount,
+    })),
+  ];
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
@@ -603,85 +619,6 @@ export default function SettlePage() {
         <ScoreTable rows={grossScores} />
       </section>
 
-      <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
-        <div className="mb-4">
-          <h2 className="text-xl font-bold">Post Handicap Scores</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Enter the course rating and slope, adjust any posting scores, then save these to golfer profiles.
-          </p>
-          {handicapPostStatus ? <p className="mt-2 text-sm text-slate-600">{handicapPostStatus}</p> : null}
-        </div>
-
-        <div className="mb-4 grid gap-3 sm:grid-cols-3">
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Course Rating</label>
-            <input
-              type="number"
-              inputMode="decimal"
-              className="w-full rounded-xl border border-slate-300 px-3 py-3"
-              value={courseRating}
-              placeholder="71.2"
-              onChange={(event) => setCourseRating(event.target.value)}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Slope Rating</label>
-            <input
-              type="number"
-              inputMode="numeric"
-              className="w-full rounded-xl border border-slate-300 px-3 py-3"
-              value={slopeRating}
-              placeholder="128"
-              onChange={(event) => setSlopeRating(event.target.value)}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">PCC</label>
-            <input
-              type="number"
-              inputMode="decimal"
-              className="w-full rounded-xl border border-slate-300 px-3 py-3"
-              value={pcc}
-              placeholder="0"
-              onChange={(event) => setPcc(event.target.value)}
-            />
-          </div>
-        </div>
-
-        <div className="overflow-hidden rounded-xl border border-slate-200">
-          <div className="grid grid-cols-[1fr_90px_110px_110px] bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            <div>Player</div>
-            <div className="text-right">Gross</div>
-            <div className="text-right">Adjusted</div>
-            <div className="text-right">Differential</div>
-          </div>
-          {handicapPostRows.map((score) => (
-            <div key={score.playerId} className="grid grid-cols-[1fr_90px_110px_110px] border-t border-slate-200 px-3 py-3 text-sm">
-              <div className="truncate font-medium">{score.playerName}</div>
-              <div className="text-right font-semibold tabular-nums">{score.grossTotal}</div>
-              <input
-                type="number"
-                inputMode="numeric"
-                className="ml-auto w-20 rounded-lg border border-slate-300 px-2 py-1 text-right font-semibold tabular-nums"
-                value={adjustedScores[score.playerId] ?? String(score.grossTotal)}
-                onChange={(event) => setAdjustedScores((current) => ({ ...current, [score.playerId]: event.target.value }))}
-              />
-              <div className="text-right font-semibold tabular-nums">{score.differential ?? '-'}</div>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-4 flex justify-end">
-          <button
-            type="button"
-            className="rounded-xl bg-[#2f8df3] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
-            disabled={!roundComplete || !Number(courseRating) || !Number(slopeRating)}
-            onClick={() => void handlePostHandicapScores()}
-          >
-            Post Handicap Scores
-          </button>
-        </div>
-      </section>
 
       {payoutGameEnabled ? (
       <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
@@ -917,6 +854,91 @@ export default function SettlePage() {
       </section>
         </>
       )}
+      </details>
+
+      <details className="mt-4 rounded-2xl border border-slate-200 p-3">
+        <summary className="cursor-pointer font-bold">Post scores for handicaps <span className="font-normal text-slate-500">(optional)</span></summary>
+        <div className="mt-3">
+      <section className="mb-4 rounded-2xl border border-[#68aef7] bg-white p-4 shadow-sm">
+        <div className="mb-4">
+          <h2 className="text-xl font-bold">Post Handicap Scores</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Enter the course rating and slope, adjust any posting scores, then save these to golfer profiles.
+          </p>
+          {handicapPostStatus ? <p className="mt-2 text-sm text-slate-600">{handicapPostStatus}</p> : null}
+        </div>
+
+        <div className="mb-4 grid gap-3 sm:grid-cols-3">
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Course Rating</label>
+            <input
+              type="number"
+              inputMode="decimal"
+              className="w-full rounded-xl border border-slate-300 px-3 py-3"
+              value={courseRating}
+              placeholder="71.2"
+              onChange={(event) => setCourseRating(event.target.value)}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Slope Rating</label>
+            <input
+              type="number"
+              inputMode="numeric"
+              className="w-full rounded-xl border border-slate-300 px-3 py-3"
+              value={slopeRating}
+              placeholder="128"
+              onChange={(event) => setSlopeRating(event.target.value)}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">PCC</label>
+            <input
+              type="number"
+              inputMode="decimal"
+              className="w-full rounded-xl border border-slate-300 px-3 py-3"
+              value={pcc}
+              placeholder="0"
+              onChange={(event) => setPcc(event.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-xl border border-slate-200">
+          <div className="grid grid-cols-[1fr_90px_110px_110px] bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <div>Player</div>
+            <div className="text-right">Gross</div>
+            <div className="text-right">Adjusted</div>
+            <div className="text-right">Differential</div>
+          </div>
+          {handicapPostRows.map((score) => (
+            <div key={score.playerId} className="grid grid-cols-[1fr_90px_110px_110px] border-t border-slate-200 px-3 py-3 text-sm">
+              <div className="truncate font-medium">{score.playerName}</div>
+              <div className="text-right font-semibold tabular-nums">{score.grossTotal}</div>
+              <input
+                type="number"
+                inputMode="numeric"
+                className="ml-auto w-20 rounded-lg border border-slate-300 px-2 py-1 text-right font-semibold tabular-nums"
+                value={adjustedScores[score.playerId] ?? String(score.grossTotal)}
+                onChange={(event) => setAdjustedScores((current) => ({ ...current, [score.playerId]: event.target.value }))}
+              />
+              <div className="text-right font-semibold tabular-nums">{score.differential ?? '-'}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            className="rounded-xl bg-[#2f8df3] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+            disabled={!roundComplete || !Number(courseRating) || !Number(slopeRating)}
+            onClick={() => void handlePostHandicapScores()}
+          >
+            Post Handicap Scores
+          </button>
+        </div>
+      </section>
+        </div>
       </details>
     </main>
   );

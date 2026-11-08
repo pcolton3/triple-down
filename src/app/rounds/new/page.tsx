@@ -12,6 +12,7 @@ import { createSharedRoundFromLocalRound, loadSharedRoundsByRyderEventCode, shar
 import { loadSavedGolfers, saveGolfersForLater, type SavedGolfer } from '@/lib/realtime/saved-golfers';
 import { loadSavedCourseTees, saveCourseTee, savedCourseKey, type SavedCourseTee } from '@/lib/realtime/saved-course-tees';
 import { BEEZER_EXTRA_GAMES, type BeezerExtraGameKey } from '@/lib/games/catalog';
+import { gameHelp } from '@/lib/games/help';
 import type { CourseRecord } from '@/types/course';
 import type { HoleConfig } from '@/types/round';
 
@@ -19,7 +20,6 @@ const MAX_PLAYERS = 40;
 const MIN_PLAYERS = 1;
 const DRAFT_KEY = 'triple-track-round-draft';
 const DRAFT_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 3;
-const PLAYER_COUNTS = [1, 2, 3, 4, 5, 8, 12, 16, 20, 24, 28, 32, 36, 40];
 
 function buildDefaultPlayers(count = 4) {
   return Array.from({ length: count }, (_, index) => ({
@@ -130,7 +130,6 @@ function NewRoundPageContent() {
   const [golferSearchQueries, setGolferSearchQueries] = useState<Record<string, string>>({});
   const [createError, setCreateError] = useState('');
   const [isCreating, setIsCreating] = useState(false);
-  const [gamesOpen, setGamesOpen] = useState(false);
   const [prefillStatus, setPrefillStatus] = useState('');
   const [draftRestored, setDraftRestored] = useState(false);
   const [created, setCreated] = useState<{ code: string; title: string; groupCount: number } | null>(null);
@@ -295,7 +294,7 @@ function NewRoundPageContent() {
         setCourseQuery(template.courseName);
         setSelectedCourse(null);
         setPlayers(copiedPlayers);
-        setPlayerCount(PLAYER_COUNTS.includes(copiedPlayers.length) ? copiedPlayers.length : PLAYER_COUNTS.find((count) => count >= copiedPlayers.length) ?? 24);
+        setPlayerCount(copiedPlayers.length);
         setFirstBankerPlayerId(copiedPlayers.find((player) => player.bankerParticipant !== false)?.id ?? copiedPlayers[0]?.id ?? 'p1');
         setTeamOneName(template.gameSettings.teamOneName ?? 'Team 1');
         setTeamTwoName(template.gameSettings.teamTwoName ?? 'Team 2');
@@ -396,39 +395,6 @@ function NewRoundPageContent() {
       cancelled = true;
     };
   }, []);
-
-  function updatePlayerCount(nextCount: number) {
-    const bounded = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, Math.floor(nextCount || MIN_PLAYERS)));
-    const normalized = PLAYER_COUNTS.reduce((best, count) =>
-      Math.abs(count - bounded) < Math.abs(best - bounded) ? count : best
-    );
-    setPlayerCount(normalized);
-    setPlayers((current) => {
-      if (normalized === current.length) return current;
-      if (normalized < current.length) {
-        const next = current.slice(0, normalized);
-        if (!next.some((player) => player.id === firstBankerPlayerId)) {
-          setFirstBankerPlayerId(next[0]?.id ?? 'p1');
-        }
-        return next;
-      }
-
-      const additions = Array.from({ length: normalized - current.length }, (_, index) => {
-        const nextNumber = current.length + index + 1;
-        return {
-          id: `p${nextNumber}`,
-          name: '',
-          handicap: 0,
-          bankerParticipant: true,
-          skinsParticipant: true,
-          ctpParticipant: true,
-          lowNetParticipant: true,
-        };
-      });
-
-      return [...current, ...additions];
-    });
-  }
 
   function updatePlayer(playerId: string, field: 'name' | 'handicap', value: string) {
     setPlayers((current) =>
@@ -633,6 +599,28 @@ function NewRoundPageContent() {
     void getNearbyCourses(userLocation ?? undefined).then((results) => setCourseResults(results));
   }
 
+  function addGolfer() {
+    setPlayers((current) => {
+      if (current.length >= MAX_PLAYERS) return current;
+      const nextNumber = Math.max(0, ...current.map((player) => Number(player.id.replace(/\D/g, '')) || 0)) + 1;
+      const next = [...current, { ...buildDefaultPlayers(1)[0], id: `p${nextNumber}` }];
+      setPlayerCount(next.length);
+      return next;
+    });
+  }
+
+  function removeGolfer(playerId: string) {
+    const player = players.find((item) => item.id === playerId);
+    if (player?.name.trim() && !window.confirm(`Remove ${player.name.trim()} from this round?`)) return;
+    setPlayers((current) => {
+      if (current.length <= MIN_PLAYERS) return current;
+      const next = current.filter((item) => item.id !== playerId);
+      setPlayerCount(next.length);
+      if (playerId === firstBankerPlayerId) setFirstBankerPlayerId(next[0]?.id ?? 'p1');
+      return next;
+    });
+  }
+
   async function handleCreateRound() {
     setCreateError('');
     setIsCreating(true);
@@ -823,7 +811,7 @@ function NewRoundPageContent() {
         <div>
           <h1 className="text-3xl font-bold">Create Round</h1>
           <p className="mt-2 text-slate-600">
-            Search for a course, set side games, add golfers, then start your Triple Track round.
+            Pick the course, add your golfers, choose any games, then share the code with the other groups.
           </p>
           {prefillStatus ? <p className="mt-2 text-sm font-bold text-[#0f5132]">{prefillStatus}</p> : null}
           {draftRestored ? (
@@ -840,6 +828,7 @@ function NewRoundPageContent() {
 
       <div className="space-y-4">
         <Card className="space-y-4">
+          <h2 className="text-xl font-bold">1. Course</h2>
           <div>
             <label className="mb-1 block text-sm font-medium">Round Title</label>
             <input
@@ -906,10 +895,11 @@ function NewRoundPageContent() {
             />
           </div>
 
-          <div>
-            <h2 className="mb-2 text-lg font-bold">Handicap Posting</h2>
+          <details className="rounded-xl border border-slate-200 p-3">
+            <summary className="cursor-pointer font-semibold">Handicap posting <span className="font-normal text-slate-500">(optional)</span></summary>
+            <div className="mt-3">
             <p className="mb-3 text-sm text-slate-500">
-              Optional USGA/WHS posting values. These prefill the handicap posting section after the round.
+              Only needed if you post scores for your official handicap. Copy the course and slope rating for your tees from the scorecard.
             </p>
             {savedCourseTeesStatus ? <p className="mb-3 text-xs text-slate-500">{savedCourseTeesStatus}</p> : null}
             {savedCourseTees.length > 0 ? (
@@ -965,7 +955,7 @@ function NewRoundPageContent() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">PCC</label>
+                <label className="mb-1 block text-sm font-medium">Playing conditions adjustment (PCC)</label>
                 <input
                   type="number"
                   inputMode="decimal"
@@ -976,245 +966,100 @@ function NewRoundPageContent() {
                 />
               </div>
             </div>
-          </div>
+                      </div>
+          </details>
 
-          <div className="max-w-xs">
-            <label className="mb-1 block text-sm font-medium">Holes</label>
-            <input
-              className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-3 text-slate-500"
-              value="18"
-              readOnly
-            />
-          </div>
           <p className="text-sm text-slate-500">You&apos;ll get a code and link to share with the other groups after you create the round.</p>
         </Card>
 
-        <Card className="space-y-4">
-          <div>
-            <h2 className="text-xl font-bold">Games</h2>
-            <p className="text-sm text-slate-500">
-              Choose which games are active for this round.
-            </p>
-          </div>
-
-          <div className="relative">
-            <button
-              type="button"
-              className="flex w-full items-center justify-between rounded-xl border border-slate-300 bg-white px-3 py-3 text-left font-semibold"
-              onClick={() => setGamesOpen((value) => !value)}
-            >
-              <span>{selectedGameLabels.length > 0 ? selectedGameLabels.join(', ') : 'Select games'}</span>
-              <span className="text-slate-500">{gamesOpen ? 'Close' : 'Open'}</span>
-            </button>
-            {gamesOpen ? (
-              <div className="absolute left-0 right-0 z-20 mt-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-lg">
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {gameOptions.map((option) => (
-                    <label key={option.label} className="flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold">
-                      <input
-                        type="checkbox"
-                        className="mr-2 h-4 w-4"
-                        checked={option.checked}
-                        onChange={option.onToggle}
-                      />
-                      {option.label}
-                    </label>
-                  ))}
-                </div>
-                <div className="mt-3 flex justify-end">
-                  <Button type="button" onClick={() => setGamesOpen(false)}>
-                    Submit
-                  </Button>
-                </div>
-              </div>
+        <details open={!selectedCourse} className="rounded-2xl border border-[#c9d8c7] bg-white p-4 shadow-sm">
+          <summary className="cursor-pointer text-lg font-bold">
+            Hole pars &amp; handicaps{' '}
+            <span className="text-sm font-normal text-slate-500">{selectedCourse ? '(filled in from the scorecard, tap to check)' : '(enter from your scorecard)'}</span>
+          </summary>
+          <div className="mt-4">
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm text-slate-500">
+                Pars and hole handicaps auto-fill when full data is available. Otherwise you can edit them manually below.
+              </p>
+            </div>
+            {selectedCourse ? (
+              <Button type="button" variant="secondary" onClick={clearSelectedCourse}>
+                Clear Course
+              </Button>
             ) : null}
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {bankerEnabled ? (
-            <div>
-              <label className="mb-1 block text-sm font-medium">Default Banker Bet</label>
-              <NumberField value={defaultBet} onChange={setDefaultBet} placeholder="Bet" />
+          {selectedCourse ? (
+            <div className="mb-4 rounded-xl bg-slate-50 px-3 py-3 text-sm text-slate-600">
+              Selected course: <span className="font-semibold text-slate-900">{selectedCourse.name}</span>
+              {selectedCourse.city || selectedCourse.state ? (
+                <>
+                  {' '}
+                  • {selectedCourse.city}
+                  {selectedCourse.city && selectedCourse.state ? ', ' : ''}
+                  {selectedCourse.state}
+                </>
+              ) : null}
+              {courseImportStatus ? (
+                <div className="mt-2 text-xs font-semibold text-[#0f5132]">{courseImportStatus}</div>
+              ) : null}
             </div>
-            ) : null}
-            {skinsEnabled ? (
-            <div>
-              <label className="mb-1 block text-sm font-medium">Skins Pot</label>
-              <NumberField value={skinsPot} onChange={setSkinsPot} placeholder="0" />
+          ) : (
+            <div className="mb-4 rounded-xl bg-slate-50 px-3 py-3 text-sm text-slate-600">
+              No course selected yet. You can still edit pars and hole handicaps manually below.
             </div>
-            ) : null}
-            {lowNetEnabled ? (
-            <div>
-              <label className="mb-1 block text-sm font-medium">Low Net Pot</label>
-              <NumberField value={lowNetPot} onChange={setLowNetPot} placeholder="0" />
-            </div>
-            ) : null}
-            {ctpEnabled ? (
-            <div>
-              <label className="mb-1 block text-sm font-medium">CTP Pot</label>
-              <NumberField value={ctpPot} onChange={setCtpPot} placeholder="0" />
-            </div>
-            ) : null}
-            {nassauEnabled ? (
-            <div>
-              <label className="mb-1 block text-sm font-medium">Nassau Pot</label>
-              <NumberField value={nassauPot} onChange={setNassauPot} placeholder="0" />
-            </div>
-            ) : null}
-            {stablefordEnabled ? (
-            <div>
-              <label className="mb-1 block text-sm font-medium">Stableford Pot</label>
-              <NumberField value={stablefordPot} onChange={setStablefordPot} placeholder="0" />
-            </div>
-            ) : null}
-            {birdiePotEnabled ? (
-            <div>
-              <label className="mb-1 block text-sm font-medium">Birdie Pot</label>
-              <NumberField value={birdiePot} onChange={setBirdiePot} placeholder="0" />
-            </div>
-            ) : null}
-            {eaglePotEnabled ? (
-            <div>
-              <label className="mb-1 block text-sm font-medium">Eagle Pot</label>
-              <NumberField value={eaglePot} onChange={setEaglePot} placeholder="0" />
-            </div>
-            ) : null}
-            {wolfEnabled ? (
-            <div>
-              <label className="mb-1 block text-sm font-medium">Wolf Unit</label>
-              <NumberField value={wolfUnit} onChange={setWolfUnit} placeholder="0" />
-            </div>
-            ) : null}
-            {bingoBangoBongoEnabled ? (
-            <div>
-              <label className="mb-1 block text-sm font-medium">Bingo Bango Bongo Unit</label>
-              <NumberField value={bingoBangoBongoUnit} onChange={setBingoBangoBongoUnit} placeholder="0" />
-            </div>
-            ) : null}
-            {vegasEnabled ? (
-            <div>
-              <label className="mb-1 block text-sm font-medium">Vegas Unit</label>
-              <NumberField value={vegasUnit} onChange={setVegasUnit} placeholder="0" />
-            </div>
-            ) : null}
-            {matchPlayEnabled ? (
-            <div>
-              <label className="mb-1 block text-sm font-medium">Match Play Unit</label>
-              <NumberField value={matchPlayUnit} onChange={setMatchPlayUnit} placeholder="0" />
-            </div>
-            ) : null}
-            {teamMatchPlayEnabled ? (
-            <div>
-              <label className="mb-1 block text-sm font-medium">Team Match Unit</label>
-              <NumberField value={teamMatchPlayUnit} onChange={setTeamMatchPlayUnit} placeholder="0" />
-            </div>
-            ) : null}
-            {BEEZER_EXTRA_GAMES.filter((game) => extraGames[game.key]).map((game) => (
-              <div key={game.key}>
-                <label className="mb-1 block text-sm font-medium">{game.unitLabel}</label>
+          )}
+
+          <div className="grid grid-cols-3 gap-3">
+            {manualHoles.map((hole) => (
+              <div key={hole.holeNumber} className="rounded-xl border border-slate-200 p-3">
+                <div className="mb-2 text-sm font-semibold text-slate-900">Hole {hole.holeNumber}</div>
+                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Par
+                </label>
+                <select
+                  className="mb-2 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm"
+                  value={hole.par}
+                  onChange={(event) => updateHoleConfig(hole.holeNumber, 'par', Number(event.target.value))}
+                >
+                  <option value={3}>3</option>
+                  <option value={4}>4</option>
+                  <option value={5}>5</option>
+                </select>
+                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Hcp
+                </label>
                 <NumberField
-                  value={extraGameUnits[game.key] ?? 0}
-                  onChange={(value) => setExtraGameUnits((current) => ({ ...current, [game.key]: value }))}
-                  placeholder="0"
+                  value={hole.handicapIndex}
+                  onChange={(value) => updateHoleConfig(hole.holeNumber, 'handicapIndex', value)}
+                  placeholder="Hcp"
                 />
               </div>
             ))}
           </div>
-          {holeInOneEnabled ? (
-            <p className="text-sm text-slate-500">Hole-in-One pays $100 from every other golfer to the player who made it.</p>
-          ) : null}
-          {teamMatchPlayEnabled ? (
-            <div className="grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
-              <div className="sm:col-span-2">
-                <label className="mb-1 block text-sm font-medium">Ryder Format</label>
-                <select
-                  className="w-full rounded-xl border border-slate-300 px-3 py-3"
-                  value={ryderCupFormat}
-                  onChange={(event) => setRyderCupFormat(event.target.value as 'team_match' | 'singles_match')}
-                >
-                  <option value="team_match">Day 1 - Team Match Play</option>
-                  <option value="singles_match">Day 2 - Singles Match Play</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium">Ryder Event Code</label>
-                <input
-                  className="w-full rounded-xl border border-slate-300 px-3 py-3 uppercase"
-                  value={ryderEventCode}
-                  onChange={(event) => setRyderEventCode(event.target.value.toUpperCase())}
-                  placeholder="Same code for every day"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium">Ryder Day</label>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  className="w-full rounded-xl border border-slate-300 px-3 py-3"
-                  value={ryderEventDay}
-                  onChange={(event) => setRyderEventDay(Number(event.target.value) || 1)}
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium">Team 1 Name</label>
-                <input className="w-full rounded-xl border border-slate-300 px-3 py-3" value={teamOneName} onChange={(event) => setTeamOneName(event.target.value)} />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium">Team 2 Name</label>
-                <input className="w-full rounded-xl border border-slate-300 px-3 py-3" value={teamTwoName} onChange={(event) => setTeamTwoName(event.target.value)} />
-              </div>
-            </div>
-          ) : null}
-        </Card>
+          </div>
+        </details>
 
         <Card>
           <div className="mb-4">
-            <h2 className="text-xl font-bold">Golfers and Foursomes</h2>
+            <h2 className="text-xl font-bold">2. Golfers</h2>
             <p className="text-sm text-slate-500">
-              Pick the number of setup slots you need. Blank golfer rows are ignored, so you can track a solo round or build out a larger event.
+              {players.length <= 5
+                ? 'Everyone plays in one group.'
+                : `Groups of 4 are made in the order listed (${groups.length} groups).`}{' '}
+              Handicap is each golfer&apos;s handicap index; use 0 if unsure.
             </p>
             {savedGolfersStatus ? <p className="mt-2 text-xs text-slate-500">{savedGolfersStatus}</p> : null}
           </div>
 
-          <div className="mb-4 max-w-xs">
-            <label className="mb-1 block text-sm font-medium">Number of Golfers</label>
-            <select
-              className="w-full rounded-xl border border-slate-300 px-3 py-3"
-              value={playerCount}
-              onChange={(event) => updatePlayerCount(Number(event.target.value))}
-            >
-              {PLAYER_COUNTS.map((count) => (
-                <option key={count} value={count}>
-                  {count}
-                </option>
-              ))}
-            </select>
-          </div>
 
-          {bankerEnabled ? (
-          <div className="mb-4">
-            <label className="mb-1 block text-sm font-medium">Opening Banker</label>
-            <select
-              className="w-full rounded-xl border border-slate-300 px-3 py-3"
-              value={firstBankerPlayerId}
-              onChange={(event) => setFirstBankerPlayerId(event.target.value)}
-            >
-              {bankerEligiblePlayers.map((player) => (
-                <option key={player.id} value={player.id}>
-                  {player.name.trim() || `Player ${players.findIndex((item) => item.id === player.id) + 1}`}
-                </option>
-              ))}
-            </select>
-            <p className="mt-2 text-xs text-slate-500">
-              Each group starts with the first listed golfer in that group unless this player belongs to the group.
-            </p>
-          </div>
-          ) : null}
 
           <div className="space-y-4">
             {groups.map((group) => (
               <div key={group.groupNumber} className="rounded-2xl border border-slate-200 p-3">
-                <h3 className="mb-3 font-bold">Group {group.groupNumber}</h3>
+                {groups.length > 1 ? <h3 className="mb-3 font-bold">Group {group.groupNumber}</h3> : null}
                 <div className="space-y-3">
                   {group.players.map((player, groupIndex) => {
                     const absoluteIndex = (group.groupNumber - 1) * effectiveGroupSize + groupIndex;
@@ -1268,7 +1113,7 @@ function NewRoundPageContent() {
                         </div>
                         <div>
                           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            Hcp
+                            Handicap
                           </label>
                           <NumberField
                             value={player.handicap}
@@ -1276,11 +1121,19 @@ function NewRoundPageContent() {
                             placeholder="0"
                           />
                         </div>
-                        <div className="sm:col-span-3">
-                            <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            Game Participation
-                          </span>
-                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        {bankerEnabled || skinsEnabled || ctpEnabled || lowNetEnabled ? (
+                        <details className="sm:col-span-3">
+                          <summary className="cursor-pointer text-sm font-semibold text-slate-600">
+                            Plays:{' '}
+                            {[
+                              bankerEnabled && player.bankerParticipant !== false ? 'Banker' : null,
+                              skinsEnabled && player.skinsParticipant !== false ? 'Skins' : null,
+                              ctpEnabled && player.ctpParticipant !== false ? 'CTP' : null,
+                              lowNetEnabled && player.lowNetParticipant !== false ? 'Low Net' : null,
+                            ].filter(Boolean).join(', ') || 'no side games'}{' '}
+                            <span className="font-normal text-slate-500">(change)</span>
+                          </summary>
+                          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
                             {bankerEnabled ? (
                             <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
                               <input
@@ -1326,7 +1179,15 @@ function NewRoundPageContent() {
                             </label>
                             ) : null}
                           </div>
-                        </div>
+                        </details>
+                        ) : null}
+                        {players.length > 1 ? (
+                          <div className="sm:col-span-3 flex justify-end">
+                            <button type="button" className="min-h-[44px] px-2 text-sm font-semibold text-red-700 underline" onClick={() => removeGolfer(player.id)}>
+                              Remove golfer
+                            </button>
+                          </div>
+                        ) : null}
                         {teamMatchPlayEnabled ? (
                           <div className="sm:col-span-3">
                             <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -1388,71 +1249,235 @@ function NewRoundPageContent() {
               </div>
             ))}
           </div>
+          {players.length < MAX_PLAYERS ? (
+            <Button type="button" variant="secondary" className="mt-4 w-full py-4" onClick={addGolfer}>
+              + Add golfer
+            </Button>
+          ) : null}
         </Card>
 
-        <Card>
-          <div className="mb-4 flex items-center justify-between gap-4">
-            <div>
-              <h2 className="text-xl font-bold">Course Setup</h2>
-              <p className="text-sm text-slate-500">
-                Pars and hole handicaps auto-fill when full data is available. Otherwise you can edit them manually below.
-              </p>
-            </div>
-            {selectedCourse ? (
-              <Button type="button" variant="secondary" onClick={clearSelectedCourse}>
-                Clear Course
-              </Button>
-            ) : null}
+        <Card className="space-y-4">
+          <div>
+            <h2 className="text-xl font-bold">3. Games</h2>
+            <p className="text-sm text-slate-500">
+              Pick any games you&apos;re playing, or none for just scores.{' '}
+              <Link href="/games" target="_blank" className="font-semibold text-[#0f5132] underline">How the games work</Link>
+            </p>
           </div>
 
-          {selectedCourse ? (
-            <div className="mb-4 rounded-xl bg-slate-50 px-3 py-3 text-sm text-slate-600">
-              Selected course: <span className="font-semibold text-slate-900">{selectedCourse.name}</span>
-              {selectedCourse.city || selectedCourse.state ? (
-                <>
-                  {' '}
-                  • {selectedCourse.city}
-                  {selectedCourse.city && selectedCourse.state ? ', ' : ''}
-                  {selectedCourse.state}
-                </>
-              ) : null}
-              {courseImportStatus ? (
-                <div className="mt-2 text-xs font-semibold text-[#0f5132]">{courseImportStatus}</div>
-              ) : null}
-            </div>
-          ) : (
-            <div className="mb-4 rounded-xl bg-slate-50 px-3 py-3 text-sm text-slate-600">
-              No course selected yet. You can still edit pars and hole handicaps manually below.
-            </div>
-          )}
-
-          <div className="grid grid-cols-3 gap-3">
-            {manualHoles.map((hole) => (
-              <div key={hole.holeNumber} className="rounded-xl border border-slate-200 p-3">
-                <div className="mb-2 text-sm font-semibold text-slate-900">Hole {hole.holeNumber}</div>
-                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  Par
-                </label>
-                <select
-                  className="mb-2 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm"
-                  value={hole.par}
-                  onChange={(event) => updateHoleConfig(hole.holeNumber, 'par', Number(event.target.value))}
+          {[
+            { title: 'Scored by the app', scored: true },
+            { title: 'Record only: settle these yourselves', scored: false },
+          ].map((section) => {
+            const options = gameOptions.filter((option) => gameHelp(option.label).scored === section.scored);
+            const classic = options.filter((option) => !BEEZER_EXTRA_GAMES.some((game) => game.label === option.label));
+            const extras = options.filter((option) => BEEZER_EXTRA_GAMES.some((game) => game.label === option.label));
+            const renderOption = (option: (typeof gameOptions)[number]) => {
+              const help = gameHelp(option.label);
+              return (
+                <label
+                  key={option.label}
+                  className={`flex min-h-[52px] items-start gap-3 rounded-xl border px-3 py-3 ${option.checked ? 'border-[#0f5132] bg-[#eef7f0]' : 'border-slate-200 bg-white'}`}
                 >
-                  <option value={3}>3</option>
-                  <option value={4}>4</option>
-                  <option value={5}>5</option>
-                </select>
-                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  Hcp
+                  <input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-[#0f5132]" checked={option.checked} onChange={option.onToggle} />
+                  <span className="min-w-0">
+                    <span className="block font-semibold">{option.label}</span>
+                    {help.summary && !help.summary.startsWith('Recorded with the round') ? (
+                      <span className="mt-0.5 block text-xs text-slate-600">{help.summary}{help.money ? ` ${help.money}` : ''}</span>
+                    ) : null}
+                  </span>
                 </label>
+              );
+            };
+            return (
+              <div key={section.title} className="space-y-2">
+                <h3 className={`text-sm font-bold uppercase tracking-wide ${section.scored ? 'text-[#0f5132]' : 'text-slate-500'}`}>{section.title}</h3>
+                {!section.scored ? (
+                  <p className="text-xs text-slate-500">These show on the round so everyone knows they&apos;re on, but the app doesn&apos;t calculate them yet.</p>
+                ) : null}
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">{classic.map(renderOption)}</div>
+                {extras.length ? (
+                  <details open={extras.some((option) => option.checked)}>
+                    <summary className="cursor-pointer py-2 text-sm font-semibold text-slate-600">More games ({extras.length})</summary>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">{extras.map(renderOption)}</div>
+                  </details>
+                ) : null}
+              </div>
+            );
+          })}
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {bankerEnabled ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Banker bet per player ($)</label>
+              <NumberField value={defaultBet} onChange={setDefaultBet} placeholder="Bet" />
+            </div>
+            ) : null}
+            {skinsEnabled ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Skins pot (total $)</label>
+              <NumberField value={skinsPot} onChange={setSkinsPot} placeholder="0" />
+            </div>
+            ) : null}
+            {lowNetEnabled ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Low net pot (total $)</label>
+              <NumberField value={lowNetPot} onChange={setLowNetPot} placeholder="0" />
+            </div>
+            ) : null}
+            {ctpEnabled ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Closest-to-pin pot (total $)</label>
+              <NumberField value={ctpPot} onChange={setCtpPot} placeholder="0" />
+            </div>
+            ) : null}
+            {nassauEnabled ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Nassau pot (total $)</label>
+              <NumberField value={nassauPot} onChange={setNassauPot} placeholder="0" />
+            </div>
+            ) : null}
+            {stablefordEnabled ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Stableford pot (total $)</label>
+              <NumberField value={stablefordPot} onChange={setStablefordPot} placeholder="0" />
+            </div>
+            ) : null}
+            {birdiePotEnabled ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Birdie pot (total $)</label>
+              <NumberField value={birdiePot} onChange={setBirdiePot} placeholder="0" />
+            </div>
+            ) : null}
+            {eaglePotEnabled ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Eagle pot (total $)</label>
+              <NumberField value={eaglePot} onChange={setEaglePot} placeholder="0" />
+            </div>
+            ) : null}
+            {wolfEnabled ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Wolf $ per point (for reference)</label>
+              <NumberField value={wolfUnit} onChange={setWolfUnit} placeholder="0" />
+            </div>
+            ) : null}
+            {bingoBangoBongoEnabled ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Bingo Bango Bongo $ per point (for reference)</label>
+              <NumberField value={bingoBangoBongoUnit} onChange={setBingoBangoBongoUnit} placeholder="0" />
+            </div>
+            ) : null}
+            {vegasEnabled ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Vegas $ per point (for reference)</label>
+              <NumberField value={vegasUnit} onChange={setVegasUnit} placeholder="0" />
+            </div>
+            ) : null}
+            {matchPlayEnabled ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Match play $ per match (for reference)</label>
+              <NumberField value={matchPlayUnit} onChange={setMatchPlayUnit} placeholder="0" />
+            </div>
+            ) : null}
+            {teamMatchPlayEnabled ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Team match $ per point</label>
+              <NumberField value={teamMatchPlayUnit} onChange={setTeamMatchPlayUnit} placeholder="0" />
+            </div>
+            ) : null}
+            {BEEZER_EXTRA_GAMES.filter((game) => extraGames[game.key]).map((game) => (
+              <div key={game.key}>
+                <label className="mb-1 block text-sm font-medium">{game.label} $ (for reference)</label>
                 <NumberField
-                  value={hole.handicapIndex}
-                  onChange={(value) => updateHoleConfig(hole.holeNumber, 'handicapIndex', value)}
-                  placeholder="Hcp"
+                  value={extraGameUnits[game.key] ?? 0}
+                  onChange={(value) => setExtraGameUnits((current) => ({ ...current, [game.key]: value }))}
+                  placeholder="0"
                 />
               </div>
             ))}
           </div>
+          {bankerEnabled ? (
+          <div>
+            <label className="mb-1 block text-sm font-medium">Banker on hole 1</label>
+            <select
+              className="w-full rounded-xl border border-slate-300 px-3 py-3"
+              value={firstBankerPlayerId}
+              onChange={(event) => setFirstBankerPlayerId(event.target.value)}
+            >
+              {bankerEligiblePlayers.map((player) => (
+                <option key={player.id} value={player.id}>
+                  {player.name.trim() || `Player ${players.findIndex((item) => item.id === player.id) + 1}`}
+                </option>
+              ))}
+            </select>
+            <p className="mt-2 text-xs text-slate-500">
+              Who is banker on the first hole. Other groups start with their first listed golfer. You can change the banker on any hole while scoring.
+            </p>
+          </div>
+          ) : null}
+          {holeInOneEnabled ? (
+            <p className="text-sm text-slate-500">Hole-in-One pays $100 from every other golfer to the player who made it.</p>
+          ) : null}
+          {teamMatchPlayEnabled ? (
+            <div className="grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-sm font-medium">Ryder Format</label>
+                <select
+                  className="w-full rounded-xl border border-slate-300 px-3 py-3"
+                  value={ryderCupFormat}
+                  onChange={(event) => setRyderCupFormat(event.target.value as 'team_match' | 'singles_match')}
+                >
+                  <option value="team_match">Day 1 - Team Match Play</option>
+                  <option value="singles_match">Day 2 - Singles Match Play</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Ryder Event Code</label>
+                <input
+                  className="w-full rounded-xl border border-slate-300 px-3 py-3 uppercase"
+                  value={ryderEventCode}
+                  onChange={(event) => setRyderEventCode(event.target.value.toUpperCase())}
+                  placeholder="Same code for every day"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Ryder Day</label>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-3"
+                  value={ryderEventDay}
+                  onChange={(event) => setRyderEventDay(Number(event.target.value) || 1)}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Team 1 Name</label>
+                <input className="w-full rounded-xl border border-slate-300 px-3 py-3" value={teamOneName} onChange={(event) => setTeamOneName(event.target.value)} />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Team 2 Name</label>
+                <input className="w-full rounded-xl border border-slate-300 px-3 py-3" value={teamTwoName} onChange={(event) => setTeamTwoName(event.target.value)} />
+              </div>
+            </div>
+          ) : null}
+        </Card>
+
+        <Card className="space-y-2 bg-[#f7fbf6]">
+          <h2 className="text-xl font-bold">4. Review</h2>
+          <ul className="space-y-1 text-sm text-slate-700">
+            <li><span className="font-semibold">Course:</span> {courseName.trim() || selectedCourse?.name || <span className="text-amber-700">not picked yet</span>}</li>
+            <li>
+              <span className="font-semibold">Golfers:</span>{' '}
+              {players.filter((player) => player.name.trim()).length || <span className="text-amber-700">none named yet</span>}
+              {groups.length > 1 ? ` in ${groups.length} groups` : ''}
+            </li>
+            <li><span className="font-semibold">Games:</span> {selectedGameLabels.length ? selectedGameLabels.join(', ') : 'none, just scores'}</li>
+          </ul>
+          {selectedGameLabels.some((label) => label && !gameHelp(label).scored) ? (
+            <p className="text-xs text-slate-500">
+              {selectedGameLabels.filter((label) => label && !gameHelp(label).scored).join(', ')}: record only, settle these yourselves.
+            </p>
+          ) : null}
         </Card>
 
         {createError ? (
@@ -1461,8 +1486,8 @@ function NewRoundPageContent() {
           </div>
         ) : null}
 
-        <div className="flex justify-end">
-          <Button disabled={isCreating} onClick={() => void handleCreateRound()}>
+        <div>
+          <Button className="w-full py-4" disabled={isCreating} onClick={() => void handleCreateRound()}>
             {isCreating ? 'Creating...' : 'Create Round'}
           </Button>
         </div>

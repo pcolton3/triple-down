@@ -45,9 +45,20 @@ function NumberField({
 }) {
   const displayValue = value == null ? '' : blankWhenZero && value === 0 ? '' : value;
 
+  const isEmpty = value == null || (blankWhenZero && value === 0);
+  const quickScores = par && isEmpty && !disabled
+    ? [
+        { label: 'Birdie', score: par - 1 },
+        { label: 'Par', score: par },
+        { label: 'Bogey', score: par + 1 },
+        { label: 'Double', score: par + 2 },
+      ].filter((item) => item.score >= 1)
+    : [];
+
   return (
+    <div className="min-w-0">
     <div className="flex min-w-0 items-center gap-1">
-      {par ? <button type="button" aria-label="Decrease gross score" disabled={disabled || (value != null && value <= 1)} className="min-h-[48px] min-w-[44px] rounded-xl border border-slate-300 font-bold disabled:opacity-40" onClick={() => onChange(Math.max(1, (value ?? par + 1) - 1))}>−</button> : null}
+      {par ? <button type="button" aria-label="Decrease gross score" disabled={disabled || (!isEmpty && (value ?? 0) <= 1)} className="min-h-[48px] min-w-[44px] rounded-xl border border-slate-300 font-bold disabled:opacity-40" onClick={() => onChange(Math.max(1, (isEmpty ? par : value ?? par) - 1))}>−</button> : null}
     <input
       aria-label={par ? "Gross score" : placeholder}
       min={par ? 1 : 0}
@@ -67,7 +78,24 @@ function NumberField({
       }}
       className="min-h-[52px] min-w-0 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-lg font-bold tabular-nums shadow-sm disabled:bg-slate-100 disabled:text-slate-500"
     />
-      {par ? <button type="button" aria-label="Increase gross score" disabled={disabled} className="min-h-[48px] min-w-[44px] rounded-xl border border-slate-300 font-bold disabled:opacity-40" onClick={() => onChange(value == null ? par : value + 1)}>+</button> : null}
+      {par ? <button type="button" aria-label="Increase gross score" disabled={disabled} className="min-h-[48px] min-w-[44px] rounded-xl border border-slate-300 font-bold disabled:opacity-40" onClick={() => onChange(isEmpty ? par + 1 : (value ?? par) + 1)}>+</button> : null}
+    </div>
+    {quickScores.length ? (
+      <div className="mt-2 grid grid-cols-4 gap-1.5">
+        {quickScores.map((item) => (
+          <button
+            key={item.label}
+            type="button"
+            aria-label={`${item.label}, ${item.score}`}
+            className={`min-h-[48px] rounded-xl border px-1 text-center leading-tight ${item.label === 'Par' ? 'border-[#0f5132] bg-[#eef7f0] text-[#0f5132]' : 'border-slate-300 bg-white text-slate-700'}`}
+            onClick={() => onChange(item.score)}
+          >
+            <span className="block text-lg font-bold tabular-nums">{item.score}</span>
+            <span className="block text-[11px] font-semibold uppercase tracking-wide">{item.label}</span>
+          </button>
+        ))}
+      </div>
+    ) : null}
     </div>
   );
 }
@@ -297,7 +325,7 @@ export default function GroupScoringPage() {
       const result = nextHole(groupNumber);
       if (!result.ok) { setMessage(result.message ?? 'Enter every gross score before continuing.'); return; }
       await persistHoleSnapshot(completedHoleNumber, isFinalHole ? completedHoleNumber : completedHoleNumber + 1);
-      if (isFinalHole) { router.push(`/r/${round.roundCode}`); return; }
+      if (isFinalHole) { window.scrollTo({ top: 0 }); setMessage(''); return; }
       window.scrollTo({ top: 0, behavior: 'smooth' });
       setMessage(`Hole ${completedHoleNumber} saved on this device.`);
     } catch (error) {
@@ -421,6 +449,90 @@ export default function GroupScoringPage() {
   const savedGroupHoles = roundHoles.filter((item) => (item.groupNumber ?? 1) === groupNumber && item.isSaved).length;
   const groupProgress = Math.round((savedGroupHoles / Math.max(1, round.totalHoles)) * 100);
 
+  const holeStrip = (
+      <nav aria-label="Holes" className="-mx-4 overflow-x-auto px-4">
+        <div className="flex gap-1.5 pb-1">
+          {Array.from({ length: round.totalHoles }, (_, index) => index + 1).map((holeNumber) => {
+            const open = canOpenHole(holeNumber);
+            const saved = groupHoleSaved(holeNumber);
+            const active = holeNumber === targetHoleNumber;
+            return (
+              <button
+                key={holeNumber}
+                type="button"
+                disabled={!open || busy}
+                aria-current={active ? 'step' : undefined}
+                aria-label={`Hole ${holeNumber}${saved ? ', saved' : holeNumber === currentHoleNumber ? ', current hole' : ', not played yet'}`}
+                onClick={() => void goToHole(holeNumber)}
+                className={`min-h-[44px] min-w-[44px] shrink-0 rounded-xl border text-base font-bold tabular-nums ${
+                  active
+                    ? 'border-[#0f5132] bg-[#0f5132] text-white'
+                    : saved
+                      ? 'border-[#c9d8c7] bg-[#eef7f0] text-[#0f5132]'
+                      : holeNumber === currentHoleNumber
+                        ? 'border-[#f6c453] bg-white text-[#071b12]'
+                        : 'border-slate-200 bg-white text-slate-300'
+                }`}
+              >
+                {holeNumber}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+  );
+
+  const groupFinished = editHoleNumber == null && savedGroupHoles >= round.totalHoles;
+  if (groupFinished) {
+    const groupNumbers = roundGroups.length ? roundGroups.map((item) => item.groupNumber) : [groupNumber];
+    const finishedGroups = groupNumbers.filter(
+      (number) => roundHoles.filter((item) => (item.groupNumber ?? 1) === number && item.isSaved).length >= round.totalHoles
+    ).length;
+    const everyoneDone = finishedGroups === groupNumbers.length;
+    return (
+      <main className="mx-auto max-w-lg space-y-4 px-4 py-4 pb-12">
+        <section className="rounded-3xl bg-[#0f5132] p-5 text-center text-white shadow-sm">
+          <p className="text-sm opacity-90">{round.courseName} · {round.title}</p>
+          <h1 className="mt-2 text-3xl font-bold">Group {groupNumber} is done ⛳</h1>
+          <p className="mt-2 text-sm">
+            {groupNumbers.length > 1
+              ? everyoneDone
+                ? `All ${groupNumbers.length} groups have finished.`
+                : `${finishedGroups} of ${groupNumbers.length} groups finished. Waiting on the rest.`
+              : 'All 18 holes saved.'}
+          </p>
+        </section>
+        {canEdit ? <SaveStatus roundId={round.id} group={groupNumber} dirty={false} onRetry={() => void persistHoleSnapshot(round.totalHoles).catch((error) => setMessage(formatUnknownError(error, 'Unable to retry saving.')))} /> : null}
+        {message ? <p className="rounded-xl bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">{message}</p> : null}
+        {!isScoreOnlyGroup && bankerRunningTotals.length ? (
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="mb-3 text-lg font-bold">Banker results for this group</h2>
+            <div className="space-y-2">
+              {bankerRunningTotals.map((total) => (
+                <div key={total.playerId} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
+                  <span className="font-medium">{total.name}</span>
+                  <span className="font-bold">
+                    {total.amount > 0 ? `Up ${formatCurrency(total.amount)}` : total.amount < 0 ? `Down ${formatCurrency(Math.abs(total.amount))}` : 'Even'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+        <Link href={`/r/${round.roundCode}/settle`} className="block rounded-xl bg-[#0f5132] px-4 py-4 text-center text-lg font-bold text-white">
+          {everyoneDone ? 'Settle up →' : 'See payouts so far →'}
+        </Link>
+        <Link href={`/r/${round.roundCode}`} className="block rounded-xl border border-[#c9d8c7] bg-white px-4 py-3 text-center font-semibold text-[#0f5132]">
+          Leaderboard
+        </Link>
+        <section className="space-y-2">
+          <p className="px-1 text-sm text-slate-600">Need to fix a score? Tap the hole.</p>
+          {holeStrip}
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="mx-auto max-w-lg space-y-4 px-4 py-4 pb-44">
       {loadError ? (
@@ -495,36 +607,7 @@ export default function GroupScoringPage() {
         {claimStatus ? <p className="mt-3 text-sm text-slate-500">{claimStatus}</p> : null}
       </section>
 
-      <nav aria-label="Holes" className="-mx-4 overflow-x-auto px-4">
-        <div className="flex gap-1.5 pb-1">
-          {Array.from({ length: round.totalHoles }, (_, index) => index + 1).map((holeNumber) => {
-            const open = canOpenHole(holeNumber);
-            const saved = groupHoleSaved(holeNumber);
-            const active = holeNumber === targetHoleNumber;
-            return (
-              <button
-                key={holeNumber}
-                type="button"
-                disabled={!open || busy}
-                aria-current={active ? 'step' : undefined}
-                aria-label={`Hole ${holeNumber}${saved ? ', saved' : holeNumber === currentHoleNumber ? ', current hole' : ', not played yet'}`}
-                onClick={() => void goToHole(holeNumber)}
-                className={`min-h-[44px] min-w-[44px] shrink-0 rounded-xl border text-base font-bold tabular-nums ${
-                  active
-                    ? 'border-[#0f5132] bg-[#0f5132] text-white'
-                    : saved
-                      ? 'border-[#c9d8c7] bg-[#eef7f0] text-[#0f5132]'
-                      : holeNumber === currentHoleNumber
-                        ? 'border-[#f6c453] bg-white text-[#071b12]'
-                        : 'border-slate-200 bg-white text-slate-300'
-                }`}
-              >
-                {holeNumber}
-              </button>
-            );
-          })}
-        </div>
-      </nav>
+      {holeStrip}
 
       <section className="sticky top-2 z-10 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm backdrop-blur">
         <div className="mb-3 rounded-xl bg-[#eef7f0] px-3 py-3">
@@ -751,7 +834,17 @@ export default function GroupScoringPage() {
           <Button className="flex-1" disabled={!canEdit || busy} onClick={() => void handleUpdate()}>
             Save Correction
           </Button>
-          {targetHoleNumber !== currentHoleNumber || !groupHoleSaved(currentHoleNumber) ? (
+          {savedGroupHoles >= round.totalHoles ? (
+            <Button variant="secondary" className="flex-1" disabled={busy} onClick={() => void (async () => {
+              if (holeIsDirty) {
+                if (!window.confirm(`You changed hole ${targetHoleNumber} but haven't saved it. Save the correction and continue?`)) return;
+                await handleUpdate();
+              }
+              router.push(`/r/${round.roundCode}/group/${groupNumber}`);
+            })()}>
+              Done
+            </Button>
+          ) : targetHoleNumber !== currentHoleNumber || !groupHoleSaved(currentHoleNumber) ? (
             <Button variant="secondary" className="flex-1" disabled={busy} onClick={() => void goToHole(currentHoleNumber)}>
               Back to Hole {currentHoleNumber}
             </Button>
