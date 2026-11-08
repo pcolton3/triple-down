@@ -394,6 +394,26 @@ export default function GroupScoringPage() {
     );
   }
 
+  const holeIsDirty = isEditingPastHole && JSON.stringify(hole) !== JSON.stringify(editingBaseline.current);
+  const groupHoleSaved = (holeNumber: number) => roundHoles.some((item) => (item.groupNumber ?? 1) === groupNumber && item.holeNumber === holeNumber && item.isSaved);
+  const canOpenHole = (holeNumber: number) => holeNumber === currentHoleNumber || groupHoleSaved(holeNumber);
+
+  async function goToHole(holeNumber: number) {
+    if (holeNumber === targetHoleNumber || !canOpenHole(holeNumber) || busy) return;
+    if (holeIsDirty) {
+      if (!window.confirm(`You changed hole ${targetHoleNumber} but haven't saved it. Save the correction and continue?`)) return;
+      await handleUpdate();
+    }
+    const base = `/r/${round.roundCode}/group/${groupNumber}`;
+    router.push(holeNumber === currentHoleNumber && !groupHoleSaved(holeNumber) ? base : `${base}?hole=${holeNumber}`);
+    window.scrollTo({ top: 0 });
+  }
+
+  function confirmPress(pressed: boolean, description: string, toggle: () => void) {
+    if (!pressed && !window.confirm(description)) return;
+    toggle();
+  }
+
   const summary = getCurrentHoleSummary(groupNumber, targetHoleNumber);
   const matchupSummaryByPlayerId = Object.fromEntries(summary.matchups.map((item) => [item.playerId, item]));
   const bankerRunningTotals = getGroupBankerPreviewTotals(groupNumber, targetHoleNumber).sort((a, b) => b.amount - a.amount);
@@ -475,6 +495,37 @@ export default function GroupScoringPage() {
         {claimStatus ? <p className="mt-3 text-sm text-slate-500">{claimStatus}</p> : null}
       </section>
 
+      <nav aria-label="Holes" className="-mx-4 overflow-x-auto px-4">
+        <div className="flex gap-1.5 pb-1">
+          {Array.from({ length: round.totalHoles }, (_, index) => index + 1).map((holeNumber) => {
+            const open = canOpenHole(holeNumber);
+            const saved = groupHoleSaved(holeNumber);
+            const active = holeNumber === targetHoleNumber;
+            return (
+              <button
+                key={holeNumber}
+                type="button"
+                disabled={!open || busy}
+                aria-current={active ? 'step' : undefined}
+                aria-label={`Hole ${holeNumber}${saved ? ', saved' : holeNumber === currentHoleNumber ? ', current hole' : ', not played yet'}`}
+                onClick={() => void goToHole(holeNumber)}
+                className={`min-h-[44px] min-w-[44px] shrink-0 rounded-xl border text-base font-bold tabular-nums ${
+                  active
+                    ? 'border-[#0f5132] bg-[#0f5132] text-white'
+                    : saved
+                      ? 'border-[#c9d8c7] bg-[#eef7f0] text-[#0f5132]'
+                      : holeNumber === currentHoleNumber
+                        ? 'border-[#f6c453] bg-white text-[#071b12]'
+                        : 'border-slate-200 bg-white text-slate-300'
+                }`}
+              >
+                {holeNumber}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+
       <section className="sticky top-2 z-10 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm backdrop-blur">
         <div className="mb-3 rounded-xl bg-[#eef7f0] px-3 py-3">
           <div className="grid grid-cols-3 gap-3">
@@ -533,7 +584,7 @@ export default function GroupScoringPage() {
               </p>
             ) : null}
           </div>
-          <Button variant="secondary" disabled={!canEdit} onClick={() => toggleBankerPress(groupNumber, targetHoleNumber)}>
+          <Button variant="secondary" disabled={!canEdit} onClick={() => confirmPress(Boolean(hole.bankerPressed), `${pressAction} every bet against ${banker.name} on hole ${hole.holeNumber}?`, () => toggleBankerPress(groupNumber, targetHoleNumber))}>
             {hole.bankerPressed ? `Undo Banker ${pressAction}` : `Banker ${pressAction}`}
           </Button>
         </div>
@@ -607,7 +658,7 @@ export default function GroupScoringPage() {
                   <p className="text-sm text-slate-500">{playsBanker ? `vs ${banker.name}` : 'Score only, not playing Banker'}</p>
                 </div>
                 {playsBanker ? (
-                  <Button variant="secondary" disabled={!canEdit} onClick={() => togglePlayerPress(player.id, groupNumber, targetHoleNumber)}>
+                  <Button variant="secondary" disabled={!canEdit} onClick={() => confirmPress(Boolean(matchup.pressed), `${pressAction} ${player.name}'s bet on hole ${hole.holeNumber}?`, () => togglePlayerPress(player.id, groupNumber, targetHoleNumber))}>
                     {matchup.pressed ? `Undo ${pressAction}` : pressAction}
                   </Button>
                 ) : null}
@@ -693,21 +744,34 @@ export default function GroupScoringPage() {
 
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_20px_rgba(15,23,42,0.08)] backdrop-blur">
         <div className="mx-auto max-w-lg">
-        {canEdit ? <SaveStatus roundId={round.id} group={groupNumber} dirty={isEditingPastHole && JSON.stringify(hole) !== JSON.stringify(editingBaseline.current)} onRetry={() => { if (isEditingPastHole) void handleUpdate(); else void persistHoleSnapshot(targetHoleNumber).catch((error) => setMessage(formatUnknownError(error, "Unable to retry saving."))); }} /> : null}
+        {canEdit ? <SaveStatus roundId={round.id} group={groupNumber} dirty={holeIsDirty} onRetry={() => { if (isEditingPastHole) void handleUpdate(); else void persistHoleSnapshot(targetHoleNumber).catch((error) => setMessage(formatUnknownError(error, "Unable to retry saving."))); }} /> : null}
         <div className="flex gap-3">
         {isEditingPastHole ? (
           <>
           <Button className="flex-1" disabled={!canEdit || busy} onClick={() => void handleUpdate()}>
             Save Correction
           </Button>
-          <Link className="flex-1 rounded-xl border border-[#2f8df3] px-4 py-3 text-center font-semibold text-[#2f8df3]" href={`/r/${round.roundCode}/history`}>
-            Back to History
-          </Link>
+          {targetHoleNumber !== currentHoleNumber || !groupHoleSaved(currentHoleNumber) ? (
+            <Button variant="secondary" className="flex-1" disabled={busy} onClick={() => void goToHole(currentHoleNumber)}>
+              Back to Hole {currentHoleNumber}
+            </Button>
+          ) : (
+            <Link className="flex-1 rounded-xl border border-[#2f8df3] px-4 py-3 text-center font-semibold text-[#2f8df3]" href={`/r/${round.roundCode}`}>
+              Leaderboard
+            </Link>
+          )}
           </>
         ) : (
+          <>
+          {hole.holeNumber > 1 && canOpenHole(hole.holeNumber - 1) ? (
+            <Button variant="secondary" className="shrink-0 px-4" disabled={busy} aria-label={`Go back to hole ${hole.holeNumber - 1}`} onClick={() => void goToHole(hole.holeNumber - 1)}>
+              ◀ {hole.holeNumber - 1}
+            </Button>
+          ) : null}
           <Button className="flex-1" disabled={!canEdit || busy} onClick={() => void handleNext()}>
             {busy ? 'Saving…' : isFinalHole ? 'Save & Finish Group' : 'Save & Next Hole'}
           </Button>
+          </>
         )}
         </div>
         </div>

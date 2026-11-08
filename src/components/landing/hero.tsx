@@ -1,6 +1,6 @@
 'use client';
 
-import { readSavedEvents, type SavedEvent } from '@/lib/events/golf-events';
+import { loadGolfEvent, readSavedEvents, type SavedEvent } from '@/lib/events/golf-events';
 import { readRecent, type RecentRound } from '@/lib/offline/local-rounds';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -17,11 +17,21 @@ export function Hero() {
   const [myEvents, setMyEvents] = useState<SavedEvent[]>([]);
   useEffect(() => setMyEvents(readSavedEvents()), []);
 
-  function handleJoin(event: FormEvent<HTMLFormElement>) {
+  const [joining, setJoining] = useState(false);
+
+  // One box for both kinds of code: events (trip invites) and rounds (live scoring).
+  async function handleJoin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const code = roundCode.trim().toUpperCase();
-    if (!code) return;
-    router.push(`/r/${code}`);
+    const code = roundCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!code || joining) return;
+    setJoining(true);
+    let isEvent = false;
+    try {
+      if (navigator.onLine) isEvent = Boolean(await loadGolfEvent(code));
+    } catch {
+      /* Offline or events not set up: rounds still open from this device's cache. */
+    }
+    router.push(isEvent ? `/join/${code}` : `/r/${code}`);
   }
 
   return (
@@ -42,11 +52,15 @@ export function Hero() {
         <input
           className="min-w-0 flex-1 rounded-xl border border-[#c9d8c7] px-3 py-3 text-center font-mono text-lg font-black uppercase text-[#071b12]"
           value={roundCode}
-          placeholder="EVENT CODE"
+          placeholder="ENTER CODE"
+          aria-label="Round or event code"
+          autoCapitalize="characters"
+          autoCorrect="off"
           onChange={(event) => setRoundCode(event.target.value.toUpperCase())}
         />
-        <Button type="submit">Join Round</Button>
+        <Button type="submit" disabled={joining}>{joining ? 'Opening…' : 'Join'}</Button>
       </form>
+      <p className="mx-auto mt-2 max-w-md text-center text-xs text-slate-500">Got a code from a friend? Round codes open live scoring; event codes open the trip invite.</p>
 
       <div className="mx-auto mt-4 flex max-w-md items-center justify-center">
         <Link href="/rounds/new" className="w-full">

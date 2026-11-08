@@ -316,6 +316,7 @@ export default function SettlePage() {
   }
 
   async function handleFinalizeSettlement() {
+    if (!window.confirm('Finalize settlement? This saves the final payouts for everyone in the round. Check the amounts above first.')) return;
     try {
       if (readPending(localStorage).some((entry) => entry.roundId === round.id)) throw new Error('Sync all pending scores on this device before finalizing settlement.');
       setSnapshotStatus('Saving final settlement...');
@@ -400,6 +401,11 @@ export default function SettlePage() {
 
       <SettlementSummary roundId={round.id} title={round.title} complete={Boolean(settlementSnapshot) || roundComplete} lines={paymentLines} />
       {snapshotStatus ? <p role="status" className="mb-4 text-sm">{snapshotStatus}</p> : null}
+      {!settlementSnapshot && !roundComplete ? (
+        <p className="mb-2 text-sm text-slate-600">
+          You can finalize once every group finishes: {holesSaved} of {round.totalHoles * Math.max(1, round.multiFoursome?.groups.length ?? 1)} holes scored so far.
+        </p>
+      ) : null}
       {!settlementSnapshot ? <button type="button" disabled={!roundComplete} className="mb-4 rounded-xl bg-[#0f5132] px-4 py-3 font-semibold text-white disabled:opacity-40" onClick={() => void handleFinalizeSettlement()}>Finalize settlement</button> : null}
       <details className="rounded-2xl border border-slate-200 p-3">
       <summary className="mb-4 cursor-pointer font-bold">Game-by-game calculations and score details</summary>

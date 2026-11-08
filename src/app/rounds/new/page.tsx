@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card } from '@/components/shared/card';
 import { Button } from '@/components/shared/button';
@@ -17,6 +17,8 @@ import type { HoleConfig } from '@/types/round';
 
 const MAX_PLAYERS = 40;
 const MIN_PLAYERS = 1;
+const DRAFT_KEY = 'triple-track-round-draft';
+const DRAFT_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 3;
 const PLAYER_COUNTS = [1, 2, 3, 4, 5, 8, 12, 16, 20, 24, 28, 32, 36, 40];
 
 function buildDefaultPlayers(count = 4) {
@@ -130,6 +132,31 @@ function NewRoundPageContent() {
   const [isCreating, setIsCreating] = useState(false);
   const [gamesOpen, setGamesOpen] = useState(false);
   const [prefillStatus, setPrefillStatus] = useState('');
+  const [draftRestored, setDraftRestored] = useState(false);
+  const [created, setCreated] = useState<{ code: string; title: string; groupCount: number } | null>(null);
+  const [shareStatus, setShareStatus] = useState('');
+  const draftReady = useRef(false);
+
+  // Everything the organizer typed, so a reload or lost signal doesn't wipe the form.
+  const draftFields: Record<string, [unknown, (value: never) => void]> = {
+    roundCode: [roundCode, setRoundCode], ryderEventCode: [ryderEventCode, setRyderEventCode], ryderEventDay: [ryderEventDay, setRyderEventDay],
+    title: [title, setTitle], courseName: [courseName, setCourseName], selectedCourse: [selectedCourse, setSelectedCourse], manualHoles: [manualHoles, setManualHoles],
+    bankerEnabled: [bankerEnabled, setBankerEnabled], skinsEnabled: [skinsEnabled, setSkinsEnabled], lowNetEnabled: [lowNetEnabled, setLowNetEnabled],
+    ctpEnabled: [ctpEnabled, setCtpEnabled], nassauEnabled: [nassauEnabled, setNassauEnabled], stablefordEnabled: [stablefordEnabled, setStablefordEnabled],
+    birdiePotEnabled: [birdiePotEnabled, setBirdiePotEnabled], eaglePotEnabled: [eaglePotEnabled, setEaglePotEnabled], holeInOneEnabled: [holeInOneEnabled, setHoleInOneEnabled],
+    wolfEnabled: [wolfEnabled, setWolfEnabled], bingoBangoBongoEnabled: [bingoBangoBongoEnabled, setBingoBangoBongoEnabled], vegasEnabled: [vegasEnabled, setVegasEnabled],
+    matchPlayEnabled: [matchPlayEnabled, setMatchPlayEnabled], teamMatchPlayEnabled: [teamMatchPlayEnabled, setTeamMatchPlayEnabled],
+    defaultBet: [defaultBet, setDefaultBet], skinsPot: [skinsPot, setSkinsPot], lowNetPot: [lowNetPot, setLowNetPot], ctpPot: [ctpPot, setCtpPot],
+    nassauPot: [nassauPot, setNassauPot], stablefordPot: [stablefordPot, setStablefordPot], birdiePot: [birdiePot, setBirdiePot], eaglePot: [eaglePot, setEaglePot],
+    wolfUnit: [wolfUnit, setWolfUnit], bingoBangoBongoUnit: [bingoBangoBongoUnit, setBingoBangoBongoUnit], vegasUnit: [vegasUnit, setVegasUnit],
+    matchPlayUnit: [matchPlayUnit, setMatchPlayUnit], teamMatchPlayUnit: [teamMatchPlayUnit, setTeamMatchPlayUnit],
+    extraGames: [extraGames, setExtraGames], extraGameUnits: [extraGameUnits, setExtraGameUnits],
+    teamOneName: [teamOneName, setTeamOneName], teamTwoName: [teamTwoName, setTeamTwoName], ryderCupFormat: [ryderCupFormat, setRyderCupFormat],
+    teamAssignments: [teamAssignments, setTeamAssignments], singlesPairings: [singlesPairings, setSinglesPairings],
+    courseRating: [courseRating, setCourseRating], slopeRating: [slopeRating, setSlopeRating], teeColor: [teeColor, setTeeColor], pcc: [pcc, setPcc],
+    playerCount: [playerCount, setPlayerCount], players: [players, setPlayers], firstBankerPlayerId: [firstBankerPlayerId, setFirstBankerPlayerId],
+  };
+  const draftJson = JSON.stringify(Object.fromEntries(Object.entries(draftFields).map(([key, [value]]) => [key, value])));
   const effectiveGroupSize: 4 | 5 = players.length <= 4 ? 4 : players.length === 5 ? 5 : 4;
 
   const groups = useMemo(() => {
@@ -186,6 +213,42 @@ function NewRoundPageContent() {
     setRoundCode(code);
     setRyderEventCode(code);
   }, []);
+
+  useEffect(() => {
+    // A Ryder prefill link sets up its own round, so don't mix in an older draft.
+    if (!searchParams.get('ryderEventCode')) {
+      try {
+        const saved = JSON.parse(localStorage.getItem(DRAFT_KEY) ?? 'null') as { savedAt: number; fields: Record<string, unknown> } | null;
+        const fields = saved?.fields;
+        const hasContent = fields && (String(fields.courseName ?? '').trim() || (Array.isArray(fields.players) && fields.players.some((player) => String(player?.name ?? '').trim())));
+        if (saved && fields && hasContent && Date.now() - saved.savedAt < DRAFT_MAX_AGE_MS) {
+          Object.entries(fields).forEach(([key, value]) => {
+            if (key in draftFields && value !== undefined) draftFields[key][1](value as never);
+          });
+          setDraftRestored(true);
+        }
+      } catch {
+        /* A bad or missing draft just means a fresh form. */
+      }
+    }
+    draftReady.current = true;
+    // Restore once on open; the setters are stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!draftReady.current || created) return;
+    const timer = window.setTimeout(() => {
+      try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ savedAt: Date.now(), fields: JSON.parse(draftJson) })); } catch { /* Storage unavailable. */ }
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [draftJson, created]);
+
+  function startOver() {
+    if (!window.confirm('Clear this round setup and start over?')) return;
+    try { localStorage.removeItem(DRAFT_KEY); } catch { /* Storage unavailable. */ }
+    window.location.reload();
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -680,7 +743,7 @@ function NewRoundPageContent() {
     }
 
     try {
-      await saveCourseTee({
+      if (courseRating.trim() && slopeRating.trim()) await saveCourseTee({
         courseKey: savedCourseKey(selectedCourse?.id ?? null, courseName.trim() || selectedCourse?.name || 'Golf Course'),
         courseName: courseName.trim() || selectedCourse?.name || 'Golf Course',
         teeColor: teeColor.trim(),
@@ -699,11 +762,59 @@ function NewRoundPageContent() {
       console.error('Unable to save golfers for later.', error);
     }
 
-    router.push(`/r/${finalRoundCode}/group/1`);
-    const nextCode = generateRoundCode();
-    setRoundCode(nextCode);
-    setRyderEventCode(nextCode);
+    try { localStorage.removeItem(DRAFT_KEY); } catch { /* Storage unavailable. */ }
+    setCreated({ code: finalRoundCode, title: title.trim() || 'Saturday Group', groupCount: Math.max(1, ...groupPlayers.map((item) => item.groupNumber)) });
     setIsCreating(false);
+    window.scrollTo({ top: 0 });
+  }
+
+  async function shareRound(code: string, roundTitle: string) {
+    const url = `${window.location.origin}/r/${code}`;
+    const text = `Join "${roundTitle}" on Triple Track. Open the link, pick your group, and tap Start scoring. Round code: ${code}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: roundTitle, text, url });
+        return;
+      }
+      await navigator.clipboard.writeText(`${text}\n${url}`);
+      setShareStatus('Link copied. Paste it in your group text.');
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') return;
+      setShareStatus(`Couldn't share automatically. Send this link: ${url}`);
+    }
+  }
+
+  if (created) {
+    const url = typeof window === 'undefined' ? '' : `${window.location.origin}/r/${created.code}`;
+    return (
+      <main className="mx-auto max-w-lg space-y-4 px-4 py-8">
+        <section className="rounded-3xl bg-[#071b12] p-5 text-center text-white shadow-sm">
+          <p className="text-sm text-white/80">Round created</p>
+          <h1 className="mt-1 text-2xl font-bold">{created.title}</h1>
+          <p className="mt-4 text-sm text-white/80">Round code</p>
+          <p className="mt-1 font-mono text-5xl font-black tracking-widest">{created.code}</p>
+        </section>
+        {created.groupCount > 1 ? (
+          <Card className="space-y-3">
+            <h2 className="text-xl font-bold">Send this to the other groups</h2>
+            <p className="text-sm text-slate-600">
+              One person in each group opens the link (or types <span className="font-mono font-bold">{created.code}</span> on the home page), picks their group, and taps <span className="font-semibold">Start scoring</span>.
+            </p>
+            <Button className="w-full py-4" onClick={() => void shareRound(created.code, created.title)}>Share round link</Button>
+            <p className="break-all text-center text-xs text-slate-500">{url}</p>
+            {shareStatus ? <p role="status" className="text-center text-sm font-semibold text-[#0f5132]">{shareStatus}</p> : null}
+          </Card>
+        ) : (
+          <Card className="space-y-3">
+            <p className="text-sm text-slate-600">Anyone can follow along live with this code or link.</p>
+            <Button variant="secondary" className="w-full" onClick={() => void shareRound(created.code, created.title)}>Share round link</Button>
+            {shareStatus ? <p role="status" className="text-center text-sm font-semibold text-[#0f5132]">{shareStatus}</p> : null}
+          </Card>
+        )}
+        <Button className="w-full py-4" onClick={() => router.push(`/r/${created.code}/group/1`)}>Start scoring Group 1</Button>
+        <Link href={`/r/${created.code}`} className="block text-center text-sm font-semibold text-[#0f5132] underline">Go to the leaderboard instead</Link>
+      </main>
+    );
   }
 
   return (
@@ -715,6 +826,12 @@ function NewRoundPageContent() {
             Search for a course, set side games, add golfers, then start your Triple Track round.
           </p>
           {prefillStatus ? <p className="mt-2 text-sm font-bold text-[#0f5132]">{prefillStatus}</p> : null}
+          {draftRestored ? (
+            <p className="mt-2 text-sm font-semibold text-[#0f5132]">
+              Picked up where you left off.{' '}
+              <button type="button" className="underline" onClick={startOver}>Start over</button>
+            </p>
+          ) : null}
         </div>
         <Link href="/" className="text-sm font-bold text-[#0f5132]">
           Back Home
@@ -869,7 +986,7 @@ function NewRoundPageContent() {
               readOnly
             />
           </div>
-          <p className="text-sm text-slate-500">Preview share code: {roundCode}</p>
+          <p className="text-sm text-slate-500">You&apos;ll get a code and link to share with the other groups after you create the round.</p>
         </Card>
 
         <Card className="space-y-4">
@@ -1346,7 +1463,7 @@ function NewRoundPageContent() {
 
         <div className="flex justify-end">
           <Button disabled={isCreating} onClick={() => void handleCreateRound()}>
-            {isCreating ? 'Creating...' : 'Create and Open Group 1'}
+            {isCreating ? 'Creating...' : 'Create Round'}
           </Button>
         </div>
       </div>
