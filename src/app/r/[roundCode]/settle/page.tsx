@@ -390,11 +390,13 @@ export default function SettlePage() {
       id: `pair:${transfer.fromId}:${transfer.toId}`,
       label: `${transfer.fromName} pays ${transfer.toName} (${transfer.reasons.join(' + ')})`,
       amount: transfer.amount,
+      payTo: transfer.toName,
     })),
     ...potCollections.map((collection) => ({
       id: `pot:${collection.playerId}`,
       label: `${collection.playerName} collects from the pot money (${collection.games.map((game) => `${game.game} ${formatCurrency(game.amount)}`).join(' · ')})`,
       amount: collection.amount,
+      payTo: collection.playerName,
     })),
   ];
 

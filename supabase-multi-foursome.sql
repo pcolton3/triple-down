@@ -262,6 +262,10 @@ create table if not exists public.saved_golfers (
 alter table public.saved_golfers
   add column if not exists posted_rounds integer not null default 0;
 
+-- Venmo / Cash App / PayPal usernames for settle-up pay buttons: { venmo, cashapp, paypal }
+alter table public.saved_golfers
+  add column if not exists payment_handles jsonb not null default '{}'::jsonb;
+
 create table if not exists public.saved_golfer_scores (
   id uuid primary key default gen_random_uuid(),
   golfer_id uuid not null references public.saved_golfers(id) on delete cascade,

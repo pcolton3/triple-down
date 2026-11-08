@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase/client';
 import { calculateHandicapIndex, calculateScoreDifferential } from '@/lib/handicap/whs';
+import { cleanHandles, type PaymentHandles } from '@/lib/payments/pay-links';
 
 export type SavedGolfer = {
   id: string;
@@ -29,7 +30,7 @@ function isMissingSchemaError(error: unknown) {
   return details.code === '42P01' || details.code === '42703' || message.includes('does not exist') || message.includes('Could not find');
 }
 
-function normalizedName(name: string) {
+export function normalizedName(name: string) {
   return name.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
@@ -218,4 +219,42 @@ export async function postHandicapScores(input: {
   );
 
   return updates;
+}
+
+export class PaymentHandlesNotSetUpError extends Error {
+  constructor() {
+    super('Payment apps are not set up in the database yet. Run the payment SQL in Supabase.');
+  }
+}
+
+/** Payment app handles for every saved golfer, keyed by normalized name. Empty if the column isn't set up yet. */
+export async function loadPaymentHandles(): Promise<Record<string, PaymentHandles>> {
+  const { data, error } = await supabase.from('saved_golfers').select('normalized_name,payment_handles');
+  if (error) {
+    if (isMissingSchemaError(error)) return {};
+    throw error;
+  }
+  return Object.fromEntries(
+    ((data ?? []) as Array<{ normalized_name: string; payment_handles: PaymentHandles | null }>).map((row) => [row.normalized_name, cleanHandles(row.payment_handles ?? {})])
+  );
+}
+
+/** Saves a golfer's payment handles so every future round can use them. */
+export async function savePaymentHandles(name: string, handles: PaymentHandles): Promise<PaymentHandles> {
+  const key = normalizedName(name);
+  if (!key) throw new Error('This golfer needs a name first.');
+  const clean = cleanHandles(handles);
+  const { data, error } = await supabase.from('saved_golfers').update({ payment_handles: clean }).eq('normalized_name', key).select('id');
+  if (error) {
+    if (isMissingSchemaError(error)) throw new PaymentHandlesNotSetUpError();
+    throw error;
+  }
+  if ((data ?? []).length === 0) {
+    const { error: insertError } = await supabase.from('saved_golfers').insert({ name: name.trim(), normalized_name: key, handicap: 0, payment_handles: clean });
+    if (insertError) {
+      if (isMissingSchemaError(insertError)) throw new PaymentHandlesNotSetUpError();
+      throw insertError;
+    }
+  }
+  return clean;
 }
