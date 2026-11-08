@@ -1,12 +1,47 @@
 import { supabase } from '@/lib/supabase/client';
 
-export type RyderFormat = 'team_match' | 'singles_match';
+export type DayFormat = 'team_match' | 'singles_match' | 'stroke_play' | 'scramble' | 'casual';
+/** @deprecated kept for older imports */
+export type RyderFormat = DayFormat;
 export type TeamKey = 'team_one' | 'team_two';
+
+/** A game played on one event day. Pot games come out of the buy-in; group games settle inside each group. */
+export type EventGame = { key: string; amount: number };
+
+export type GameDefinition = { key: string; label: string; kind: 'pot' | 'group'; blurb: string };
+
+export const EVENT_GAMES: GameDefinition[] = [
+  { key: 'skins', label: 'Net skins', kind: 'pot', blurb: 'Lowest net score on a hole wins a skin; the pot splits by skins won.' },
+  { key: 'ctp', label: 'Closest to the pin', kind: 'pot', blurb: 'Pot splits across the par 3s.' },
+  { key: 'low_net', label: 'Low net', kind: 'pot', blurb: 'Best net round of the day wins the pot.' },
+  { key: 'stableford', label: 'Stableford', kind: 'pot', blurb: 'Most net Stableford points wins the pot.' },
+  { key: 'birdie_pot', label: 'Birdie pot', kind: 'pot', blurb: 'Pot splits across every birdie made.' },
+  { key: 'eagle_pot', label: 'Eagle pot', kind: 'pot', blurb: 'Pot splits across every eagle made.' },
+  { key: 'hole_in_one', label: 'Hole-in-one pot', kind: 'pot', blurb: 'Pays only if someone makes an ace.' },
+  { key: 'nassau', label: 'Nassau', kind: 'group', blurb: 'Front, back and overall bets inside each group.' },
+  { key: 'match_play', label: 'Match play bet', kind: 'group', blurb: 'Head-to-head bet inside each group.' },
+  { key: 'wolf', label: 'Wolf', kind: 'group', blurb: 'Rotating wolf picks a partner or goes alone.' },
+  { key: 'vegas', label: 'Vegas', kind: 'group', blurb: 'Team scores combine into two-digit numbers.' },
+  { key: 'bingo_bango_bongo', label: 'Bingo Bango Bongo', kind: 'group', blurb: 'Points for first on, closest, and first in.' },
+  { key: 'banker', label: 'Banker', kind: 'group', blurb: 'Rotating banker takes on the group each hole.' },
+];
+
+export function gameDefinition(key: string): GameDefinition {
+  return EVENT_GAMES.find((game) => game.key === key) ?? { key, label: key, kind: 'pot', blurb: '' };
+}
+
+export const TEAM_FORMATS: DayFormat[] = ['team_match', 'singles_match'];
+
+/** True when any day pits the two event teams against each other (Ryder Cup style). */
+export function isTeamEvent(event: Pick<GolfEvent, 'days'>) {
+  return event.days.some((day) => TEAM_FORMATS.includes(day.format));
+}
 
 export type EventDay = {
   day: number;
   date: string; // YYYY-MM-DD
-  format: RyderFormat;
+  format: DayFormat;
+  games?: EventGame[];
   course?: string;
   address?: string;
   teeTime?: string; // HH:MM
@@ -52,9 +87,12 @@ export type Signup = RosterEntry & {
   created_at: string;
 };
 
-export const FORMAT_LABELS: Record<RyderFormat, string> = {
+export const FORMAT_LABELS: Record<DayFormat, string> = {
   team_match: 'Team match play · 2 vs 2 low net',
   singles_match: 'Singles match play · 1 vs 1 net',
+  stroke_play: 'Individual stroke play · net',
+  scramble: 'Scramble',
+  casual: 'Casual round · side games only',
 };
 
 function rpcError(error: { message?: string } | null) {
@@ -71,9 +109,20 @@ export async function loadGolfEvent(code: string): Promise<GolfEvent | null> {
   rpcError(error);
   if (!data) return null;
   const event = data as GolfEvent;
+  return normalizeEvent(event);
+}
+
+/** Older events stored CTP and skins as event-wide amounts; move them onto each day's game list. */
+export function normalizeEvent(event: GolfEvent): GolfEvent {
+  const legacyGames = (): EventGame[] => [
+    ...(Number(event.ctp_per_day) > 0 ? [{ key: 'ctp', amount: Number(event.ctp_per_day) }] : []),
+    ...(Number(event.skins_per_day) > 0 ? [{ key: 'skins', amount: Number(event.skins_per_day) }] : []),
+  ];
   return {
     ...event,
-    days: [...(event.days ?? [])].sort((a, b) => a.day - b.day),
+    days: [...(event.days ?? [])]
+      .sort((a, b) => a.day - b.day)
+      .map((day) => ({ ...day, games: (day.games ?? legacyGames()).map((game) => ({ key: game.key, amount: Number(game.amount) || 0 })) })),
     agenda: event.agenda ?? [],
     buy_in: Number(event.buy_in),
     team_bet: Number(event.team_bet),
@@ -105,21 +154,116 @@ export async function updateSignup(code: string, key: string, signupId: string, 
   rpcError(error);
 }
 
-export async function updateEvent(code: string, key: string, patch: Partial<Pick<GolfEvent, 'title' | 'description' | 'days' | 'agenda' | 'team_one_name' | 'team_two_name' | 'signups_open'>>) {
+export async function updateEvent(code: string, key: string, patch: Partial<Pick<GolfEvent, EditableField | 'signups_open'>>) {
   const { error } = await supabase.rpc('organizer_update_golf_event', { p_code: code, p_key: key, p_patch: patch });
   rpcError(error);
 }
 
+export type EditableField = 'title' | 'description' | 'days' | 'agenda' | 'team_one_name' | 'team_two_name' | 'buy_in' | 'team_bet' | 'max_players';
+export type EventDraft = Pick<GolfEvent, EditableField>;
+
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+export function randomEventCode(length = 6) {
+  const values = new Uint32Array(length);
+  crypto.getRandomValues(values);
+  return Array.from(values, (value) => CODE_ALPHABET[value % CODE_ALPHABET.length]).join('');
+}
+
+/** Creates the event, retrying with a fresh code if one is already taken. */
+export async function createGolfEvent(draft: EventDraft): Promise<{ code: string; organizerKey: string }> {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const code = randomEventCode();
+    const { data, error } = await supabase.rpc('create_golf_event', {
+      p_event: { ...draft, code, ctp_per_day: 0, skins_per_day: 0 },
+    });
+    if (error?.code === '23505' || error?.message?.includes('duplicate key')) continue;
+    rpcError(error);
+    const row = (Array.isArray(data) ? data[0] : data) as { code: string; organizer_key: string };
+    return { code: row.code, organizerKey: row.organizer_key };
+  }
+  throw new Error('Could not create a unique event code. Try again.');
+}
+
+export function organizerKeyStorageName(code: string) {
+  return `triple-track-organizer:${code}`;
+}
+
+const MY_EVENTS_KEY = 'triple-track-my-events';
+export type MyEvent = { code: string; title: string; createdAt: string };
+
+export function readMyEvents(): MyEvent[] {
+  try {
+    const list = JSON.parse(localStorage.getItem(MY_EVENTS_KEY) ?? '[]');
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+export function rememberMyEvent(code: string, title: string, organizerKey?: string) {
+  try {
+    if (organizerKey) localStorage.setItem(organizerKeyStorageName(code), organizerKey);
+    const list = readMyEvents().filter((entry) => entry.code !== code);
+    list.unshift({ code, title, createdAt: new Date().toISOString() });
+    localStorage.setItem(MY_EVENTS_KEY, JSON.stringify(list.slice(0, 20)));
+  } catch {
+    /* Storage can be unavailable; the links still work. */
+  }
+}
+
+export function potGames(day: EventDay) {
+  return (day.games ?? []).filter((game) => gameDefinition(game.key).kind === 'pot' && game.amount > 0);
+}
+
+export function groupGames(day: EventDay) {
+  return (day.games ?? []).filter((game) => gameDefinition(game.key).kind === 'group');
+}
+
+/** What the buy-in should be if it covers the team bet plus every pot game. */
+export function suggestedBuyIn(event: Pick<GolfEvent, 'team_bet' | 'days'>) {
+  const teamBet = isTeamEvent(event) ? event.team_bet : 0;
+  return teamBet + event.days.reduce((total, day) => total + potGames(day).reduce((sum, game) => sum + game.amount, 0), 0);
+}
+
 /** Per-player buy-in breakdown and the resulting pots for a given field size. */
-export function buyInBreakdown(event: Pick<GolfEvent, 'buy_in' | 'team_bet' | 'ctp_per_day' | 'skins_per_day' | 'days'>, players: number) {
-  const dayCount = Math.max(1, event.days.length);
+export function buyInBreakdown(event: Pick<GolfEvent, 'buy_in' | 'team_bet' | 'days'>, players: number) {
+  const teamBet = isTeamEvent(event) ? event.team_bet : 0;
   const lines = [
-    { label: 'Team bet (winning team splits)', perPlayer: event.team_bet, pot: event.team_bet * players },
-    ...event.days.map((day) => ({ label: `Day ${day.day} closest to the pin`, perPlayer: event.ctp_per_day, pot: event.ctp_per_day * players })),
-    ...event.days.map((day) => ({ label: `Day ${day.day} net skins`, perPlayer: event.skins_per_day, pot: event.skins_per_day * players })),
+    ...(teamBet > 0 ? [{ label: 'Team bet (winning team splits)', perPlayer: teamBet, pot: teamBet * players }] : []),
+    ...event.days.flatMap((day) =>
+      potGames(day).map((game) => ({
+        label: `${event.days.length > 1 ? `Day ${day.day} ` : ''}${gameDefinition(game.key).label.toLowerCase()}`,
+        perPlayer: game.amount,
+        pot: game.amount * players,
+      }))
+    ),
   ];
-  const allocated = event.team_bet + (event.ctp_per_day + event.skins_per_day) * dayCount;
+  const allocated = suggestedBuyIn(event);
   return { lines, allocated, unallocated: event.buy_in - allocated, total: event.buy_in * players };
+}
+
+/** Problems that should block saving an event. */
+export function validateDraft(draft: EventDraft) {
+  const problems: string[] = [];
+  if (!draft.title.trim()) problems.push('Give the event a name.');
+  if (!draft.days.length) problems.push('Add at least one golf day.');
+  draft.days.forEach((day) => {
+    if (!day.date) problems.push(`Pick a date for golf day ${day.day}.`);
+  });
+  draft.agenda.forEach((item) => {
+    if (item.title.trim() && !item.date) problems.push(`Pick a date for "${item.title.trim()}".`);
+  });
+  if (draft.buy_in < 0 || draft.team_bet < 0) problems.push('Money amounts cannot be negative.');
+  if (draft.max_players != null && draft.max_players < 2) problems.push('Player limit must be at least 2.');
+  return problems;
+}
+
+/** Days renumbered 1..n in date order. */
+export function renumberDays(days: EventDay[]) {
+  return [...days]
+    .sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999') || a.day - b.day)
+    .map((day, index) => ({ ...day, day: index + 1 }));
 }
 
 export function formatEventDate(date: string, options: Intl.DateTimeFormatOptions = { weekday: 'long', month: 'long', day: 'numeric' }) {

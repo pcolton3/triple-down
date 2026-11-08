@@ -3,6 +3,9 @@ import { formatCurrency } from '@/lib/utils/currency';
 import {
   FORMAT_LABELS,
   buildSchedule,
+  gameDefinition,
+  groupGames,
+  potGames,
   buyInBreakdown,
   formatEventDate,
   formatTime,
@@ -49,7 +52,16 @@ export function EventSchedule({ event }: { event: GolfEvent }) {
                         {day.teeTime ? `${formatTime(day.teeTime)} · ` : ''}Golf · Day {day.day}
                       </p>
                       <p className="mt-1 text-lg font-bold">{day.course || 'Course to be announced'}</p>
-                      <p className="text-sm text-slate-600">{FORMAT_LABELS[day.format]}</p>
+                      <p className="text-sm text-slate-600">{FORMAT_LABELS[day.format] ?? day.format}</p>
+                      {day.games?.length ? (
+                        <p className="mt-1 text-sm text-slate-700">
+                          <span className="font-semibold">Games: </span>
+                          {[
+                            ...potGames(day).map((game) => `${gameDefinition(game.key).label} (${formatCurrency(game.amount)})`),
+                            ...groupGames(day).map((game) => `${gameDefinition(game.key).label} (${formatCurrency(game.amount)} per bet, in groups)`),
+                          ].join(' · ')}
+                        </p>
+                      ) : null}
                       {day.address ? <p className="mt-1 text-sm"><LinkOut href={mapsLink(day.address)}>{day.address}</LinkOut></p> : null}
                       {day.website ? <p className="mt-1 text-sm"><LinkOut href={safeLink(day.website)}>Course website</LinkOut></p> : null}
                       {day.notes ? <p className="mt-2 whitespace-pre-line text-sm text-slate-700">{day.notes}</p> : null}
@@ -77,21 +89,26 @@ export function EventSchedule({ event }: { event: GolfEvent }) {
 }
 
 export function BuyInCard({ event, players }: { event: GolfEvent; players: number }) {
-  if (!event.buy_in) return null;
   const breakdown = buyInBreakdown(event, players);
+  const sideBets = event.days.flatMap((day) => groupGames(day).map((game) => ({ day, game })));
+  if (!event.buy_in && !sideBets.length) return null;
   return (
     <Card>
-      <h2 className="text-xl font-bold">Buy-in: {formatCurrency(event.buy_in)} per player</h2>
-      <p className="mb-3 text-sm text-slate-500">
-        Pots shown for {players} player{players === 1 ? '' : 's'} signed up so far.
-      </p>
+      <h2 className="text-xl font-bold">{event.buy_in ? `Buy-in: ${formatCurrency(event.buy_in)} per player` : 'No buy-in'}</h2>
+      {event.buy_in && players > 0 ? (
+        <p className="mb-3 text-sm text-slate-500">
+          Pots shown for {players} player{players === 1 ? '' : 's'} signed up so far.
+        </p>
+      ) : (
+        <div className="mb-3" />
+      )}
       <div className="divide-y divide-slate-100 text-sm">
         {breakdown.lines.map((line) => (
           <div key={line.label} className="flex items-center justify-between gap-3 py-2">
             <span>{line.label}</span>
             <span className="text-right tabular-nums">
               <span className="font-semibold">{formatCurrency(line.perPlayer)}</span>
-              <span className="text-slate-500"> each · {formatCurrency(line.pot)} pot</span>
+              <span className="text-slate-500"> each{players > 0 ? ` · ${formatCurrency(line.pot)} pot` : ''}</span>
             </span>
           </div>
         ))}
@@ -100,6 +117,17 @@ export function BuyInCard({ event, players }: { event: GolfEvent; players: numbe
         <p className="mt-2 text-xs text-amber-700">
           {formatCurrency(Math.abs(breakdown.unallocated))} of the buy-in is {breakdown.unallocated > 0 ? 'not assigned to a game' : 'over-assigned'}.
         </p>
+      ) : null}
+      {sideBets.length ? (
+        <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-sm">
+          <p className="font-semibold">Group games (not in the buy-in)</p>
+          <p className="text-slate-600">
+            {sideBets
+              .map(({ day, game }) => `${event.days.length > 1 ? `Day ${day.day} ` : ''}${gameDefinition(game.key).label}: ${formatCurrency(game.amount)} per bet`)
+              .join(' · ')}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">Played inside each group and settled in the app after the round.</p>
+        </div>
       ) : null}
     </Card>
   );

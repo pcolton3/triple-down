@@ -5,7 +5,7 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { BuyInCard, EventSchedule, eventDateRange } from '@/components/events/event-details';
 import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
-import { loadGolfEvent, loadRoster, signUp, type GolfEvent, type RosterEntry } from '@/lib/events/golf-events';
+import { isTeamEvent, loadGolfEvent, loadRoster, signUp, type GolfEvent, type RosterEntry } from '@/lib/events/golf-events';
 
 const inputClass = 'min-h-[48px] w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-base';
 
@@ -96,7 +96,8 @@ export default function JoinEventPage() {
         <p className="mt-2 text-sm font-semibold">{eventDateRange(event)}</p>
         {event.days.length ? (
           <p className="mt-1 text-sm text-white/80">
-            {event.days.length}-day Ryder Cup · {event.team_one_name} vs {event.team_two_name}
+            {event.days.length} day{event.days.length === 1 ? '' : 's'} of golf
+            {isTeamEvent(event) ? ` · Ryder Cup style · ${event.team_one_name} vs ${event.team_two_name}` : ''}
           </p>
         ) : null}
       </section>

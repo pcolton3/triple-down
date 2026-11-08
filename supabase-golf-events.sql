@@ -85,6 +85,7 @@ declare
   v_id uuid;
 begin
   if coalesce(trim(p_event->>'title'), '') = '' then raise exception 'Event title is required'; end if;
+  if pg_column_size(p_event) > 100000 then raise exception 'Event details are too long'; end if;
   insert into golf_events (code, title, description, days, agenda, buy_in, team_bet, ctp_per_day, skins_per_day, team_one_name, team_two_name, max_players)
   values (
     v_code,
@@ -203,6 +204,7 @@ declare v_id uuid;
 begin
   select id into v_id from golf_events where code = upper(trim(p_code));
   if v_id is null or not golf_event_key_ok(v_id, p_key) then raise exception 'Organizer link is not valid'; end if;
+  if pg_column_size(p_patch) > 100000 then raise exception 'Event details are too long'; end if;
   update golf_events set
     title = coalesce(nullif(trim(p_patch->>'title'), ''), title),
     description = coalesce(p_patch->>'description', description),
@@ -210,7 +212,10 @@ begin
     agenda = coalesce(p_patch->'agenda', agenda),
     team_one_name = coalesce(nullif(trim(p_patch->>'team_one_name'), ''), team_one_name),
     team_two_name = coalesce(nullif(trim(p_patch->>'team_two_name'), ''), team_two_name),
-    signups_open = coalesce((p_patch->>'signups_open')::boolean, signups_open)
+    signups_open = coalesce((p_patch->>'signups_open')::boolean, signups_open),
+    buy_in = case when p_patch ? 'buy_in' then greatest(coalesce((p_patch->>'buy_in')::numeric, 0), 0) else buy_in end,
+    team_bet = case when p_patch ? 'team_bet' then greatest(coalesce((p_patch->>'team_bet')::numeric, 0), 0) else team_bet end,
+    max_players = case when p_patch ? 'max_players' then nullif(p_patch->>'max_players', '')::integer else max_players end
   where id = v_id;
 end;
 $$;

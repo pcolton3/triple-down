@@ -4,28 +4,31 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BuyInCard, EventSchedule } from '@/components/events/event-details';
+import { EventEditor, cleanDraft } from '@/components/events/event-editor';
 import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
 import { formatCurrency } from '@/lib/utils/currency';
 import {
-  FORMAT_LABELS,
+  isTeamEvent,
   loadGolfEvent,
   loadSignups,
+  organizerKeyStorageName as keyStorageName,
+  rememberMyEvent,
+  suggestedBuyIn,
   updateEvent,
   updateSignup,
-  type AgendaItem,
-  type EventDay,
+  validateDraft,
+  type EditableField,
+  type EventDraft,
   type GolfEvent,
-  type RyderFormat,
   type Signup,
   type TeamKey,
 } from '@/lib/events/golf-events';
 
-const input = 'min-h-[44px] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm';
-const label = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500';
+const EDITABLE: EditableField[] = ['title', 'description', 'days', 'agenda', 'team_one_name', 'team_two_name', 'buy_in', 'team_bet', 'max_players'];
 
-function keyStorageName(code: string) {
-  return `triple-track-organizer:${code}`;
+function pickDraft(event: GolfEvent): EventDraft {
+  return Object.fromEntries(EDITABLE.map((field) => [field, event[field]])) as EventDraft;
 }
 
 function readKey(code: string) {
@@ -43,21 +46,13 @@ function readKey(code: string) {
   }
 }
 
-function Field({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <label className="block min-w-0">
-      <span className={label}>{title}</span>
-      {children}
-    </label>
-  );
-}
 
 export default function OrganizeEventPage() {
   const params = useParams<{ eventCode: string }>();
   const code = params.eventCode?.toUpperCase() ?? '';
   const [key, setKey] = useState('');
   const [event, setEvent] = useState<GolfEvent | null>(null);
-  const [draft, setDraft] = useState<GolfEvent | null>(null);
+  const [draft, setDraft] = useState<EventDraft | null>(null);
   const [signups, setSignups] = useState<Signup[]>([]);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -66,7 +61,8 @@ export default function OrganizeEventPage() {
   const refresh = useCallback(async (organizerKey: string) => {
     const [nextEvent, nextSignups] = await Promise.all([loadGolfEvent(code), loadSignups(code, organizerKey)]);
     setEvent(nextEvent);
-    setDraft((current) => current ?? nextEvent);
+    setDraft((current) => current ?? (nextEvent ? pickDraft(nextEvent) : null));
+    if (nextEvent) rememberMyEvent(nextEvent.code, nextEvent.title);
     setSignups(nextSignups);
   }, [code]);
 
@@ -102,11 +98,11 @@ export default function OrganizeEventPage() {
     setNotice('');
     try {
       await action();
-      await refresh(key);
       if (success) setNotice(success);
     } catch (actionError) {
       setNotice(actionError instanceof Error ? actionError.message : 'Something went wrong.');
     } finally {
+      await refresh(key).catch((refreshError: Error) => setNotice(refreshError.message));
       setBusy(false);
     }
   }
@@ -120,13 +116,6 @@ export default function OrganizeEventPage() {
     }
   }
 
-  function setDay(index: number, patch: Partial<EventDay>) {
-    setDraft((current) => current && { ...current, days: current.days.map((day, i) => (i === index ? { ...day, ...patch } : day)) });
-  }
-
-  function setAgenda(id: string, patch: Partial<AgendaItem>) {
-    setDraft((current) => current && { ...current, agenda: current.agenda.map((item) => (item.id === id ? { ...item, ...patch } : item)) });
-  }
 
   if (error) {
     return (
@@ -138,7 +127,9 @@ export default function OrganizeEventPage() {
   if (!event || !draft) return <main className="mx-auto max-w-3xl px-4 py-8 text-slate-600" role="status">Loading organizer tools…</main>;
 
   const joinUrl = `${window.location.origin}/join/${event.code}`;
-  const dirty = JSON.stringify(draft) !== JSON.stringify(event);
+  const dirty = JSON.stringify(draft) !== JSON.stringify(pickDraft(event));
+  const teamEvent = isTeamEvent(event);
+  const preview: GolfEvent = { ...event, ...cleanDraft(draft) };
 
   return (
     <main className="mx-auto max-w-3xl space-y-4 px-4 py-6 pb-24">
@@ -175,6 +166,7 @@ export default function OrganizeEventPage() {
             </p>
           ) : null}
         </div>
+        {teamEvent ? (<>
         <div className="mb-3 grid gap-2 sm:grid-cols-2">
           <div className="rounded-xl bg-slate-50 px-3 py-2 text-sm">
             <p className="font-bold">{event.team_one_name}</p>
@@ -189,6 +181,7 @@ export default function OrganizeEventPage() {
         {stats.teamOne.length !== stats.teamTwo.length && !stats.unassigned && signups.length ? (
           <p className="mb-2 text-sm text-amber-700">Teams are uneven. Match play needs the same number of players on each side.</p>
         ) : null}
+        </>) : null}
         {signups.length ? (
           <ul className="divide-y divide-slate-100">
             {signups.map((signup) => (
@@ -198,6 +191,7 @@ export default function OrganizeEventPage() {
                   <p className="truncate text-sm text-slate-500">{signup.email}</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  {teamEvent ? (
                   <select
                     aria-label={`Team for ${signup.name}`}
                     className="min-h-[44px] rounded-xl border border-slate-300 bg-white px-2 text-sm"
@@ -209,6 +203,7 @@ export default function OrganizeEventPage() {
                     <option value="team_one">{event.team_one_name}</option>
                     <option value="team_two">{event.team_two_name}</option>
                   </select>
+                  ) : null}
                   <label className="flex min-h-[44px] items-center gap-2 rounded-xl border border-slate-300 px-3 text-sm">
                     <input type="checkbox" checked={signup.paid} disabled={busy} onChange={(e) => void run(() => updateSignup(code, key, signup.id, { paid: e.target.checked }))} />
                     Paid
@@ -232,85 +227,17 @@ export default function OrganizeEventPage() {
         )}
       </Card>
 
-      <Card className="space-y-4">
-        <h2 className="text-xl font-bold">Event details</h2>
-        <Field title="Event name">
-          <input className={input} value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
-        </Field>
-        <Field title="Message to players">
-          <textarea className={`${input} min-h-[96px]`} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
-        </Field>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field title="Team 1 name">
-            <input className={input} value={draft.team_one_name} onChange={(e) => setDraft({ ...draft, team_one_name: e.target.value })} />
-          </Field>
-          <Field title="Team 2 name">
-            <input className={input} value={draft.team_two_name} onChange={(e) => setDraft({ ...draft, team_two_name: e.target.value })} />
-          </Field>
-        </div>
-
-        {draft.days.map((day, index) => (
-          <section key={day.day} className="space-y-3 rounded-xl border border-[#c9d8c7] p-3">
-            <h3 className="font-bold">Golf day {day.day}</h3>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Field title="Date"><input type="date" className={input} value={day.date} onChange={(e) => setDay(index, { date: e.target.value })} /></Field>
-              <Field title="First tee time"><input type="time" className={input} value={day.teeTime ?? ''} onChange={(e) => setDay(index, { teeTime: e.target.value })} /></Field>
-              <Field title="Format">
-                <select className={input} value={day.format} onChange={(e) => setDay(index, { format: e.target.value as RyderFormat })}>
-                  {Object.entries(FORMAT_LABELS).map(([value, text]) => <option key={value} value={value}>{text}</option>)}
-                </select>
-              </Field>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field title="Course"><input className={input} value={day.course ?? ''} onChange={(e) => setDay(index, { course: e.target.value })} /></Field>
-              <Field title="Address"><input className={input} value={day.address ?? ''} onChange={(e) => setDay(index, { address: e.target.value })} /></Field>
-            </div>
-            <Field title="Course website"><input className={input} inputMode="url" value={day.website ?? ''} onChange={(e) => setDay(index, { website: e.target.value })} /></Field>
-            <Field title="Course notes (dress code, range, carts…)">
-              <textarea className={`${input} min-h-[72px]`} value={day.notes ?? ''} onChange={(e) => setDay(index, { notes: e.target.value })} />
-            </Field>
-          </section>
-        ))}
-
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="font-bold">Agenda (dinners, activities…)</h3>
-            <Button
-              variant="secondary"
-              onClick={() =>
-                setDraft({
-                  ...draft,
-                  agenda: [...draft.agenda, { id: crypto.randomUUID(), date: draft.days[0]?.date ?? '', time: '18:00', title: '' }],
-                })
-              }
-            >
-              Add item
-            </Button>
-          </div>
-          {draft.agenda.map((item) => (
-            <div key={item.id} className="space-y-3 rounded-xl border border-slate-200 p-3">
-              <div className="grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
-                <Field title="What"><input className={input} placeholder="Birthday dinner" value={item.title} onChange={(e) => setAgenda(item.id, { title: e.target.value })} /></Field>
-                <Field title="Date"><input type="date" className={input} value={item.date} onChange={(e) => setAgenda(item.id, { date: e.target.value })} /></Field>
-                <Field title="Time"><input type="time" className={input} value={item.time ?? ''} onChange={(e) => setAgenda(item.id, { time: e.target.value })} /></Field>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field title="Place"><input className={input} value={item.location ?? ''} onChange={(e) => setAgenda(item.id, { location: e.target.value })} /></Field>
-                <Field title="Address"><input className={input} value={item.address ?? ''} onChange={(e) => setAgenda(item.id, { address: e.target.value })} /></Field>
-              </div>
-              <Field title="Link (reservation, menu…)"><input className={input} inputMode="url" value={item.link ?? ''} onChange={(e) => setAgenda(item.id, { link: e.target.value })} /></Field>
-              <Field title="Notes"><textarea className={`${input} min-h-[60px]`} value={item.notes ?? ''} onChange={(e) => setAgenda(item.id, { notes: e.target.value })} /></Field>
-              <button type="button" className="text-sm text-red-700 underline" onClick={() => setDraft({ ...draft, agenda: draft.agenda.filter((entry) => entry.id !== item.id) })}>
-                Remove item
-              </button>
-            </div>
-          ))}
-        </section>
+      <Card>
+        <EventEditor
+          draft={draft}
+          onChange={setDraft}
+          autoBuyInDefault={event.buy_in === suggestedBuyIn(event)}
+        />
       </Card>
 
       <h2 className="px-1 pt-2 text-sm font-bold uppercase tracking-wide text-slate-500">What players see</h2>
-      <EventSchedule event={draft} />
-      <BuyInCard event={draft} players={signups.length} />
+      <EventSchedule event={preview} />
+      <BuyInCard event={preview} players={signups.length} />
 
       {notice ? <p role="status" className="rounded-xl bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">{notice}</p> : null}
 
@@ -321,16 +248,15 @@ export default function OrganizeEventPage() {
             disabled={!dirty || busy}
             onClick={() =>
               void run(async () => {
-                const agenda = draft.agenda.filter((item) => item.title.trim());
-                await updateEvent(code, key, {
-                  title: draft.title,
-                  description: draft.description,
-                  team_one_name: draft.team_one_name,
-                  team_two_name: draft.team_two_name,
-                  days: draft.days,
-                  agenda,
-                });
+                const clean = cleanDraft(draft);
+                const problems = validateDraft(clean);
+                if (problems.length) throw new Error(problems.join(' '));
+                await updateEvent(code, key, clean);
                 setDraft(null);
+                const saved = await loadGolfEvent(code);
+                if (saved && (saved.buy_in !== clean.buy_in || saved.team_bet !== clean.team_bet || saved.max_players !== clean.max_players)) {
+                  throw new Error('Saved, except the buy-in, team bet and player limit. Run the latest supabase-golf-events.sql in Supabase to allow editing those.');
+                }
               }, 'Event details saved.')
             }
           >

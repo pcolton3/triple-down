@@ -1,5 +1,6 @@
 'use client';
 
+import { readMyEvents, type MyEvent } from '@/lib/events/golf-events';
 import { readRecent, type RecentRound } from '@/lib/offline/local-rounds';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -13,6 +14,8 @@ export function Hero() {
 
   const [recent, setRecent] = useState<RecentRound | null>(null);
   useEffect(() => { try { setRecent(readRecent()); } catch { /* Joining still works if storage is unavailable. */ } }, []);
+  const [myEvents, setMyEvents] = useState<MyEvent[]>([]);
+  useEffect(() => setMyEvents(readMyEvents()), []);
 
   function handleJoin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -55,6 +58,28 @@ export function Hero() {
           </Button>
         </Link>
       </div>
+
+      <div className="mx-auto mt-3 flex max-w-md items-center justify-center">
+        <Link href="/events/new" className="w-full">
+          <Button variant="secondary" className="w-full py-4">
+            Plan an Event or Golf Trip
+          </Button>
+        </Link>
+      </div>
+
+      {myEvents.length ? (
+        <div className="mx-auto mt-5 max-w-md rounded-2xl border border-[#c9d8c7] bg-white p-4 shadow-sm">
+          <p className="font-bold text-[#0f5132]">Your events</p>
+          <ul className="mt-2 divide-y divide-slate-100 text-sm">
+            {myEvents.map((entry) => (
+              <li key={entry.code} className="flex items-center justify-between gap-3 py-2">
+                <span className="min-w-0 truncate font-semibold">{entry.title}</span>
+                <a href={`/join/${encodeURIComponent(entry.code)}/organize`} className="shrink-0 font-semibold text-[#0f5132] underline">Manage</a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {recent ? (
         <a href={`/r/${encodeURIComponent(recent.code)}/group/${recent.group}`} className="mx-auto mt-5 block max-w-md rounded-2xl border border-[#c9d8c7] bg-white p-4 shadow-sm">
