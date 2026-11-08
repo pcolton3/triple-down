@@ -409,9 +409,9 @@ export default function SettlePage() {
               : `These payouts are based on ${holesSaved} group holes saved so far.`}
           </p>
         </div>
-        <div className="flex gap-4 text-sm font-semibold text-[#2f8df3]">
-          <a href={`/r/${routeRoundCode}/history`}>History</a>
-          <a href={`/r/${routeRoundCode}`}>Back to Round</a>
+        <div className="flex shrink-0 flex-wrap justify-end gap-2 text-sm font-semibold">
+          <a className="inline-flex min-h-[44px] items-center rounded-xl border border-[#c9d8c7] px-3 text-[#0f5132]" href={`/r/${routeRoundCode}/history`}>History</a>
+          <a className="inline-flex min-h-[44px] items-center rounded-xl border border-[#c9d8c7] px-3 text-[#0f5132]" href={`/r/${routeRoundCode}`}>Back to round</a>
         </div>
       </div>
 

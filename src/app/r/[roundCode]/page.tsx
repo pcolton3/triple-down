@@ -574,9 +574,18 @@ export default function EventLeaderboardPage() {
   const eventPath = `/r/${round.roundCode}`;
 
   async function copyLink(path: string, label: string) {
-    const origin = typeof window === 'undefined' ? '' : window.location.origin;
-    await navigator.clipboard?.writeText(`${origin}${path}`);
-    setCopiedLink(label);
+    const url = `${window.location.origin}${path}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: round.title, text: `Follow ${round.title} live on Triple Track (code ${round.roundCode})`, url });
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      setCopiedLink(label);
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') return;
+      window.prompt('Copy this link to share the round:', url);
+    }
   }
 
   return (
@@ -595,31 +604,31 @@ export default function EventLeaderboardPage() {
               </span>
               <button
                 type="button"
-                className="rounded-xl bg-white/20 px-3 py-2 text-sm font-semibold"
+                className="inline-flex min-h-[44px] items-center rounded-xl bg-white/20 px-3 text-sm font-semibold"
                 onClick={() => void copyLink(eventPath, 'event')}
               >
-                {copiedLink === 'event' ? 'Copied' : 'Copy Event Link'}
+                {copiedLink === 'event' ? 'Link copied ✓' : 'Share round'}
               </button>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link className="rounded-xl bg-white/20 px-3 py-2 text-sm font-semibold" href={`/r/${round.roundCode}/settle`}>
+            <Link className="inline-flex min-h-[44px] items-center rounded-xl bg-white/20 px-3 text-sm font-semibold" href={`/r/${round.roundCode}/settle`}>
               Settle Up
             </Link>
-            <Link className="rounded-xl bg-white/20 px-3 py-2 text-sm font-semibold" href={`/r/${round.roundCode}/history`}>
+            <Link className="inline-flex min-h-[44px] items-center rounded-xl bg-white/20 px-3 text-sm font-semibold" href={`/r/${round.roundCode}/history`}>
               History
             </Link>
-            <Link className="rounded-xl bg-white/20 px-3 py-2 text-sm font-semibold" href={`/r/${round.roundCode}/setup`}>
+            <Link className="inline-flex min-h-[44px] items-center rounded-xl bg-white/20 px-3 text-sm font-semibold" href={`/r/${round.roundCode}/setup`}>
               Edit Setup
             </Link>
             {round.ryderEventCode ? (
               <>
-                <Link className="rounded-xl bg-white/20 px-3 py-2 text-sm font-semibold" href={`/e/${round.ryderEventCode}`}>
+                <Link className="inline-flex min-h-[44px] items-center rounded-xl bg-white/20 px-3 text-sm font-semibold" href={`/e/${round.ryderEventCode}`}>
                   Ryder Event
                 </Link>
                 {roundComplete ? (
                   <Link
-                    className="rounded-xl bg-white/20 px-3 py-2 text-sm font-semibold"
+                    className="inline-flex min-h-[44px] items-center rounded-xl bg-white/20 px-3 text-sm font-semibold"
                     href={`/rounds/new?ryderEventCode=${encodeURIComponent(round.ryderEventCode)}&ryderDay=${(round.ryderEventDay ?? 1) + 1}`}
                   >
                     Create Next Ryder Round

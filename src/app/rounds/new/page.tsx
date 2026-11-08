@@ -13,6 +13,7 @@ import { loadSavedGolfers, saveGolfersForLater, type SavedGolfer } from '@/lib/r
 import { loadSavedCourseTees, saveCourseTee, savedCourseKey, type SavedCourseTee } from '@/lib/realtime/saved-course-tees';
 import { BEEZER_EXTRA_GAMES, type BeezerExtraGameKey } from '@/lib/games/catalog';
 import { gameHelp } from '@/lib/games/help';
+import { GamePicker } from '@/components/round/game-picker';
 import type { CourseRecord } from '@/types/course';
 import type { HoleConfig } from '@/types/round';
 
@@ -1016,7 +1017,7 @@ function NewRoundPageContent() {
             {manualHoles.map((hole) => (
               <div key={hole.holeNumber} className="rounded-xl border border-slate-200 p-3">
                 <div className="mb-2 text-sm font-semibold text-slate-900">Hole {hole.holeNumber}</div>
-                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Par
                 </label>
                 <select
@@ -1028,7 +1029,7 @@ function NewRoundPageContent() {
                   <option value={4}>4</option>
                   <option value={5}>5</option>
                 </select>
-                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Hcp
                 </label>
                 <NumberField
@@ -1265,46 +1266,7 @@ function NewRoundPageContent() {
             </p>
           </div>
 
-          {[
-            { title: 'Scored by the app', scored: true },
-            { title: 'Record only: settle these yourselves', scored: false },
-          ].map((section) => {
-            const options = gameOptions.filter((option) => gameHelp(option.label).scored === section.scored);
-            const classic = options.filter((option) => !BEEZER_EXTRA_GAMES.some((game) => game.label === option.label));
-            const extras = options.filter((option) => BEEZER_EXTRA_GAMES.some((game) => game.label === option.label));
-            const renderOption = (option: (typeof gameOptions)[number]) => {
-              const help = gameHelp(option.label);
-              return (
-                <label
-                  key={option.label}
-                  className={`flex min-h-[52px] items-start gap-3 rounded-xl border px-3 py-3 ${option.checked ? 'border-[#0f5132] bg-[#eef7f0]' : 'border-slate-200 bg-white'}`}
-                >
-                  <input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-[#0f5132]" checked={option.checked} onChange={option.onToggle} />
-                  <span className="min-w-0">
-                    <span className="block font-semibold">{option.label}</span>
-                    {help.summary && !help.summary.startsWith('Recorded with the round') ? (
-                      <span className="mt-0.5 block text-xs text-slate-600">{help.summary}{help.money ? ` ${help.money}` : ''}</span>
-                    ) : null}
-                  </span>
-                </label>
-              );
-            };
-            return (
-              <div key={section.title} className="space-y-2">
-                <h3 className={`text-sm font-bold uppercase tracking-wide ${section.scored ? 'text-[#0f5132]' : 'text-slate-500'}`}>{section.title}</h3>
-                {!section.scored ? (
-                  <p className="text-xs text-slate-500">These show on the round so everyone knows they&apos;re on, but the app doesn&apos;t calculate them yet.</p>
-                ) : null}
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">{classic.map(renderOption)}</div>
-                {extras.length ? (
-                  <details open={extras.some((option) => option.checked)}>
-                    <summary className="cursor-pointer py-2 text-sm font-semibold text-slate-600">More games ({extras.length})</summary>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">{extras.map(renderOption)}</div>
-                  </details>
-                ) : null}
-              </div>
-            );
-          })}
+          <GamePicker options={gameOptions} />
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {bankerEnabled ? (

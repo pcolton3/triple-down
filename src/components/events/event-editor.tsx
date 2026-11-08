@@ -99,7 +99,7 @@ function GamePicker({ day, onChange }: { day: EventDay; onChange: (games: EventD
                 {game ? (
                   <span className="w-28 shrink-0">
                     <MoneyInput ariaLabel={`${definition.label} amount, day ${day.day}`} value={game.amount} onChange={(amount) => setAmount(definition.key, amount)} />
-                    <span className="mt-0.5 block text-center text-[11px] text-slate-500">{kind === 'pot' ? 'per player' : 'per bet'}</span>
+                    <span className="mt-0.5 block text-center text-xs text-slate-500">{kind === 'pot' ? 'per player' : 'per bet'}</span>
                   </span>
                 ) : null}
               </div>

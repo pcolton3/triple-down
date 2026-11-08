@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
 import { loadSharedRoundByCode, sharedRoundBundleToRoundState, updateSharedRoundSetup } from '@/lib/realtime/shared-rounds';
 import { saveCourseTee, savedCourseKey } from '@/lib/realtime/saved-course-tees';
 import { BEEZER_EXTRA_GAMES, type BeezerExtraGameKey } from '@/lib/games/catalog';
+import { GamePicker } from '@/components/round/game-picker';
 import { useRoundStore } from '@/stores/round-store';
 import type { Player, RoundState } from '@/types/round';
 
@@ -42,6 +43,25 @@ function buildPlayerDrafts(players: Player[]): PlayerDraft[] {
     ctpParticipant: player.ctpParticipant !== false,
     lowNetParticipant: player.lowNetParticipant !== false,
   }));
+}
+
+const inputClass = 'min-h-[48px] w-full rounded-xl border border-slate-300 bg-white px-3 py-3';
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-sm font-medium">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function MoneyField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <Field label={label}>
+      <input type="number" inputMode="decimal" min={0} step="any" className={inputClass} value={value} onFocus={(event) => event.currentTarget.select()} onChange={(event) => onChange(event.target.value)} />
+    </Field>
+  );
 }
 
 function getGroupLabel(round: RoundState, playerId: string) {
@@ -99,26 +119,11 @@ export default function EditRoundSetupPage() {
   const [teeColor, setTeeColor] = useState(round.gameSettings.teeColor ?? '');
   const [pcc, setPcc] = useState(String(round.gameSettings.pcc ?? 0));
   const [playerDrafts, setPlayerDrafts] = useState<PlayerDraft[]>(buildPlayerDrafts(round.players));
-  const [gamesOpen, setGamesOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [resetToken, setResetToken] = useState(0);
+  const [baseline, setBaseline] = useState<{ all: string; money: string } | null>(null);
 
   const groupCount = useMemo(() => round.multiFoursome?.groups.length ?? 1, [round.multiFoursome?.groups.length]);
-  const selectedGameLabels = [
-    bankerEnabled ? 'Banker' : null,
-    skinsEnabled ? 'Skins' : null,
-    ctpEnabled ? 'CTP' : null,
-    lowNetEnabled ? 'Low Net' : null,
-    nassauEnabled ? 'Nassau' : null,
-    stablefordEnabled ? 'Stableford' : null,
-    birdiePotEnabled ? 'Birdie Pot' : null,
-    eaglePotEnabled ? 'Eagle Pot' : null,
-    holeInOneEnabled ? 'Hole-in-One' : null,
-    wolfEnabled ? 'Wolf' : null,
-    bingoBangoBongoEnabled ? 'Bingo Bango Bongo' : null,
-    vegasEnabled ? 'Vegas' : null,
-    matchPlayEnabled ? 'Match Play' : null,
-    teamMatchPlayEnabled ? 'Team Match Play' : null,
-    ...BEEZER_EXTRA_GAMES.filter((game) => extraGames[game.key]).map((game) => game.label),
-  ].filter(Boolean);
   const gameOptions: Array<{ label: string; checked: boolean; onToggle: () => void }> = [
     { label: 'Banker', checked: bankerEnabled, onToggle: () => setBankerEnabled((value) => !value) },
     { label: 'Skins', checked: skinsEnabled, onToggle: () => setSkinsEnabled((value) => !value) },
@@ -140,6 +145,33 @@ export default function EditRoundSetupPage() {
       onToggle: () => setExtraGames((current) => ({ ...current, [game.key]: !current[game.key] })),
     })),
   ];
+
+  const moneyJson = JSON.stringify([
+    bankerEnabled, skinsEnabled, lowNetEnabled, ctpEnabled, nassauEnabled, stablefordEnabled, birdiePotEnabled, eaglePotEnabled, holeInOneEnabled,
+    teamMatchPlayEnabled, skinsPot, lowNetPot, ctpPot, nassauPot, stablefordPot, birdiePot, eaglePot, teamMatchPlayUnit,
+    teamAssignments, singlesPairings, ryderCupFormat,
+    playerDrafts.map((player) => [player.handicap, player.bankerParticipant, player.skinsParticipant, player.ctpParticipant, player.lowNetParticipant]),
+  ]);
+  const allJson = JSON.stringify([
+    moneyJson, title, courseName, ryderEventCode, ryderEventDay, wolfEnabled, bingoBangoBongoEnabled, vegasEnabled, matchPlayEnabled, extraGames,
+    extraGameUnits, wolfUnit, bingoBangoBongoUnit, vegasUnit, matchPlayUnit, teamOneName, teamTwoName, courseRating, slopeRating, teeColor, pcc,
+    playerDrafts.map((player) => player.name),
+  ]);
+  const dirty = baseline != null && baseline.all !== allJson;
+  const scoresEntered = round.holes.some((hole) => hole.isSaved);
+
+  useEffect(() => {
+    // Runs on the render after the form is reset from the loaded round.
+    if (resetToken > 0) setBaseline({ all: allJson, money: moneyJson });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetToken]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
 
   useEffect(() => {
     let cancelled = false;
@@ -208,6 +240,7 @@ export default function EditRoundSetupPage() {
     setTeeColor(round.gameSettings.teeColor ?? '');
     setPcc(String(round.gameSettings.pcc ?? 0));
     setPlayerDrafts(buildPlayerDrafts(round.players));
+    setResetToken((token) => token + 1);
   }, [round]);
 
   function updatePlayerDraft(playerId: string, field: keyof PlayerDraft, value: string | boolean) {
@@ -234,8 +267,12 @@ export default function EditRoundSetupPage() {
   }
 
   async function handleSaveSetup() {
+    if (saving) return;
+    if (scoresEntered && baseline && baseline.money !== moneyJson &&
+      !window.confirm('Some holes are already scored. Changing games, pots, handicaps or who plays what recalculates the payouts for the whole round. Save these changes?')) return;
+    setSaving(true);
     try {
-      setSaveStatus('Saving setup...');
+      setSaveStatus('Saving…');
       const playerById = new Map(playerDrafts.map((player) => [player.id, player]));
       const nextPlayers = round.players.map((player) => {
         const draft = playerById.get(player.id);
@@ -330,7 +367,7 @@ export default function EditRoundSetupPage() {
 
       hydrateRound(nextRound);
       await updateSharedRoundSetup(nextRound);
-      await saveCourseTee({
+      if (courseRating.trim() && slopeRating.trim()) await saveCourseTee({
         courseKey: savedCourseKey(nextRound.selectedCourseId ?? null, nextRound.courseName),
         courseName: nextRound.courseName,
         teeColor: teeColor.trim(),
@@ -341,323 +378,204 @@ export default function EditRoundSetupPage() {
       if (bundle) {
         hydrateRound(sharedRoundBundleToRoundState(bundle));
       }
-      setSaveStatus('Setup saved.');
+      setSaveStatus('Saved ✓');
     } catch (error) {
       console.error('Unable to save setup.', error);
-      setSaveStatus(error instanceof Error ? error.message : 'Unable to save setup.');
+      setSaveStatus(error instanceof Error ? `Couldn't save: ${error.message}` : "Couldn't save. Check your connection and try again.");
+    } finally {
+      setSaving(false);
     }
   }
 
+  const participation = (player: PlayerDraft) =>
+    [
+      bankerEnabled && player.bankerParticipant ? 'Banker' : null,
+      skinsEnabled && player.skinsParticipant ? 'Skins' : null,
+      ctpEnabled && player.ctpParticipant ? 'CTP' : null,
+      lowNetEnabled && player.lowNetParticipant ? 'Low Net' : null,
+    ].filter(Boolean).join(', ') || 'no side games';
+  const checkbox = (player: PlayerDraft, field: 'bankerParticipant' | 'skinsParticipant' | 'ctpParticipant' | 'lowNetParticipant', label: string) => (
+    <label key={field} className="flex min-h-[48px] items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold">
+      <input type="checkbox" className="h-5 w-5 accent-[#0f5132]" checked={player[field]} onChange={() => updatePlayerDraft(player.id, field, !player[field])} />
+      {label}
+    </label>
+  );
+
   return (
-    <main className="mx-auto max-w-4xl space-y-4 px-4 py-6">
+    <main className="mx-auto max-w-3xl space-y-4 px-4 py-6 pb-32">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Edit Round Setup</h1>
-          <p className="mt-2 text-sm text-slate-600">Update event details, pots, handicap settings, and player setup.</p>
+          <h1 className="text-3xl font-bold">Edit round</h1>
+          <p className="mt-1 text-sm text-slate-600">Fix names, handicaps, games or pots. Scores already entered stay with each golfer.</p>
         </div>
-        <Link href={`/r/${routeRoundCode}`} className="text-sm font-semibold text-[#2f8df3]">
-          Back to Round
+        <Link href={`/r/${routeRoundCode}`} className="inline-flex min-h-[44px] shrink-0 items-center rounded-xl border border-[#c9d8c7] px-3 text-sm font-semibold text-[#0f5132]">
+          Back to round
         </Link>
       </div>
 
-      {loadStatus === 'loading' ? <Card className="text-sm text-slate-600">Loading round {routeRoundCode}...</Card> : null}
-      {loadStatus === 'not_found' ? <Card className="text-sm text-slate-600">No round was found for code {routeRoundCode}.</Card> : null}
+      {loadStatus === 'loading' ? <Card className="text-sm text-slate-600" role="status">Loading round {routeRoundCode}…</Card> : null}
+      {loadStatus === 'not_found' ? <Card className="text-sm text-slate-600">No round was found for code {routeRoundCode}. Check the code and try again.</Card> : null}
 
+      {loadStatus === 'ready' ? (
+      <>
       <Card className="space-y-4">
-        <h2 className="text-xl font-bold">Event</h2>
+        <h2 className="text-xl font-bold">1. Round &amp; course</h2>
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Round Title</span>
-            <input className="w-full rounded-xl border border-slate-300 px-3 py-3" value={title} onChange={(event) => setTitle(event.target.value)} />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Course Name</span>
-            <input className="w-full rounded-xl border border-slate-300 px-3 py-3" value={courseName} onChange={(event) => setCourseName(event.target.value)} />
-          </label>
+          <Field label="Round title">
+            <input className={inputClass} value={title} onChange={(event) => setTitle(event.target.value)} />
+          </Field>
+          <Field label="Course name">
+            <input className={inputClass} value={courseName} onChange={(event) => setCourseName(event.target.value)} />
+          </Field>
         </div>
+        <details className="rounded-xl border border-slate-200 p-3">
+          <summary className="cursor-pointer font-semibold">Handicap posting <span className="font-normal text-slate-500">(optional)</span></summary>
+          <p className="mt-2 text-sm text-slate-500">Only needed if you post scores for your official handicap. Copy the ratings for your tees from the scorecard.</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <Field label="Tee color">
+              <input className={inputClass} value={teeColor} onChange={(event) => setTeeColor(event.target.value)} />
+            </Field>
+            <Field label="Course rating">
+              <input type="number" inputMode="decimal" className={inputClass} value={courseRating} onChange={(event) => setCourseRating(event.target.value)} />
+            </Field>
+            <Field label="Slope rating">
+              <input type="number" inputMode="numeric" className={inputClass} value={slopeRating} onChange={(event) => setSlopeRating(event.target.value)} />
+            </Field>
+            <Field label="Playing conditions adjustment (PCC)">
+              <input type="number" inputMode="decimal" className={inputClass} value={pcc} onChange={(event) => setPcc(event.target.value)} />
+            </Field>
+          </div>
+        </details>
       </Card>
 
-      <Card className="space-y-4">
-        <h2 className="text-xl font-bold">Games, Pots, and Handicap Posting</h2>
-        <div className="relative">
-          <button
-            type="button"
-            className="flex w-full items-center justify-between rounded-xl border border-slate-300 bg-white px-3 py-3 text-left font-semibold"
-            onClick={() => setGamesOpen((value) => !value)}
-          >
-            <span>{selectedGameLabels.length > 0 ? selectedGameLabels.join(', ') : 'Select games'}</span>
-            <span className="text-slate-500">{gamesOpen ? 'Close' : 'Open'}</span>
-          </button>
-          {gamesOpen ? (
-            <div className="absolute left-0 right-0 z-20 mt-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-lg">
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {gameOptions.map((option) => (
-                  <label key={option.label} className="flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold">
-                    <input
-                      type="checkbox"
-                      className="mr-2 h-4 w-4"
-                      checked={option.checked}
-                      onChange={option.onToggle}
-                    />
-                    {option.label}
-                  </label>
-                ))}
-              </div>
-              <div className="mt-3 flex justify-end">
-                <Button type="button" onClick={() => setGamesOpen(false)}>
-                  Submit
-                </Button>
-              </div>
-            </div>
-          ) : null}
+      <Card className="space-y-3">
+        <div>
+          <h2 className="text-xl font-bold">2. Golfers</h2>
+          <p className="text-sm text-slate-500">
+            {groupCount > 1 ? 'Groups can\'t be changed after the round starts, so saved scores stay with the right golfer. ' : ''}
+            Handicap is each golfer&apos;s handicap index.
+          </p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-3">
-          {skinsEnabled ? (
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Skins Pot</span>
-            <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={skinsPot} onChange={(event) => setSkinsPot(event.target.value)} />
-          </label>
-          ) : null}
-          {lowNetEnabled ? (
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Low Net Pot</span>
-            <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={lowNetPot} onChange={(event) => setLowNetPot(event.target.value)} />
-          </label>
-          ) : null}
-          {ctpEnabled ? (
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">CTP Pot</span>
-            <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={ctpPot} onChange={(event) => setCtpPot(event.target.value)} />
-          </label>
-          ) : null}
-          {nassauEnabled ? (
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Nassau Pot</span>
-            <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={nassauPot} onChange={(event) => setNassauPot(event.target.value)} />
-          </label>
-          ) : null}
-          {stablefordEnabled ? (
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Stableford Pot</span>
-            <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={stablefordPot} onChange={(event) => setStablefordPot(event.target.value)} />
-          </label>
-          ) : null}
-          {birdiePotEnabled ? (
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Birdie Pot</span>
-            <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={birdiePot} onChange={(event) => setBirdiePot(event.target.value)} />
-          </label>
-          ) : null}
-          {eaglePotEnabled ? (
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Eagle Pot</span>
-            <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={eaglePot} onChange={(event) => setEaglePot(event.target.value)} />
-          </label>
-          ) : null}
-          {wolfEnabled ? (
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Wolf Unit</span>
-            <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={wolfUnit} onChange={(event) => setWolfUnit(event.target.value)} />
-          </label>
-          ) : null}
-          {bingoBangoBongoEnabled ? (
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Bingo Bango Bongo Unit</span>
-            <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={bingoBangoBongoUnit} onChange={(event) => setBingoBangoBongoUnit(event.target.value)} />
-          </label>
-          ) : null}
-          {vegasEnabled ? (
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Vegas Unit</span>
-            <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={vegasUnit} onChange={(event) => setVegasUnit(event.target.value)} />
-          </label>
-          ) : null}
-          {matchPlayEnabled ? (
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Match Play Unit</span>
-            <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={matchPlayUnit} onChange={(event) => setMatchPlayUnit(event.target.value)} />
-          </label>
-          ) : null}
-          {teamMatchPlayEnabled ? (
-          <>
-            <label className="block">
-              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Ryder Event Code</span>
-              <input className="w-full rounded-xl border border-slate-300 px-3 py-3 uppercase" value={ryderEventCode} onChange={(event) => setRyderEventCode(event.target.value.toUpperCase())} />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Ryder Day</span>
-              <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={ryderEventDay} onChange={(event) => setRyderEventDay(event.target.value)} />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Ryder Format</span>
-              <select
-                className="w-full rounded-xl border border-slate-300 px-3 py-3"
-                value={ryderCupFormat}
-                onChange={(event) => setRyderCupFormat(event.target.value as 'team_match' | 'singles_match')}
-              >
-                <option value="team_match">Day 1 - Team Match Play</option>
-                <option value="singles_match">Day 2 - Singles Match Play</option>
-              </select>
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Team Match Unit</span>
-              <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={teamMatchPlayUnit} onChange={(event) => setTeamMatchPlayUnit(event.target.value)} />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Team 1 Name</span>
-              <input className="w-full rounded-xl border border-slate-300 px-3 py-3" value={teamOneName} onChange={(event) => setTeamOneName(event.target.value)} />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Team 2 Name</span>
-              <input className="w-full rounded-xl border border-slate-300 px-3 py-3" value={teamTwoName} onChange={(event) => setTeamTwoName(event.target.value)} />
-            </label>
-          </>
-          ) : null}
-          {BEEZER_EXTRA_GAMES.filter((game) => extraGames[game.key]).map((game) => (
-          <label key={game.key} className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{game.unitLabel}</span>
-            <input
-              type="number"
-              inputMode="numeric"
-              className="w-full rounded-xl border border-slate-300 px-3 py-3"
-              value={extraGameUnits[game.key] ?? '0'}
-              onChange={(event) => setExtraGameUnits((current) => ({ ...current, [game.key]: event.target.value }))}
-            />
-          </label>
-          ))}
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Tee Color</span>
-            <input className="w-full rounded-xl border border-slate-300 px-3 py-3" value={teeColor} onChange={(event) => setTeeColor(event.target.value)} />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Course Rating</span>
-            <input type="number" inputMode="decimal" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={courseRating} onChange={(event) => setCourseRating(event.target.value)} />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Slope Rating</span>
-            <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={slopeRating} onChange={(event) => setSlopeRating(event.target.value)} />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">PCC</span>
-            <input type="number" inputMode="decimal" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={pcc} onChange={(event) => setPcc(event.target.value)} />
-          </label>
-        </div>
-      </Card>
-
-      <Card>
-        <div className="mb-4">
-          <h2 className="text-xl font-bold">Players</h2>
-          <p className="text-sm text-slate-500">Player IDs and score history stay attached while you correct visible names or handicaps.</p>
-        </div>
-        <div className="space-y-3">
-          {playerDrafts.map((player) => (
-            <div key={player.id} className="grid gap-3 rounded-xl bg-slate-50 p-3 sm:grid-cols-[100px_1fr_110px]">
-              <div>
-                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Group</span>
-                <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold">{getGroupLabel(round, player.id)}</div>
-              </div>
-              <label className="block">
-                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Name</span>
-                <input className="w-full rounded-xl border border-slate-300 px-3 py-3" value={player.name} onChange={(event) => updatePlayerDraft(player.id, 'name', event.target.value)} />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">HCP</span>
-                <input type="number" inputMode="numeric" className="w-full rounded-xl border border-slate-300 px-3 py-3" value={player.handicap} onChange={(event) => updatePlayerDraft(player.id, 'handicap', event.target.value)} />
-              </label>
-              <div className="sm:col-span-3">
-                <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">Games</span>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {bankerEnabled ? (
-                  <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
-                    <input type="checkbox" className="mr-2 h-4 w-4" checked={player.bankerParticipant} onChange={() => updatePlayerDraft(player.id, 'bankerParticipant', !player.bankerParticipant)} />
-                    Banker
-                  </label>
-                  ) : null}
-                  {skinsEnabled ? (
-                  <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
-                    <input type="checkbox" className="mr-2 h-4 w-4" checked={player.skinsParticipant} onChange={() => updatePlayerDraft(player.id, 'skinsParticipant', !player.skinsParticipant)} />
-                    Skins
-                  </label>
-                  ) : null}
-                  {ctpEnabled ? (
-                  <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
-                    <input type="checkbox" className="mr-2 h-4 w-4" checked={player.ctpParticipant} onChange={() => updatePlayerDraft(player.id, 'ctpParticipant', !player.ctpParticipant)} />
-                    CTP
-                  </label>
-                  ) : null}
-                  {lowNetEnabled ? (
-                  <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
-                    <input type="checkbox" className="mr-2 h-4 w-4" checked={player.lowNetParticipant} onChange={() => updatePlayerDraft(player.id, 'lowNetParticipant', !player.lowNetParticipant)} />
-                    Low Net
-                  </label>
-                  ) : null}
+        {playerDrafts.map((player) => (
+          <div key={player.id} className="grid gap-3 rounded-xl bg-slate-50 p-3 sm:grid-cols-[minmax(0,1fr)_120px]">
+            <Field label={groupCount > 1 ? `Name · ${getGroupLabel(round, player.id)}` : 'Name'}>
+              <input className={inputClass} value={player.name} onChange={(event) => updatePlayerDraft(player.id, 'name', event.target.value)} />
+            </Field>
+            <Field label="Handicap">
+              <input type="number" inputMode="decimal" step="0.1" className={inputClass} value={player.handicap} onFocus={(event) => event.currentTarget.select()} onChange={(event) => updatePlayerDraft(player.id, 'handicap', event.target.value)} />
+            </Field>
+            {bankerEnabled || skinsEnabled || ctpEnabled || lowNetEnabled ? (
+              <details className="sm:col-span-2">
+                <summary className="cursor-pointer text-sm font-semibold text-slate-600">
+                  Plays: {participation(player)} <span className="font-normal text-slate-500">(change)</span>
+                </summary>
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {bankerEnabled ? checkbox(player, 'bankerParticipant', 'Banker') : null}
+                  {skinsEnabled ? checkbox(player, 'skinsParticipant', 'Skins') : null}
+                  {ctpEnabled ? checkbox(player, 'ctpParticipant', 'CTP') : null}
+                  {lowNetEnabled ? checkbox(player, 'lowNetParticipant', 'Low Net') : null}
                 </div>
-              </div>
-              {teamMatchPlayEnabled ? (
-                <div className="sm:col-span-3">
-                  <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">Ryder Cup Team</span>
-                  <div className="grid grid-cols-2 gap-2">
-                    <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
-                      <input
-                        type="radio"
-                        className="mr-2 h-4 w-4"
-                        checked={(teamAssignments[player.id] ?? 'team_one') === 'team_one'}
-                        onChange={() => setPlayerTeam(player.id, 'team_one')}
-                      />
-                      {teamOneName || 'Team 1'}
+              </details>
+            ) : null}
+            {teamMatchPlayEnabled ? (
+              <div className="sm:col-span-2">
+                <span className="mb-2 block text-sm font-medium">Ryder Cup team</span>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['team_one', 'team_two'] as const).map((team) => (
+                    <label key={team} className="flex min-h-[48px] items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold">
+                      <input type="radio" className="h-5 w-5 accent-[#0f5132]" checked={(teamAssignments[player.id] ?? 'team_one') === team} onChange={() => setPlayerTeam(player.id, team)} />
+                      {team === 'team_one' ? teamOneName || 'Team 1' : teamTwoName || 'Team 2'}
                     </label>
-                    <label className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold">
-                      <input
-                        type="radio"
-                        className="mr-2 h-4 w-4"
-                        checked={(teamAssignments[player.id] ?? 'team_one') === 'team_two'}
-                        onChange={() => setPlayerTeam(player.id, 'team_two')}
-                      />
-                      {teamTwoName || 'Team 2'}
-                    </label>
-                  </div>
-                  {ryderCupFormat === 'singles_match' ? (
-                    <div className="mt-3">
-                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Singles Opponent</label>
-                      <select
-                        className="w-full rounded-xl border border-slate-300 px-3 py-3"
-                        value={singlesPairings[player.id] ?? ''}
-                        onChange={(event) => setSinglesOpponent(player.id, event.target.value)}
-                      >
+                  ))}
+                </div>
+                {ryderCupFormat === 'singles_match' ? (
+                  <div className="mt-3">
+                    <Field label="Singles opponent">
+                      <select className={inputClass} value={singlesPairings[player.id] ?? ''} onChange={(event) => setSinglesOpponent(player.id, event.target.value)}>
                         <option value="">Auto pair by team order</option>
                         {playerDrafts
-                          .filter((opponent) => {
-                            if (opponent.id === player.id) return false;
-                            const playerTeam = teamAssignments[player.id] ?? 'team_one';
-                            const opponentTeam = teamAssignments[opponent.id] ?? 'team_one';
-                            return playerTeam !== opponentTeam;
-                          })
+                          .filter((opponent) => opponent.id !== player.id && (teamAssignments[player.id] ?? 'team_one') !== (teamAssignments[opponent.id] ?? 'team_one'))
                           .map((opponent) => (
-                            <option key={opponent.id} value={opponent.id}>
-                              {opponent.name.trim() || opponent.id}
-                            </option>
+                            <option key={opponent.id} value={opponent.id}>{opponent.name.trim() || opponent.id}</option>
                           ))}
                       </select>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          ))}
-        </div>
+                    </Field>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ))}
       </Card>
 
-      <div className="flex items-center justify-end gap-3">
-        {saveStatus ? <span className="text-sm text-slate-600">{saveStatus}</span> : null}
-        <Button type="button" onClick={() => void handleSaveSetup()}>
-          Save Setup
-        </Button>
-      </div>
+      <Card className="space-y-4">
+        <div>
+          <h2 className="text-xl font-bold">3. Games</h2>
+          <p className="text-sm text-slate-500">
+            {scoresEntered ? 'Scores are already in, so changing games or pots recalculates the payouts. ' : ''}
+            <Link href="/games" target="_blank" className="font-semibold text-[#0f5132] underline">How the games work</Link>
+          </p>
+        </div>
+        <GamePicker options={gameOptions} />
+        <div className="grid gap-3 sm:grid-cols-2">
+          {skinsEnabled ? <MoneyField label="Skins pot (total $)" value={skinsPot} onChange={setSkinsPot} /> : null}
+          {lowNetEnabled ? <MoneyField label="Low net pot (total $)" value={lowNetPot} onChange={setLowNetPot} /> : null}
+          {ctpEnabled ? <MoneyField label="Closest-to-pin pot (total $)" value={ctpPot} onChange={setCtpPot} /> : null}
+          {nassauEnabled ? <MoneyField label="Nassau pot (total $)" value={nassauPot} onChange={setNassauPot} /> : null}
+          {stablefordEnabled ? <MoneyField label="Stableford pot (total $)" value={stablefordPot} onChange={setStablefordPot} /> : null}
+          {birdiePotEnabled ? <MoneyField label="Birdie pot (total $)" value={birdiePot} onChange={setBirdiePot} /> : null}
+          {eaglePotEnabled ? <MoneyField label="Eagle pot (total $)" value={eaglePot} onChange={setEaglePot} /> : null}
+          {wolfEnabled ? <MoneyField label="Wolf $ per point (for reference)" value={wolfUnit} onChange={setWolfUnit} /> : null}
+          {bingoBangoBongoEnabled ? <MoneyField label="Bingo Bango Bongo $ per point (for reference)" value={bingoBangoBongoUnit} onChange={setBingoBangoBongoUnit} /> : null}
+          {vegasEnabled ? <MoneyField label="Vegas $ per point (for reference)" value={vegasUnit} onChange={setVegasUnit} /> : null}
+          {matchPlayEnabled ? <MoneyField label="Match play $ per match (for reference)" value={matchPlayUnit} onChange={setMatchPlayUnit} /> : null}
+          {BEEZER_EXTRA_GAMES.filter((game) => extraGames[game.key]).map((game) => (
+            <MoneyField
+              key={game.key}
+              label={`${game.label} $ (for reference)`}
+              value={extraGameUnits[game.key] ?? '0'}
+              onChange={(value) => setExtraGameUnits((current) => ({ ...current, [game.key]: value }))}
+            />
+          ))}
+        </div>
+        {holeInOneEnabled ? <p className="text-sm text-slate-500">Hole-in-one pays $100 from every other golfer to the player who made it.</p> : null}
+        {teamMatchPlayEnabled ? (
+          <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
+            <h3 className="font-bold sm:col-span-2">Ryder Cup</h3>
+            <Field label="Format">
+              <select className={inputClass} value={ryderCupFormat} onChange={(event) => setRyderCupFormat(event.target.value as 'team_match' | 'singles_match')}>
+                <option value="team_match">Team match play (2 vs 2)</option>
+                <option value="singles_match">Singles match play (1 vs 1)</option>
+              </select>
+            </Field>
+            <MoneyField label="Team match $ per point" value={teamMatchPlayUnit} onChange={setTeamMatchPlayUnit} />
+            <Field label="Team 1 name">
+              <input className={inputClass} value={teamOneName} onChange={(event) => setTeamOneName(event.target.value)} />
+            </Field>
+            <Field label="Team 2 name">
+              <input className={inputClass} value={teamTwoName} onChange={(event) => setTeamTwoName(event.target.value)} />
+            </Field>
+            <Field label="Ryder event code (links days together)">
+              <input className={`${inputClass} uppercase`} value={ryderEventCode} onChange={(event) => setRyderEventCode(event.target.value.toUpperCase())} />
+            </Field>
+            <Field label="Day number">
+              <input type="number" inputMode="numeric" min={1} className={inputClass} value={ryderEventDay} onChange={(event) => setRyderEventDay(event.target.value)} />
+            </Field>
+          </div>
+        ) : null}
+      </Card>
 
-      {groupCount > 1 ? (
-        <p className="text-sm text-slate-500">
-          Group moves are intentionally read-only here so saved hole scores stay attached to the right player IDs.
-        </p>
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_20px_rgba(15,23,42,0.08)] backdrop-blur">
+        <div className="mx-auto flex max-w-3xl items-center gap-3">
+          <p role="status" className="min-w-0 flex-1 text-sm text-slate-600">
+            {saving ? 'Saving…' : saveStatus.startsWith("Couldn't") ? saveStatus : dirty ? 'You have unsaved changes.' : saveStatus || 'No changes yet.'}
+          </p>
+          <Button type="button" className="shrink-0 px-6 py-4" disabled={saving || !dirty} onClick={() => void handleSaveSetup()}>
+            {saving ? 'Saving…' : 'Save changes'}
+          </Button>
+        </div>
+      </div>
+      </>
       ) : null}
     </main>
   );

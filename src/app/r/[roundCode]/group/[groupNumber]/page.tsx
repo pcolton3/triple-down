@@ -64,7 +64,7 @@ function NumberField({
       min={par ? 1 : 0}
       step={par ? 1 : 0.01}
       type="number"
-      inputMode="numeric"
+      inputMode={par ? 'numeric' : 'decimal'}
       value={displayValue}
       disabled={disabled}
       placeholder={placeholder}
@@ -91,7 +91,7 @@ function NumberField({
             onClick={() => onChange(item.score)}
           >
             <span className="block text-lg font-bold tabular-nums">{item.score}</span>
-            <span className="block text-[11px] font-semibold uppercase tracking-wide">{item.label}</span>
+            <span className="block text-xs font-semibold uppercase tracking-wide">{item.label}</span>
           </button>
         ))}
       </div>
@@ -158,6 +158,7 @@ export default function GroupScoringPage() {
   const [loadError, setLoadError] = useState('');
   const [scorekeeperName, setScorekeeperName] = useState('');
   const [claimStatus, setClaimStatus] = useState('');
+  const [claiming, setClaiming] = useState(false);
   const [audit, setAudit] = useState<Correction[]>([]);
   const [busy, setBusy] = useState(false);
   const editingBaseline = useRef<HoleState | null>(null);
@@ -267,6 +268,8 @@ export default function GroupScoringPage() {
   }
 
   async function handleClaimScorekeeper() {
+    if (claiming) return;
+    setClaiming(true);
     try {
       setClaimStatus('');
       const roundId = await ensureSharedRoundId();
@@ -277,7 +280,7 @@ export default function GroupScoringPage() {
         scorekeeperName: scorekeeperName.trim() || `Group ${groupNumber} Scorekeeper`,
       });
       await refreshRound();
-      setClaimStatus('Scorekeeper mode enabled for this device.');
+      setClaimStatus(`You're keeping score for Group ${groupNumber} ✓`);
     } catch (error) {
       setClaimStatus(formatUnknownError(error, 'Unable to claim scorekeeper.'));
       try {
@@ -285,6 +288,8 @@ export default function GroupScoringPage() {
       } catch {
         // The claim error is more useful than a follow-up refresh error.
       }
+    } finally {
+      setClaiming(false);
     }
   }
 
@@ -311,7 +316,7 @@ export default function GroupScoringPage() {
         setAudit(corrections(round.id, groupNumber));
       }
       editingBaseline.current = structuredClone(after);
-      setMessage('Correction saved on this device. Check sync status below.');
+      setMessage(`Hole ${targetHoleNumber} correction saved ✓`);
     } catch (error) { setMessage(formatUnknownError(error, 'Unable to save correction. Keep this page open and retry.')); }
     finally { setBusy(false); }
   }
@@ -327,7 +332,7 @@ export default function GroupScoringPage() {
       await persistHoleSnapshot(completedHoleNumber, isFinalHole ? completedHoleNumber : completedHoleNumber + 1);
       if (isFinalHole) { window.scrollTo({ top: 0 }); setMessage(''); return; }
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      setMessage(`Hole ${completedHoleNumber} saved on this device.`);
+      setMessage(`Hole ${completedHoleNumber} saved ✓`);
     } catch (error) {
       hydrateRound(before);
       setMessage(formatUnknownError(error, 'Unable to save. Keep this page open and retry.'));
@@ -348,15 +353,24 @@ export default function GroupScoringPage() {
       editingBaseline.current = structuredClone(entry.before);
       setAudit(corrections(round.id, groupNumber));
       void flushScores();
-      setMessage('Correction undone. Check sync status below.');
+      setMessage('Correction undone ✓');
     } catch (error) { setMessage(formatUnknownError(error, 'Unable to undo correction.')); }
     finally { setBusy(false); }
   }
 
-  async function copyEventLink() {
-    const origin = typeof window === 'undefined' ? '' : window.location.origin;
-    await navigator.clipboard?.writeText(`${origin}/r/${round.roundCode}`);
-    setCopiedEventLink(true);
+  async function shareRoundLink() {
+    const url = `${window.location.origin}/r/${round.roundCode}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: round.title, text: `Follow ${round.title} live on Triple Track (code ${round.roundCode})`, url });
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      setCopiedEventLink(true);
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') return;
+      setMessage(`Couldn't share automatically. Send this link: ${url}`);
+    }
   }
 
   useEffect(() => {
@@ -553,17 +567,17 @@ export default function GroupScoringPage() {
               <span className="rounded-xl bg-white px-3 py-2 font-mono text-lg font-bold text-[#1f2937]">
                 {round.roundCode}
               </span>
-              <span className="rounded-xl bg-white/20 px-3 py-2 text-sm font-semibold">{savedGroupHoles}/{round.totalHoles} saved</span>
+              <span className="inline-flex min-h-[44px] items-center rounded-xl bg-white/20 px-3 text-sm font-semibold">{savedGroupHoles}/{round.totalHoles} saved</span>
               <button
                 type="button"
-                className="rounded-xl bg-white/20 px-3 py-2 text-sm font-semibold"
-                onClick={() => void copyEventLink()}
+                className="inline-flex min-h-[44px] items-center rounded-xl bg-white/20 px-3 text-sm font-semibold"
+                onClick={() => void shareRoundLink()}
               >
-                {copiedEventLink ? 'Event Link Copied' : 'Copy Event Link'}
+                {copiedEventLink ? 'Link copied ✓' : 'Share round'}
               </button>
             </div>
           </div>
-          <Link className="rounded-xl bg-white/20 px-3 py-2 text-sm font-semibold" href={`/r/${round.roundCode}`}>
+          <Link className="inline-flex min-h-[44px] shrink-0 items-center rounded-xl bg-white/20 px-3 text-sm font-semibold" href={`/r/${round.roundCode}`}>
             Leaderboard
           </Link>
         </div>
@@ -573,39 +587,29 @@ export default function GroupScoringPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-          <h2 className="text-lg font-bold">Scorekeeper</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              {canEdit
-                ? isEditingPastHole
-                  ? 'This device can edit this saved hole for this group.'
-                  : 'This device can edit scores for this group.'
-                : isClaimed
-                  ? `${group?.scorekeeperName ?? 'Another scorekeeper'} is scoring this group. You can still view live scores.`
-                  : 'Anyone can view. The first person to claim this group can edit scores.'}
-            </p>
-          </div>
-          {canEdit ? <span className="rounded-xl bg-green-50 px-3 py-2 text-sm font-bold text-green-700">Scorekeeper</span> : <span className="rounded-xl bg-slate-100 px-3 py-2 text-sm font-bold text-slate-600">Viewing</span>}
-        </div>
-
-        {!isClaimed ? (
-          <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]">
-            <input
-              className="min-w-0 rounded-xl border border-slate-300 px-3 py-3"
-              value={scorekeeperName}
-              placeholder="Scorekeeper name"
-              onChange={(event) => setScorekeeperName(event.target.value)}
-            />
-            <Button type="button" onClick={() => void handleClaimScorekeeper()}>
-              Claim
-            </Button>
-          </div>
-        ) : null}
-
-        {claimStatus ? <p className="mt-3 text-sm text-slate-500">{claimStatus}</p> : null}
-      </section>
+      {!isClaimed ? (
+        <section className="rounded-2xl border-2 border-[#0f5132] bg-[#eef7f0] p-4 shadow-sm">
+          <h2 className="text-lg font-bold">Keeping score for Group {groupNumber}?</h2>
+          <p className="mt-1 text-sm text-slate-600">One person per group enters scores. Everyone else can just watch live.</p>
+          <input
+            className="mt-3 min-h-[48px] w-full rounded-xl border border-slate-300 bg-white px-3 py-3"
+            value={scorekeeperName}
+            placeholder="Your name (optional)"
+            autoComplete="given-name"
+            onChange={(event) => setScorekeeperName(event.target.value)}
+          />
+          <Button type="button" className="mt-3 w-full py-4 text-lg" disabled={claiming || loadStatus !== 'ready'} onClick={() => void handleClaimScorekeeper()}>
+            {claiming ? 'Starting…' : 'Start scoring this group'}
+          </Button>
+          {claimStatus ? <p role="status" className="mt-3 text-sm text-slate-600">{claimStatus}</p> : null}
+        </section>
+      ) : canEdit ? (
+        claimStatus ? <p role="status" className="rounded-xl bg-green-50 px-4 py-3 text-sm font-semibold text-green-800">{claimStatus}</p> : null
+      ) : (
+        <section className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
+          <span className="font-semibold text-slate-800">{group?.scorekeeperName ?? 'Someone else'}</span> is keeping score for this group. You&apos;re watching live.
+        </section>
+      )}
 
       {holeStrip}
 
