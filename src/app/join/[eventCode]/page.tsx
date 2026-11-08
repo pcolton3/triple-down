@@ -1,11 +1,12 @@
 'use client';
 
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { BuyInCard, EventSchedule, eventDateRange } from '@/components/events/event-details';
 import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
-import { isTeamEvent, loadGolfEvent, loadRoster, signUp, type GolfEvent, type RosterEntry } from '@/lib/events/golf-events';
+import { isTeamEvent, loadGolfEvent, loadRoster, rememberJoinedEvent, signUp, type GolfEvent, type RosterEntry } from '@/lib/events/golf-events';
 
 const inputClass = 'min-h-[48px] w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-base';
 
@@ -36,6 +37,7 @@ export default function JoinEventPage() {
     setEvent(nextEvent);
     setRoster(nextRoster);
     setStatus(nextEvent ? 'ready' : 'not_found');
+    if (nextEvent && readSaved(code)) rememberJoinedEvent(nextEvent.code, nextEvent.title);
   }, [code]);
 
   useEffect(() => {
@@ -136,6 +138,11 @@ export default function JoinEventPage() {
         {message ? (
           <p role="status" className={`mt-3 rounded-xl px-3 py-2 text-sm ${message.tone === 'ok' ? 'bg-[#e7f3e5] text-[#0f5132]' : 'bg-red-50 text-red-700'}`}>
             {message.text}
+          </p>
+        ) : null}
+        {signedUp ? (
+          <p className="mt-3 text-sm text-slate-600">
+            Find this event again any time under <Link href="/events" className="font-semibold text-[#0f5132] underline">Your events</Link>.
           </p>
         ) : null}
       </Card>

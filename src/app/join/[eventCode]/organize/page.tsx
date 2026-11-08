@@ -134,7 +134,7 @@ export default function OrganizeEventPage() {
   return (
     <main className="mx-auto max-w-3xl space-y-4 px-4 py-6 pb-24">
       <section className="rounded-3xl bg-[#071b12] p-5 text-white shadow-sm">
-        <p className="text-sm text-white/80">Organizer · {event.code}</p>
+        <p className="text-sm text-white/80"><Link href="/events" className="underline">Your events</Link> · Organizer · {event.code}</p>
         <h1 className="mt-1 text-3xl font-bold">{event.title}</h1>
         <p className="mt-2 text-sm">
           {signups.length} signed up · {stats.paid} paid · signups {event.signups_open ? 'open' : 'closed'}

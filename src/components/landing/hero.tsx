@@ -1,6 +1,6 @@
 'use client';
 
-import { readMyEvents, type MyEvent } from '@/lib/events/golf-events';
+import { readSavedEvents, type SavedEvent } from '@/lib/events/golf-events';
 import { readRecent, type RecentRound } from '@/lib/offline/local-rounds';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -14,8 +14,8 @@ export function Hero() {
 
   const [recent, setRecent] = useState<RecentRound | null>(null);
   useEffect(() => { try { setRecent(readRecent()); } catch { /* Joining still works if storage is unavailable. */ } }, []);
-  const [myEvents, setMyEvents] = useState<MyEvent[]>([]);
-  useEffect(() => setMyEvents(readMyEvents()), []);
+  const [myEvents, setMyEvents] = useState<SavedEvent[]>([]);
+  useEffect(() => setMyEvents(readSavedEvents()), []);
 
   function handleJoin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -68,17 +68,13 @@ export function Hero() {
       </div>
 
       {myEvents.length ? (
-        <div className="mx-auto mt-5 max-w-md rounded-2xl border border-[#c9d8c7] bg-white p-4 shadow-sm">
-          <p className="font-bold text-[#0f5132]">Your events</p>
-          <ul className="mt-2 divide-y divide-slate-100 text-sm">
-            {myEvents.map((entry) => (
-              <li key={entry.code} className="flex items-center justify-between gap-3 py-2">
-                <span className="min-w-0 truncate font-semibold">{entry.title}</span>
-                <a href={`/join/${encodeURIComponent(entry.code)}/organize`} className="shrink-0 font-semibold text-[#0f5132] underline">Manage</a>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <Link href="/events" className="mx-auto mt-5 block max-w-md rounded-2xl border border-[#c9d8c7] bg-white p-4 shadow-sm">
+          <span className="block font-bold text-[#0f5132]">Your events →</span>
+          <span className="mt-1 block truncate text-sm text-slate-600">
+            {myEvents.slice(0, 3).map((entry) => entry.title || entry.code).join(' · ')}
+            {myEvents.length > 3 ? ` + ${myEvents.length - 3} more` : ''}
+          </span>
+        </Link>
       ) : null}
 
       {recent ? (

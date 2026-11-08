@@ -11,6 +11,9 @@ export function SiteHeader() {
           <Link href="/" className="hidden rounded-xl px-3 py-2 hover:bg-white/10 sm:inline-flex">
             Home
           </Link>
+          <Link href="/events" className="rounded-xl px-3 py-2 hover:bg-white/10">
+            Events
+          </Link>
           <Link href="/rounds/new" className="rounded-xl bg-white px-3 py-2 text-[#071b12] shadow-sm sm:px-4">
             Start
           </Link>

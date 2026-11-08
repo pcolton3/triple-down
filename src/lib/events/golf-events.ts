@@ -212,6 +212,87 @@ export function rememberMyEvent(code: string, title: string, organizerKey?: stri
   }
 }
 
+const JOINED_EVENTS_KEY = 'triple-track-joined-events';
+const SIGNUP_KEY_PREFIX = 'triple-track-signup:';
+
+/** Remembers on this device that the player signed up, so the event shows under "Your events". */
+export function rememberJoinedEvent(code: string, title: string) {
+  try {
+    const list = readList(JOINED_EVENTS_KEY).filter((entry) => entry.code !== code);
+    list.unshift({ code, title, createdAt: new Date().toISOString() });
+    localStorage.setItem(JOINED_EVENTS_KEY, JSON.stringify(list.slice(0, 50)));
+  } catch {
+    /* Storage can be unavailable; the invite link still works. */
+  }
+}
+
+function readList(key: string): MyEvent[] {
+  try {
+    const list = JSON.parse(localStorage.getItem(key) ?? '[]');
+    return Array.isArray(list) ? list.filter((entry) => entry && typeof entry.code === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export type SavedEvent = { code: string; title: string; organizer: boolean; joined: boolean };
+
+/** Every event this device organizes or has signed up for. */
+export function readSavedEvents(): SavedEvent[] {
+  const saved = new Map<string, SavedEvent>();
+  const add = (code: string, title: string, role: 'organizer' | 'joined') => {
+    const key = code.toUpperCase();
+    const entry = saved.get(key) ?? { code: key, title, organizer: false, joined: false };
+    entry[role] = true;
+    if (!entry.title) entry.title = title;
+    saved.set(key, entry);
+  };
+  try {
+    readMyEvents().forEach((entry) => {
+      if (localStorage.getItem(organizerKeyStorageName(entry.code))) add(entry.code, entry.title, 'organizer');
+    });
+    readList(JOINED_EVENTS_KEY).forEach((entry) => add(entry.code, entry.title, 'joined'));
+    // Signups made before this list existed.
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const name = localStorage.key(index);
+      if (name?.startsWith(SIGNUP_KEY_PREFIX)) add(name.slice(SIGNUP_KEY_PREFIX.length), '', 'joined');
+    }
+  } catch {
+    /* Storage unavailable: nothing saved on this device. */
+  }
+  return [...saved.values()];
+}
+
+/** First and last calendar dates of an event (golf days and agenda), or null if it has none. */
+export function eventDateBounds(event: Pick<GolfEvent, 'days' | 'agenda'>) {
+  const dates = [...event.days.map((day) => day.date), ...event.agenda.map((item) => item.date)].filter(Boolean).sort();
+  return dates.length ? { first: dates[0], last: dates[dates.length - 1] } : null;
+}
+
+/** Upcoming events (soonest first, undated last) and past events (most recent first). `today` is YYYY-MM-DD. */
+export function splitUpcoming<T extends { event: Pick<GolfEvent, 'days' | 'agenda'> }>(items: T[], today: string) {
+  const withBounds = items.map((item) => ({ item, bounds: eventDateBounds(item.event) }));
+  const upcoming = withBounds
+    .filter(({ bounds }) => !bounds || bounds.last >= today)
+    .sort((a, b) => (a.bounds?.first ?? '9999').localeCompare(b.bounds?.first ?? '9999'))
+    .map(({ item }) => item);
+  const past = withBounds
+    .filter(({ bounds }) => bounds && bounds.last < today)
+    .sort((a, b) => b.bounds!.last.localeCompare(a.bounds!.last))
+    .map(({ item }) => item);
+  return { upcoming, past };
+}
+
+/** The next golf day on or after `today`, if any. */
+export function nextGolfDay(event: Pick<GolfEvent, 'days'>, today: string) {
+  return event.days.filter((day) => day.date && day.date >= today).sort((a, b) => a.date.localeCompare(b.date))[0] ?? null;
+}
+
+/** Local calendar date as YYYY-MM-DD. */
+export function localToday(now = new Date()) {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
 export function potGames(day: EventDay) {
   return (day.games ?? []).filter((game) => gameDefinition(game.key).kind === 'pot' && game.amount > 0);
 }

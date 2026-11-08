@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/supabase/client', () => ({ supabase: {} }));
-import { buildSchedule, buyInBreakdown, isTeamEvent, normalizeEvent, renumberDays, safeLink, suggestedBuyIn, validateDraft, type EventDay, type GolfEvent } from './golf-events';
+import { buildSchedule, buyInBreakdown, isTeamEvent, localToday, nextGolfDay, normalizeEvent, renumberDays, safeLink, splitUpcoming, suggestedBuyIn, validateDraft, type EventDay, type GolfEvent } from './golf-events';
 
 const pots = [{ key: 'ctp', amount: 50 }, { key: 'skins', amount: 50 }];
 const days: EventDay[] = [
@@ -76,5 +76,22 @@ describe('safeLink', () => {
   it('allows web links only', () => {
     expect(safeLink('example.com/menu')).toBe('https://example.com/menu');
     expect(safeLink('javascript:alert(1)')).toBe('');
+  });
+});
+
+describe('your events', () => {
+  const make = (code: string, dates: string[]) => ({ code, event: { days: dates.map((date, i) => ({ day: i + 1, date, format: 'casual' as const })), agenda: [] } });
+
+  it('splits upcoming (soonest first, undated last) from past (latest first)', () => {
+    const items = [make('LATE', ['2027-04-27']), make('PAST1', ['2026-01-02']), make('NONE', []), make('NOW', ['2026-11-07', '2026-11-08']), make('PAST2', ['2026-06-01'])];
+    const { upcoming, past } = splitUpcoming(items, '2026-11-08');
+    expect(upcoming.map((item) => item.code)).toEqual(['NOW', 'LATE', 'NONE']);
+    expect(past.map((item) => item.code)).toEqual(['PAST2', 'PAST1']);
+  });
+
+  it('finds the next golf day and formats local dates', () => {
+    expect(nextGolfDay({ days }, '2027-04-28')?.day).toBe(2);
+    expect(nextGolfDay({ days }, '2027-05-01')).toBeNull();
+    expect(localToday(new Date(2026, 0, 5))).toBe('2026-01-05');
   });
 });
