@@ -22,22 +22,13 @@ export function settleBankerHole(
       };
     }
 
-    if (bankerBirdie && playerBirdie) {
-      return {
-        playerId: matchup.playerId,
-        result: 'push',
-        pressMultiplier,
-        birdieMultiplier: 1,
-        finalAmount: 0,
-        reason: 'Both banker and player made gross birdie or better',
-      };
-    }
-
     const playerWins = matchup.playerNetScore < input.bankerNetScore;
     const result = playerWins ? 'player_wins' : 'banker_wins';
 
     let birdieMultiplier = 1;
-    if (bankerBirdie || playerBirdie) {
+    // Only one side's gross birdie doubles the bet. If both birdie, the automatic doubles cancel
+    // out, but presses still count and the lower net score still wins (user, 2026-11-08).
+    if (bankerBirdie !== playerBirdie) {
       birdieMultiplier = 2;
     }
 
@@ -47,7 +38,9 @@ export function settleBankerHole(
       pressMultiplier,
       birdieMultiplier,
       finalAmount: matchup.baseWager * pressMultiplier * birdieMultiplier,
-      reason: bankerBirdie
+      reason: bankerBirdie && playerBirdie
+        ? 'Both made gross birdie; no automatic double, lower net wins'
+        : bankerBirdie
         ? 'Banker gross birdie or better doubled bet'
         : playerBirdie
           ? 'Player gross birdie or better doubled bet'

@@ -525,11 +525,6 @@ export default function GroupScoringPage() {
     window.scrollTo({ top: 0 });
   }
 
-  function confirmPress(pressed: boolean, description: string, toggle: () => void) {
-    if (!pressed && !window.confirm(description)) return;
-    toggle();
-  }
-
   const summary = getCurrentHoleSummary(groupNumber, targetHoleNumber);
   const matchupSummaryByPlayerId = Object.fromEntries(summary.matchups.map((item) => [item.playerId, item]));
   const bankerRunningTotals = getGroupBankerPreviewTotals(groupNumber, targetHoleNumber).sort((a, b) => b.amount - a.amount);
@@ -802,7 +797,7 @@ export default function GroupScoringPage() {
               </p>
             ) : null}
           </div>
-          <Button variant="secondary" disabled={!canEdit} onClick={() => confirmPress(Boolean(hole.bankerPressed), `${pressAction} every bet against ${banker.name} on hole ${hole.holeNumber}?`, () => toggleBankerPress(groupNumber, targetHoleNumber))}>
+          <Button variant="secondary" disabled={!canEdit} onClick={() => toggleBankerPress(groupNumber, targetHoleNumber)}>
             {hole.bankerPressed ? `Undo Banker ${pressAction}` : `Banker ${pressAction}`}
           </Button>
         </div>
@@ -878,7 +873,7 @@ export default function GroupScoringPage() {
                   <p className="text-sm text-slate-500">{playsBanker ? `vs ${banker.name}` : 'Score only, not playing Banker'}</p>
                 </div>
                 {playsBanker ? (
-                  <Button variant="secondary" disabled={!canEdit} onClick={() => confirmPress(Boolean(matchup.pressed), `${pressAction} ${player.name}'s bet on hole ${hole.holeNumber}?`, () => togglePlayerPress(player.id, groupNumber, targetHoleNumber))}>
+                  <Button variant="secondary" disabled={!canEdit} onClick={() => togglePlayerPress(player.id, groupNumber, targetHoleNumber)}>
                     {matchup.pressed ? `Undo ${pressAction}` : pressAction}
                   </Button>
                 ) : null}

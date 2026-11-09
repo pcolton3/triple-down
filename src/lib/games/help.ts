@@ -16,7 +16,7 @@ export const GAME_HELP: Record<string, GameHelp> = {
     summary:
       'One player in each group is the banker and plays every other player in the group on each hole, using net scores. The banker can change from hole to hole.',
     money:
-      'Each player sets a bet against the banker. A player can press to double the bet on a hole (triple on a par 3), and the banker can press every bet at once.',
+      'Each player sets a bet against the banker. A player can press to double the bet on a hole (triple on a par 3), and the banker can press every bet at once. A gross birdie or better doubles that bet automatically. If both make a gross birdie, there is no automatic double: the lower net score wins, and any presses still count.',
   },
   Skins: {
     label: 'Skins',
