@@ -8,6 +8,7 @@ import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
 import { completeChoices, isTeamEvent, loadGolfEvent, loadRoster, rememberJoinedEvent, signUp, type GolfEvent, type RosterEntry, type SignupChoices } from '@/lib/events/golf-events';
 import { ChoicesEditor } from '@/components/events/signup-choices';
+import { ShareEventCard } from '@/components/events/share-event';
 
 const inputClass = 'min-h-[48px] w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-base';
 
@@ -157,6 +158,8 @@ export default function JoinEventPage() {
           </p>
         ) : null}
       </Card>
+
+      {canSignUp && !full ? <ShareEventCard event={event} dates={eventDateRange(event)} /> : null}
 
       <EventSchedule event={event} />
       <BuyInCard event={event} players={roster.length} roster={roster} />
