@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { Card } from '@/components/shared/card';
 import { SideBetsCard } from '@/components/round/side-bets-card';
+import { AnnouncementsBanner, RoundCreatorComposer } from '@/components/events/announcements';
 import { computeGroupGames } from '@/lib/games/group-games';
 import { formatCurrency as formatMoney } from '@/lib/utils/currency';
 import { useRoundStore } from '@/stores/round-store';
@@ -547,6 +548,7 @@ export default function EventLeaderboardPage() {
 
   return (
     <main className="mx-auto max-w-5xl space-y-4 px-4 py-6">
+      {params.roundCode ? <AnnouncementsBanner scope="round" code={params.roundCode} /> : null}
       <section className="rounded-3xl bg-[#071b12] p-5 text-white shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -657,6 +659,8 @@ export default function EventLeaderboardPage() {
         <h2 className="mb-3 text-xl font-bold">Scorecard</h2>
         <ScorecardTable round={round} players={roundPlayers} />
       </Card>
+
+      {params.roundCode ? <RoundCreatorComposer roundCode={params.roundCode} /> : null}
 
     </main>
   );

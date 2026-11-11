@@ -5,6 +5,8 @@ import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BuyInCard, EventSchedule } from '@/components/events/event-details';
 import { EventAssistant } from '@/components/events/event-assistant';
+import { AnnouncementComposer } from '@/components/events/announcements';
+import { EmailPlayers } from '@/components/events/email-players';
 import { EventEditor, cleanDraft } from '@/components/events/event-editor';
 import { ChoicesEditor, choicesSummary } from '@/components/events/signup-choices';
 import { Button } from '@/components/shared/button';
@@ -249,6 +251,10 @@ export default function OrganizeEventPage() {
             .catch((refreshError: Error) => setNotice(refreshError.message));
         }}
       />
+
+      <AnnouncementComposer scope="event" code={event.code} organizerKey={key} />
+
+      <EmailPlayers event={event} signups={signups} organizerKey={key} />
 
       {event.days.length ? (
         <Card className="space-y-3">

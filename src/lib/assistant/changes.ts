@@ -523,3 +523,11 @@ export function draftOutline(draft: EventDraft): string[] {
   lines.push(`Buy-in ${money(draft.buy_in)}${draft.team_bet ? ` (includes ${money(draft.team_bet)} team bet)` : ''}${draft.max_players ? ` · up to ${draft.max_players} players` : ''}`);
   return lines;
 }
+
+/** Structured output for a drafted email to players. */
+export const EMAIL_REPLY_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['subject', 'body'],
+  properties: { subject: { type: 'string' }, body: { type: 'string', description: 'Plain text email body.' } },
+} as const;

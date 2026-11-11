@@ -56,3 +56,35 @@ self.addEventListener('fetch', (event) => {
       })
   );
 });
+
+// Announcements pushed by an event or round organizer.
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { body: event.data ? event.data.text() : '' };
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'Triple Track', {
+      body: data.body || 'New update from your organizer.',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      tag: data.tag,
+      renotify: Boolean(data.tag),
+      data: { url: data.url || '/' },
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = new URL((event.notification.data && event.notification.data.url) || '/', self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+      const open = windows.find((client) => client.url === url) || windows[0];
+      if (open) return open.focus().then((client) => (client && client.url !== url && 'navigate' in client ? client.navigate(url) : client));
+      return self.clients.openWindow(url);
+    })
+  );
+});

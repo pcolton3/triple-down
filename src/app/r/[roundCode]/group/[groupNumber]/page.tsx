@@ -18,6 +18,7 @@ import {
   sharedRoundBundleToRoundState,
 } from '@/lib/realtime/shared-rounds';
 import { claimGroupScorekeeper, releaseGroupScorekeeper, takeOverGroupScorekeeper, userCanEditGroup } from '@/lib/realtime/group-rounds';
+import { AnnouncementsBanner } from '@/components/events/announcements';
 import { discardPendingForGroup, pendingForGroup, QUEUE_EVENT, type PendingHole } from '@/lib/offline/score-queue';
 
 function formatUnknownError(error: unknown, fallback: string) {
@@ -628,6 +629,7 @@ export default function GroupScoringPage() {
 
   return (
     <main className="mx-auto max-w-lg space-y-4 px-4 py-4 pb-44">
+      {params.roundCode ? <AnnouncementsBanner scope="round" code={params.roundCode} showNotify={false} /> : null}
       {loadError ? (
         <section className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {loadError}

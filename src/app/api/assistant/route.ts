@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
-import { ORGANIZER_REPLY_SCHEMA, PLANNER_REPLY_SCHEMA, type AssistantReply, type PlannerReply } from '@/lib/assistant/changes';
+import { EMAIL_REPLY_SCHEMA, ORGANIZER_REPLY_SCHEMA, PLANNER_REPLY_SCHEMA, type AssistantReply, type PlannerReply } from '@/lib/assistant/changes';
 import { eventContext, plannerContext, systemPrompt, type AssistantMode } from '@/lib/assistant/prompt';
 import { loadGolfEvent, loadRoster, loadSignups } from '@/lib/events/golf-events';
 import { supabase } from '@/lib/supabase/client';
@@ -78,7 +78,8 @@ export async function POST(request: NextRequest) {
   } catch {
     return fail(400, 'Bad request.');
   }
-  const mode: AssistantMode = body.mode === 'organizer' ? 'organizer' : body.mode === 'planner' ? 'planner' : 'player';
+  const mode: AssistantMode = body.mode === 'organizer' || body.mode === 'planner' || body.mode === 'email' ? body.mode : 'player';
+  const needsKey = mode === 'organizer' || mode === 'email';
   // Planning happens before an event exists; those turns share one daily bucket.
   const code = mode === 'planner' ? 'NEWEVENT' : typeof body.code === 'string' ? body.code.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 16) : '';
   const key = typeof body.key === 'string' ? body.key : '';
@@ -94,21 +95,21 @@ export async function POST(request: NextRequest) {
     if (!event) return fail(404, 'Event not found.');
     try {
       // Organizer data only comes back for a valid organizer key; emails never go to the model.
-      context = mode === 'organizer'
+      context = needsKey
         ? eventContext(event, today, { signups: await loadSignups(code, key) })
         : eventContext(event, today, { roster: await loadRoster(code) });
     } catch {
-      return fail(mode === 'organizer' ? 403 : 500, mode === 'organizer' ? 'Organizer link is not valid.' : "Couldn't load the event.");
+      return fail(needsKey ? 403 : 500, needsKey ? 'Organizer link is not valid.' : "Couldn't load the event.");
     }
   }
 
   // Daily limits and the monthly spend cap live in Supabase (supabase-assistant.sql).
-  const { data: turn, error: turnError } = await supabase.rpc('assistant_take_turn', { p_code: code, p_mode: mode });
+  const { data: turn, error: turnError } = await supabase.rpc('assistant_take_turn', { p_code: code, p_mode: needsKey ? 'organizer' : mode });
   if (turnError) return fail(503, "The assistant isn't set up yet (run supabase-assistant.sql).");
   if (turn === 'monthly_cap') return fail(429, 'The assistant has hit its monthly limit. It will be back next month.');
   if (turn !== 'ok') return fail(429, "That's a lot of questions for one day. Try again tomorrow.");
 
-  const schema = mode === 'organizer' ? ORGANIZER_REPLY_SCHEMA : mode === 'planner' ? PLANNER_REPLY_SCHEMA : null;
+  const schema = { organizer: ORGANIZER_REPLY_SCHEMA, planner: PLANNER_REPLY_SCHEMA, email: EMAIL_REPLY_SCHEMA, player: null }[mode];
   const client = new Anthropic({ apiKey: apiKey() });
   const conversation: Anthropic.Beta.BetaMessageParam[] = [...messages];
   let response: Anthropic.Beta.BetaMessage | null = null;
@@ -128,7 +129,7 @@ export async function POST(request: NextRequest) {
         messages: conversation,
         ...(mode === 'planner' ? { tools: [{ type: 'web_search_20260209' as const, name: 'web_search' as const, max_uses: 4 }] } : {}),
         output_config: {
-          effort: mode === 'player' ? 'low' : 'medium',
+          effort: mode === 'player' || mode === 'email' ? 'low' : 'medium',
           ...(schema ? { format: { type: 'json_schema' as const, schema: schema as unknown as Record<string, unknown> } } : {}),
         },
       });
@@ -137,10 +138,10 @@ export async function POST(request: NextRequest) {
       conversation.push({ role: 'assistant', content: response.content });
     }
   } catch (error) {
-    if (cents) await supabase.rpc('assistant_record_cost', { p_code: code, p_mode: mode, p_cents: Math.round(cents * 100) / 100 });
+    if (cents) await supabase.rpc('assistant_record_cost', { p_code: code, p_mode: needsKey ? 'organizer' : mode, p_cents: Math.round(cents * 100) / 100 });
     return apiFailure(error);
   }
-  await supabase.rpc('assistant_record_cost', { p_code: code, p_mode: mode, p_cents: Math.round(cents * 100) / 100 });
+  await supabase.rpc('assistant_record_cost', { p_code: code, p_mode: needsKey ? 'organizer' : mode, p_cents: Math.round(cents * 100) / 100 });
   if (!response) return fail(502, "Couldn't reach the assistant. Try again.");
 
   const empty = mode === 'planner' ? { draft: null } : { changes: [] };
@@ -151,6 +152,15 @@ export async function POST(request: NextRequest) {
   const text = response.content.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('').trim();
   const lost = 'Sorry, I lost my train of thought. Ask again?';
   if (mode === 'player') return NextResponse.json({ reply: text || lost, changes: [] } satisfies AssistantReply);
+
+  if (mode === 'email') {
+    try {
+      const parsed = JSON.parse(text) as { subject?: unknown; body?: unknown };
+      return NextResponse.json({ subject: typeof parsed.subject === 'string' ? parsed.subject : '', body: typeof parsed.body === 'string' ? parsed.body : '' });
+    } catch {
+      return fail(502, 'The draft came back garbled. Try again.');
+    }
+  }
 
   try {
     const parsed = JSON.parse(text) as Partial<AssistantReply & PlannerReply>;
