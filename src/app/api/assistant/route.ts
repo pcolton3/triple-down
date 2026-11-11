@@ -38,8 +38,13 @@ function cleanHistory(value: unknown): ChatTurn[] | null {
   }, []);
 }
 
+// The Vercel project stores the key as TripleTrackClaudeAI; ANTHROPIC_API_KEY also works.
+function apiKey() {
+  return process.env.ANTHROPIC_API_KEY || process.env.TripleTrackClaudeAI || '';
+}
+
 export async function POST(request: NextRequest) {
-  if (!process.env.ANTHROPIC_API_KEY) return fail(503, "The assistant isn't set up yet.");
+  if (!apiKey()) return fail(503, "The assistant isn't set up yet.");
 
   let body: { code?: unknown; mode?: unknown; key?: unknown; messages?: unknown; today?: unknown };
   try {
@@ -73,7 +78,7 @@ export async function POST(request: NextRequest) {
   if (turn === 'monthly_cap') return fail(429, 'The assistant has hit its monthly limit. It will be back next month.');
   if (turn !== 'ok') return fail(429, "That's a lot of questions for one day. Try again tomorrow.");
 
-  const client = new Anthropic();
+  const client = new Anthropic({ apiKey: apiKey() });
   let response: Anthropic.Beta.BetaMessage;
   try {
     response = await client.beta.messages.create({

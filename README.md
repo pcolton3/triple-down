@@ -93,7 +93,7 @@ An AI assistant (Claude Opus 5.5) on the invite page answers players' questions,
 page also drafts changes (tee times, games, schedule, paid/teams) that only take effect when the
 organizer taps Apply. Setup:
 
-1. Set `ANTHROPIC_API_KEY` in the Vercel project's environment variables and redeploy.
+1. Set `ANTHROPIC_API_KEY` (or `TripleTrackClaudeAI`, as this project does) in the Vercel project's environment variables and redeploy.
 2. Run `supabase-assistant.sql` once in the Supabase SQL editor. It caps usage per event per day and
    stops the assistant once it has spent $20 in a month (also set a spend limit in the Anthropic Console).
 
