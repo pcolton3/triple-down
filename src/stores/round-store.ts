@@ -10,6 +10,7 @@ import { buildLedgerEntries, type LedgerEntry } from '@/domain/banker/ledger';
 import type { BankerMatchupResult } from '@/domain/banker/types';
 import type { CreateRoundInput, HoleConfig, HoleGameData, HoleState, Player, RoundState } from '@/types/round';
 import { buildGroupsForPlayers } from '@/lib/groups/group-utils';
+import { splitCents } from '@/lib/utils/currency';
 
 type MatchupSummary = {
   playerId: string;
@@ -477,7 +478,8 @@ function getMatchupNetScores(
     };
   }
 
-  const diff = Math.abs(playerHandicap - bankerHandicap);
+  // Round to a tenth: decimal indexes (8.2 - 0.2 = 7.9999…) must not lose a pop to float error.
+  const diff = Math.round(Math.abs(playerHandicap - bankerHandicap) * 10) / 10;
 
   let playerGets = false;
   let bankerGets = false;
@@ -511,7 +513,8 @@ function buildModifierLabels(
   if (
     playerGrossScore != null &&
     bankerGrossScore != null &&
-    (isGrossBirdieOrBetter(playerGrossScore, hole.par) || isGrossBirdieOrBetter(bankerGrossScore, hole.par))
+    // The auto double only applies when exactly one side makes a gross birdie (both = no double).
+    isGrossBirdieOrBetter(playerGrossScore, hole.par) !== isGrossBirdieOrBetter(bankerGrossScore, hole.par)
   ) {
     modifiers.push('birdie auto double');
   }
@@ -842,15 +845,15 @@ function buildSkinsSummary(round: RoundState): SkinsSummary {
   const wonHoles = holes.filter((hole) => hole.winnerPlayerId);
   const valuePerSkin = wonHoles.length > 0 ? pot / wonHoles.length : 0;
 
-  const payouts = round.players.filter(playerParticipatesInSkins).map((player) => {
-    const skins = wonHoles.filter((hole) => hole.winnerPlayerId === player.id).length;
-    return {
-      playerId: player.id,
-      playerName: player.name,
-      skins,
-      amount: skins * valuePerSkin,
-    };
-  });
+  const skinPlayers = round.players.filter(playerParticipatesInSkins);
+  const skinCounts = skinPlayers.map((player) => wonHoles.filter((hole) => hole.winnerPlayerId === player.id).length);
+  const skinShares = splitCents(pot, skinCounts);
+  const payouts = skinPlayers.map((player, index) => ({
+    playerId: player.id,
+    playerName: player.name,
+    skins: skinCounts[index],
+    amount: skinShares[index],
+  }));
 
   return { pot, skinsWon: wonHoles.length, valuePerSkin, holes, payouts };
 }
@@ -871,15 +874,23 @@ function buildLowNetSummary(round: RoundState): LowNetSummary {
 
   if (pot <= 0 || totals.length === 0) return { pot, totals, payouts };
 
+  // Nobody wins low net until every player in it has the same holes in; until then it's in progress.
+  const holesIn = totals.map((item) => item.holesCounted);
+  if (Math.max(...holesIn) === 0 || new Set(holesIn).size > 1) {
+    payouts.forEach((payout) => { payout.placement = 'In progress'; });
+    return { pot, totals, payouts };
+  }
+
   const lowScore = totals[0]?.netTotal;
   const firstPlace = totals.filter((item) => item.netTotal === lowScore);
 
   // House rule: the low net winner takes the whole pot; a tie for first splits it.
-  firstPlace.forEach((item) => {
+  const lowNetShares = splitCents(pot, firstPlace.map(() => 1));
+  firstPlace.forEach((item, index) => {
     const payout = payouts.find((p) => p.playerId === item.playerId);
     if (payout) {
       payout.placement = firstPlace.length > 1 ? 'Tied 1st' : '1st';
-      payout.amount = pot / firstPlace.length;
+      payout.amount = lowNetShares[index];
     }
   });
 
@@ -908,17 +919,15 @@ function buildCtpSummary(round: RoundState): CtpSummary {
     });
 
   const won = par3Holes.filter((item) => item.winnerPlayerId);
-  const valuePerWin = won.length > 0 ? pot / won.length : 0;
-
-  const payouts = round.players.filter(playerParticipatesInCtp).map((player) => {
-    const wins = won.filter((item) => item.winnerPlayerId === player.id).length;
-    return {
-      playerId: player.id,
-      playerName: player.name,
-      wins,
-      amount: wins * valuePerWin,
-    };
-  });
+  const ctpPlayers = round.players.filter(playerParticipatesInCtp);
+  const ctpWins = ctpPlayers.map((player) => won.filter((item) => item.winnerPlayerId === player.id).length);
+  const ctpShares = splitCents(pot, ctpWins);
+  const payouts = ctpPlayers.map((player, index) => ({
+    playerId: player.id,
+    playerName: player.name,
+    wins: ctpWins[index],
+    amount: ctpShares[index],
+  }));
 
   return { pot, par3Holes, payouts };
 }
@@ -932,13 +941,13 @@ function buildNassauSummary(round: RoundState): NassauSummary {
     { label: 'Back 9', holes: Array.from({ length: 9 }, (_, index) => index + 10) },
     { label: 'Total', holes: Array.from({ length: round.totalHoles }, (_, index) => index + 1) },
   ];
-  const segmentPot = pot / segmentConfigs.length;
+  const segmentPots = splitCents(pot, segmentConfigs.map(() => 1));
   const payouts = new Map(playersInGame(round, 'nassau').map((player) => [
     player.id,
     { playerId: player.id, playerName: player.name, amount: 0, wins: [] as string[] },
   ]));
 
-  const segments = segmentConfigs.map((segment) => {
+  const segments = segmentConfigs.map((segment, segmentIndex) => {
     const totals = playersInGame(round, 'nassau')
       .map((player) => {
         let netTotal = 0;
@@ -957,10 +966,11 @@ function buildNassauSummary(round: RoundState): NassauSummary {
     if (totals.length === 0) return { label: segment.label, holes: segment.holes, winners: [] };
 
     const lowNet = Math.min(...totals.map((item) => item.netTotal));
-    const winners = totals
-      .filter((item) => item.netTotal === lowNet)
-      .map((item) => {
-        const amount = segmentPot / totals.filter((total) => total.netTotal === lowNet).length;
+    const segmentWinners = totals.filter((item) => item.netTotal === lowNet);
+    const segmentShares = splitCents(segmentPots[segmentIndex], segmentWinners.map(() => 1));
+    const winners = segmentWinners
+      .map((item, winnerIndex) => {
+        const amount = segmentShares[winnerIndex];
         const payout = payouts.get(item.player.id);
         if (payout) {
           payout.amount += amount;
@@ -1008,7 +1018,8 @@ function buildStablefordSummary(round: RoundState): StablefordSummary {
 
   const topScore = standings[0]?.points ?? 0;
   const winners = standings.filter((item) => item.points === topScore && topScore > 0);
-  const payouts = winners.map((item) => ({ ...item, amount: pot / winners.length }));
+  const stablefordShares = splitCents(pot, winners.map(() => 1));
+  const payouts = winners.map((item, index) => ({ ...item, amount: stablefordShares[index] }));
   const payoutByPlayer = new Map(payouts.map((item) => [item.playerId, item.amount]));
 
   return {
@@ -1041,9 +1052,9 @@ function buildBirdiePotSummary(round: RoundState): BirdiePotSummary {
 
   const totalBirdies = Array.from(birdiesByPlayer.values()).reduce((sum, item) => sum + item.birdies, 0);
   const valuePerBirdie = totalBirdies > 0 ? pot / totalBirdies : 0;
-  const payouts = Array.from(birdiesByPlayer.values())
-    .filter((item) => item.birdies > 0)
-    .map((item) => ({ ...item, amount: item.birdies * valuePerBirdie }));
+  const birdieWinners = Array.from(birdiesByPlayer.values()).filter((item) => item.birdies > 0);
+  const birdieShares = splitCents(pot, birdieWinners.map((item) => item.birdies));
+  const payouts = birdieWinners.map((item, index) => ({ ...item, amount: birdieShares[index] }));
 
   return { pot, valuePerBirdie, payouts };
 }
@@ -1071,9 +1082,9 @@ function buildEaglePotSummary(round: RoundState): EaglePotSummary {
 
   const totalEagles = Array.from(eaglesByPlayer.values()).reduce((sum, item) => sum + item.eagles, 0);
   const valuePerEagle = totalEagles > 0 ? pot / totalEagles : 0;
-  const payouts = Array.from(eaglesByPlayer.values())
-    .filter((item) => item.eagles > 0)
-    .map((item) => ({ ...item, amount: item.eagles * valuePerEagle }));
+  const eagleWinners = Array.from(eaglesByPlayer.values()).filter((item) => item.eagles > 0);
+  const eagleShares = splitCents(pot, eagleWinners.map((item) => item.eagles));
+  const payouts = eagleWinners.map((item, index) => ({ ...item, amount: eagleShares[index] }));
 
   return { pot, valuePerEagle, payouts };
 }

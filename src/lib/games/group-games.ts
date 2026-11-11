@@ -1,5 +1,6 @@
 import type { HoleState, Player, RoundState } from '@/types/round';
 import type { Debt, PotWin } from '@/lib/offline/net-payments';
+import { splitCents } from '@/lib/utils/currency';
 
 /**
  * Scoring for games played inside each group: Wolf, Vegas, Bingo Bango Bongo, Match Play and the
@@ -329,7 +330,8 @@ function scoreGame(round: RoundState, key: GroupGameKey, groupNumber: number, pl
     if (!done.length || unit <= 0) return { debts: [], pots, notes };
     const best = key === 'stableford_group' ? Math.max(...totals.values()) : Math.min(...totals.values());
     const winners = players.filter((player) => totals.get(player.id) === best);
-    winners.forEach((player) => pots.push({ playerId: player.id, playerName: player.name, amount: cents(unit / winners.length), game: `${label} · Group ${groupNumber}` }));
+    const shares = splitCents(unit, winners.map(() => 1));
+    winners.forEach((player, index) => pots.push({ playerId: player.id, playerName: player.name, amount: shares[index], game: `${label} · Group ${groupNumber}` }));
     return { debts: [], pots, notes };
   }
 
@@ -342,10 +344,12 @@ function scoreGame(round: RoundState, key: GroupGameKey, groupNumber: number, pl
       if (winners.length === 1) skins.set(winners[0].player.id, (skins.get(winners[0].player.id) ?? 0) + 1);
     });
     const won = [...skins.values()].reduce((sum, count) => sum + count, 0);
-    if (won && unit > 0) players.forEach((player) => {
-      const count = skins.get(player.id) ?? 0;
-      if (count) pots.push({ playerId: player.id, playerName: player.name, amount: cents((unit * count) / won), game: `${label} · Group ${groupNumber}` });
-    });
+    if (won && unit > 0) {
+      const shares = splitCents(unit, players.map((player) => skins.get(player.id) ?? 0));
+      players.forEach((player, index) => {
+        if (shares[index]) pots.push({ playerId: player.id, playerName: player.name, amount: shares[index], game: `${label} · Group ${groupNumber}` });
+      });
+    }
     return { debts: [], pots, notes };
   }
 
