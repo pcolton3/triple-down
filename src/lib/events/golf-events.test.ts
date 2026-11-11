@@ -113,6 +113,16 @@ describe('signup choices', () => {
     });
   });
 
+  it('charges half the team bet to someone playing one of two team days', () => {
+    const twoDay = { team_bet: 100, days };
+    const dayOneOnly = { days: { '1': { playing: true, games: [] }, '2': { playing: false, games: [] } } };
+    expect(playerBuyIn(twoDay, undefined)).toBe(300);
+    expect(playerBuyIn(twoDay, dayOneOnly)).toBe(50);
+    expect(playerBuyIn(twoDay, { days: { '1': { playing: false, games: [] }, '2': { playing: true, games: ['ctp'] } } })).toBe(100);
+    const lines = buyInBreakdown({ buy_in: 300, ...twoDay }, 2, [{}, { choices: dayOneOnly }]).lines;
+    expect(lines[0].pot).toBe(150);
+  });
+
   it('charges only for the pot games a player joined', () => {
     expect(playerBuyIn(event, undefined)).toBe(220); // team bet + 50 + 50 + 20
     expect(playerBuyIn(event, { days: { '1': { playing: true, games: ['banker'] }, '2': { playing: false, games: [] } } })).toBe(100);

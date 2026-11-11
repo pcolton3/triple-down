@@ -375,7 +375,11 @@ export function buyInBreakdown(event: Pick<GolfEvent, 'buy_in' | 'team_bet' | 'd
   const inGame = (day: EventDay, key: string) => (roster ? roster.filter((entry) => dayChoice(event, entry.choices, day.day).games.includes(key)).length : players);
   const teamBet = isTeamEvent(event) ? event.team_bet : 0;
   const lines = [
-    ...(teamBet > 0 ? [{ label: 'Team bet (winning team splits)', perPlayer: teamBet, pot: teamBet * players }] : []),
+    ...(teamBet > 0 ? [{
+      label: 'Team bet (winning team splits)',
+      perPlayer: teamBet,
+      pot: roster ? roster.reduce((total, entry) => total + playerTeamBet(event, entry.choices), 0) : teamBet * players,
+    }] : []),
     ...event.days.flatMap((day) =>
       potGames(day).map((game) => ({
         label: `${event.days.length > 1 ? `Day ${day.day} ` : ''}${gameDefinition(game.key).label.toLowerCase()}`,
@@ -469,12 +473,21 @@ export function isDayLocked(day: Pick<EventDay, 'roundCode'>) {
   return Boolean(day.roundCode?.trim());
 }
 
-/** What one player owes: the team bet (team events) plus only the pot games they joined. */
+/**
+ * A player's share of the team bet: the full bet split evenly across the team-match days, so someone
+ * who plays one of two team days pays half. Non-team events have no team bet.
+ */
+export function playerTeamBet(event: Pick<GolfEvent, 'days' | 'team_bet'>, choices?: SignupChoices) {
+  const teamDays = event.days.filter((day) => TEAM_FORMATS.includes(day.format));
+  if (!teamDays.length || !(event.team_bet > 0)) return 0;
+  const played = teamDays.filter((day) => dayChoice(event, choices, day.day).playing).length;
+  return Math.round(((event.team_bet * played) / teamDays.length) * 100) / 100;
+}
+
+/** What one player owes: their share of the team bet plus only the pot games they joined. */
 export function playerBuyIn(event: Pick<GolfEvent, 'days' | 'team_bet'>, choices?: SignupChoices) {
   const days = event.days.map((day) => ({ day, choice: dayChoice(event, choices, day.day) }));
-  const playsAnyDay = days.some(({ choice }) => choice.playing);
-  const teamBet = isTeamEvent(event) && playsAnyDay ? event.team_bet : 0;
-  return teamBet + days.reduce((total, { day, choice }) => total + potGames(day).filter((game) => choice.games.includes(game.key)).reduce((sum, game) => sum + game.amount, 0), 0);
+  return playerTeamBet(event, choices) + days.reduce((total, { day, choice }) => total + potGames(day).filter((game) => choice.games.includes(game.key)).reduce((sum, game) => sum + game.amount, 0), 0);
 }
 
 /** Games where the whole foursome has to be playing for it to work. */
