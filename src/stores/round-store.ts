@@ -909,7 +909,13 @@ function buildCtpSummary(round: RoundState): CtpSummary {
         const winner = round.players.find((player) => player.id === hole.ctpWinnerPlayerId);
         return hole.holeNumber === holeNumber && hole.ctpWinnerPlayerId && playerParticipatesInCtp(winner);
       });
-      const winningPlayerId = groupHoles[groupHoles.length - 1]?.ctpWinnerPlayerId ?? null;
+      // Groups only mark CTP when they beat the current mark, so the most recent mark wins.
+      // (Marks from before marks were timestamped fall back to the last group.)
+      const latest = groupHoles.reduce<HoleState | null>(
+        (best, hole) => (!best || (hole.gameData?.ctpMarkedAt ?? 0) >= (best.gameData?.ctpMarkedAt ?? 0) ? hole : best),
+        null
+      );
+      const winningPlayerId = latest?.ctpWinnerPlayerId ?? null;
       const winner = round.players.find((player) => player.id === winningPlayerId);
       return {
         holeNumber,
@@ -1511,7 +1517,9 @@ export const useRoundStore = create<RoundStore>()(
           const round = {
             ...state.round,
             holes: state.round.holes.map((hole) =>
-              hole.holeNumber === holeNumber && (hole.groupNumber ?? 1) === groupNumber ? { ...hole, ctpWinnerPlayerId: playerId } : hole
+              hole.holeNumber === holeNumber && (hole.groupNumber ?? 1) === groupNumber
+                ? { ...hole, ctpWinnerPlayerId: playerId, gameData: { ...hole.gameData, ctpMarkedAt: playerId ? Date.now() : null } }
+                : hole
             ),
           };
           return { round, ledger: recalcLedger(round) };

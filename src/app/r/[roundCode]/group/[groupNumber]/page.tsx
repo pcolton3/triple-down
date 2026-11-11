@@ -19,6 +19,7 @@ import {
 } from '@/lib/realtime/shared-rounds';
 import { claimGroupScorekeeper, releaseGroupScorekeeper, takeOverGroupScorekeeper, userCanEditGroup } from '@/lib/realtime/group-rounds';
 import { AnnouncementsBanner } from '@/components/events/announcements';
+import { CtpCard } from '@/components/round/ctp-card';
 import { discardPendingForGroup, pendingForGroup, QUEUE_EVENT, type PendingHole } from '@/lib/offline/score-queue';
 
 function formatUnknownError(error: unknown, fallback: string) {
@@ -809,22 +810,7 @@ export default function GroupScoringPage() {
       ) : null}
 
       {ctpGameEnabled && hole.par === 3 ? (
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="mb-2 text-lg font-bold">Closest to the Pin</h2>
-          <select
-            className="w-full rounded-xl border border-slate-300 px-3 py-3 font-semibold"
-            value={hole.ctpWinnerPlayerId ?? ''}
-            disabled={!canEdit}
-            onChange={(event) => setCtpWinner(hole.holeNumber, event.target.value || null, groupNumber)}
-          >
-            <option value="">No Winner</option>
-            {ctpPlayers.map((player) => (
-              <option key={player.id} value={player.id}>
-                {player.name}
-              </option>
-            ))}
-          </select>
-        </section>
+        <CtpCard round={round} hole={hole} groupNumber={groupNumber} players={ctpPlayers} canEdit={canEdit} onChange={(playerId) => setCtpWinner(hole.holeNumber, playerId, groupNumber)} />
       ) : null}
 
       <GroupGameInputs round={round} groupNumber={groupNumber} hole={hole} canEdit={canEdit} onChange={changeGameData} />

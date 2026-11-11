@@ -81,3 +81,30 @@ describe('Pot splits pay out every cent', () => {
     expect(sum(result.pots.map((p) => p.amount))).toBe(10);
   });
 });
+
+describe('CTP across groups: the most recent mark wins', () => {
+  // Groups only mark when they beat the current mark (the on-course process), so the latest mark is the closest.
+  const twoGroups = (marks: Record<number, { ctp: string; at: number }>) => {
+    const round = buildRound(
+      [player('a', 0), player('b', 0), player('c', 0), player('d', 0)],
+      [{ par: 3, index: 1, gross: { a: 3, b: 3, c: 3, d: 3 } }],
+      { ctpEnabled: true, ctpPot: 100 },
+      [['a', 'b'], ['c', 'd']]
+    );
+    round.holes = round.holes.map((hole) => {
+      const mark = marks[hole.groupNumber ?? 1];
+      return mark ? { ...hole, ctpWinnerPlayerId: mark.ctp, gameData: { ctpMarkedAt: mark.at } } : hole;
+    });
+    return Object.fromEntries(load(round).getCtpSummary().payouts.map((p) => [p.playerId, p.amount]));
+  };
+
+  it('a later group that beat the mark wins', () => {
+    expect(twoGroups({ 1: { ctp: 'a', at: 1000 }, 2: { ctp: 'c', at: 2000 } })).toMatchObject({ a: 0, c: 100 });
+  });
+
+  it('an earlier group syncing late does not take it back', () => {
+    // Group 2 marked later on the course; group 1's phone was offline and its save arrives last.
+    expect(twoGroups({ 2: { ctp: 'c', at: 2000 }, 1: { ctp: 'a', at: 1000 } })).toMatchObject({ a: 0, c: 100 });
+    expect(twoGroups({ 1: { ctp: 'a', at: 3000 }, 2: { ctp: 'c', at: 2000 } })).toMatchObject({ a: 100, c: 0 });
+  });
+});

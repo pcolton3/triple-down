@@ -25,6 +25,8 @@ export type HoleGameData = {
   bongoPlayerId?: string | null;
   /** Team games (Vegas, Best Ball…): who partners the group's first player. */
   teamPartnerOfFirst?: string | null;
+  /** CTP: when this group marked its player as closest (ms, phone clock). The latest mark wins. */
+  ctpMarkedAt?: number | null;
 };
 
 export type HoleState = {
