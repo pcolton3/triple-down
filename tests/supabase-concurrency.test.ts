@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
+import { supabase } from '@/lib/supabase/client';
 import {
   createSharedRoundFromLocalRound,
   loadSharedRoundByCode,
@@ -141,13 +142,22 @@ function assertSavedScores(expectedRound: RoundState, loadedRound: RoundState) {
   });
 }
 
-describe('Supabase multi-group scoring concurrency', () => {
+// Writes to the real Supabase project, so it only runs when asked for:
+// RUN_LIVE_TESTS=1 npx vitest run tests/supabase-concurrency.test.ts
+const createdRounds: string[] = [];
+
+describe.skipIf(!process.env.RUN_LIVE_TESTS)('Supabase multi-group scoring concurrency', () => {
+  afterAll(async () => {
+    for (const code of createdRounds) await supabase.rpc('delete_round', { p_round_code: code, p_device_id: null });
+  });
+
   it('preserves all group scores when groups save holes at the same time', async () => {
     requireSupabaseEnv();
 
     const roundCode = `TT${Date.now().toString(36).slice(-6).toUpperCase()}`;
     const initialRound = createLocalRound(roundCode);
     const savedRound = await createSharedRoundFromLocalRound(initialRound);
+    createdRounds.push(roundCode);
 
     const expectedHoles = initialRound.holes.map(completedHole);
     const jitteredSaves = expectedHoles.map(

@@ -9,7 +9,8 @@ import { AnnouncementsBanner, RoundCreatorComposer } from '@/components/events/a
 import { computeGroupGames } from '@/lib/games/group-games';
 import { formatCurrency as formatMoney } from '@/lib/utils/currency';
 import { useRoundStore } from '@/stores/round-store';
-import { loadSharedRoundByCode, sharedRoundBundleToRoundState } from '@/lib/realtime/shared-rounds';
+import { loadSharedRoundByCode, sharedRoundBundleToRoundState, type SharedRoundBundle } from '@/lib/realtime/shared-rounds';
+import { refreshSharedRoundBundle } from '@/lib/realtime/round-refresh';
 import type { HoleState, Player, RoundState } from '@/types/round';
 
 function ScoreTable({
@@ -459,31 +460,58 @@ export default function EventLeaderboardPage() {
     let cancelled = false;
     let refreshTimer: number | null = null;
 
+    // Full reloads download the whole round (about 40 KB for 12 foursomes), so between them only
+    // changed rows are fetched, and nothing is fetched while the page is in the background.
+    let lastBundle: SharedRoundBundle | null = null;
+    let lastFullLoad = 0;
+    let busy = false;
+
     async function loadRound(showLoading = false) {
       const requestedCode = params.roundCode?.toUpperCase();
-      if (!requestedCode) return;
+      if (!requestedCode || busy) return;
+      busy = true;
+      try {
+        if (showLoading) setLoadStatus('loading');
+        let bundle: SharedRoundBundle | null;
+        if (lastBundle && Date.now() - lastFullLoad < 60_000) {
+          const refreshed = await refreshSharedRoundBundle(lastBundle);
+          if (cancelled || !refreshed.changed) return;
+          bundle = refreshed.bundle;
+        } else {
+          bundle = await loadSharedRoundByCode(requestedCode);
+          lastFullLoad = Date.now();
+        }
+        if (cancelled) return;
 
-      if (showLoading) setLoadStatus('loading');
-      const bundle = await loadSharedRoundByCode(requestedCode);
-      if (cancelled) return;
+        if (!bundle) {
+          if (showLoading) setLoadStatus('not_found');
+          return;
+        }
 
-      if (!bundle) {
-        if (showLoading) setLoadStatus('not_found');
-        return;
+        lastBundle = bundle;
+        hydrateRound(sharedRoundBundleToRoundState(bundle));
+        setLoadStatus('ready');
+      } catch {
+        // Keep showing the last scores; the next tick tries again.
+      } finally {
+        busy = false;
       }
-
-      hydrateRound(sharedRoundBundleToRoundState(bundle));
-      setLoadStatus('ready');
     }
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void loadRound(false);
+    };
 
     void loadRound(true);
     refreshTimer = window.setInterval(() => {
-      void loadRound(false);
+      if (document.visibilityState === 'visible') void loadRound(false);
     }, 5000);
+    document.addEventListener('visibilitychange', onVisible);
 
     return () => {
       cancelled = true;
       if (refreshTimer) window.clearInterval(refreshTimer);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, [hydrateRound, params.roundCode]);
   const roundPlayers = useMemo(() => (Array.isArray(round.players) ? round.players : []), [round.players]);
