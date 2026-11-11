@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BuyInCard, EventSchedule } from '@/components/events/event-details';
+import { EventAssistant } from '@/components/events/event-assistant';
 import { EventEditor, cleanDraft } from '@/components/events/event-editor';
 import { ChoicesEditor, choicesSummary } from '@/components/events/signup-choices';
 import { Button } from '@/components/shared/button';
@@ -225,6 +226,29 @@ export default function OrganizeEventPage() {
         </div>
         <p className="text-xs text-slate-500">This organizer page is saved on this device. Keep your organizer link private; anyone with it can edit the event.</p>
       </Card>
+
+      <EventAssistant
+        mode="organizer"
+        event={event}
+        signups={signups}
+        organizerKey={key}
+        applyBlocked={dirty ? 'You have unsaved edits in the editor below. Save or undo them first, then apply.' : undefined}
+        reload={async () => {
+          const [freshEvent, freshSignups] = await Promise.all([loadGolfEvent(code), loadSignups(code, key)]);
+          if (!freshEvent) throw new Error('This event no longer exists.');
+          return { event: freshEvent, signups: freshSignups };
+        }}
+        onApplied={() => {
+          void Promise.all([loadGolfEvent(code), loadSignups(code, key)])
+            .then(([freshEvent, freshSignups]) => {
+              if (!freshEvent) return;
+              setEvent(freshEvent);
+              setDraft(pickDraft(freshEvent));
+              setSignups(freshSignups);
+            })
+            .catch((refreshError: Error) => setNotice(refreshError.message));
+        }}
+      />
 
       {event.days.length ? (
         <Card className="space-y-3">

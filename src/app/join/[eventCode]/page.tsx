@@ -9,6 +9,7 @@ import { Card } from '@/components/shared/card';
 import { completeChoices, isTeamEvent, loadGolfEvent, loadRoster, rememberJoinedEvent, signUp, type GolfEvent, type RosterEntry, type SignupChoices } from '@/lib/events/golf-events';
 import { ChoicesEditor } from '@/components/events/signup-choices';
 import { ShareEventCard } from '@/components/events/share-event';
+import { EventAssistant } from '@/components/events/event-assistant';
 
 const inputClass = 'min-h-[48px] w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-base';
 
@@ -163,6 +164,7 @@ export default function JoinEventPage() {
 
       <EventSchedule event={event} />
       <BuyInCard event={event} players={roster.length} roster={roster} />
+      <EventAssistant mode="player" event={event} />
 
       <Card>
         <h2 className="mb-2 text-xl font-bold">

@@ -14,6 +14,7 @@
     "test:concurrency": "vitest run tests/supabase-concurrency.test.ts --testTimeout=90000"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
     "@supabase/supabase-js": "^2.104.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.511.0",
