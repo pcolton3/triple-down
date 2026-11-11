@@ -37,4 +37,22 @@ describe('buildEventRoundPrefill', () => {
     expect(prefill.settings.teamAssignments).toEqual({ p1: 'team_one', p2: 'team_one', p3: 'team_two' });
     expect(prefill.notes).toContain('1 signed-up player is not playing this day.');
   });
+
+  it('plays everyone off the lowest handicap in the event, even if that player sits out the day', () => {
+    const withHandicap = (entry: Signup, handicap: number) => ({ ...entry, handicap });
+    const prefill = buildEventRoundPrefill(event, [
+      withHandicap(signup('Al', 'team_one'), 10),
+      withHandicap(signup('Bo', 'team_two'), 2.1),
+      withHandicap(signup('Cy', 'team_one'), 14.4),
+      withHandicap(signup('Di', 'team_two', [], false), 1.5), // event low, not playing Day 1
+    ], 1);
+    const byName = Object.fromEntries(prefill.players.map((player) => [player.name, player.handicap]));
+    expect(byName).toEqual({ Al: 8.5, Bo: 0.6, Cy: 12.9 });
+    expect(prefill.notes.some((note) => note.includes('lowest handicap (1.5)'))).toBe(true);
+  });
+
+  it('leaves handicaps alone when the event low is scratch', () => {
+    const prefill = buildEventRoundPrefill(event, [{ ...signup('Al', 'team_one'), handicap: 0 }, { ...signup('Bo', 'team_two'), handicap: 10 }], 1);
+    expect(prefill.players.map((player) => player.handicap).sort()).toEqual([0, 10]);
+  });
 });
