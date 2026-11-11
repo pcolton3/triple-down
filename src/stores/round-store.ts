@@ -874,34 +874,12 @@ function buildLowNetSummary(round: RoundState): LowNetSummary {
   const lowScore = totals[0]?.netTotal;
   const firstPlace = totals.filter((item) => item.netTotal === lowScore);
 
-  if (firstPlace.length > 1) {
-    firstPlace.forEach((item) => {
-      const payout = payouts.find((p) => p.playerId === item.playerId);
-      if (payout) {
-        payout.placement = 'Tied 1st';
-        payout.amount = pot / firstPlace.length;
-      }
-    });
-    return { pot, totals, payouts };
-  }
-
-  const first = firstPlace[0];
-  const secondScore = totals.find((item) => item.netTotal > first.netTotal)?.netTotal;
-  const secondPlace = secondScore == null ? [] : totals.filter((item) => item.netTotal === secondScore);
-  const secondPot = secondPlace.length > 0 ? pot * 0.2 : 0;
-  const firstPot = pot - secondPot;
-
-  const firstPayout = payouts.find((p) => p.playerId === first.playerId);
-  if (firstPayout) {
-    firstPayout.placement = '1st';
-    firstPayout.amount = firstPot;
-  }
-
-  secondPlace.forEach((item) => {
+  // House rule: the low net winner takes the whole pot; a tie for first splits it.
+  firstPlace.forEach((item) => {
     const payout = payouts.find((p) => p.playerId === item.playerId);
     if (payout) {
-      payout.placement = secondPlace.length > 1 ? 'Tied 2nd' : '2nd';
-      payout.amount = secondPot / secondPlace.length;
+      payout.placement = firstPlace.length > 1 ? 'Tied 1st' : '1st';
+      payout.amount = pot / firstPlace.length;
     }
   });
 
