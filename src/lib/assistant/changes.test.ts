@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { planChanges, type AssistantChange } from '@/lib/assistant/changes';
+import { PLANNER_REPLY_SCHEMA, draftFromWire, draftOutline, planChanges, type AssistantChange } from '@/lib/assistant/changes';
 import type { GolfEvent, Signup } from '@/lib/events/golf-events';
 
 const event: GolfEvent = {
@@ -83,5 +83,40 @@ describe('planChanges', () => {
     const plan = planChanges(event, signups, [{ op: 'set_signups_open', open: true }, updateDay({ course: 'Wigwam Gold' })]);
     expect(plan.lines).toEqual([]);
     expect(plan.eventPatch).toEqual({});
+  });
+});
+
+describe('draftFromWire', () => {
+  it('turns a planner plan into a valid form draft and drops bad values', () => {
+    const draft = draftFromWire({
+      title: ' Scottsdale Cup ', description: 'Two days.', team_one_name: '', team_two_name: 'Blue', buy_in: 150, team_bet: 50, max_players: 0,
+      days: [
+        { date: '2027-04-24', format: 'team_match', course: 'Troon North', address: '', teeTime: '08:10', website: '', notes: '', games: [{ key: 'skins', amount: 50 }, { key: 'skins', amount: 10 }, { key: 'made_up', amount: 5 }] },
+        { date: 'next sat', format: 'weird', course: '', address: '', teeTime: '8am', website: '', notes: '', games: [] },
+      ],
+      agenda: [{ date: '2027-04-24', time: '18:30', title: 'Dinner', location: "Mastro's", address: '', link: '', notes: '' }, { date: '', time: '', title: ' ', location: '', address: '', link: '', notes: '' }],
+    });
+    expect(draft.title).toBe('Scottsdale Cup');
+    expect(draft.team_one_name).toBe('Team 1');
+    expect(draft.max_players).toBeNull();
+    expect(draft.days[0]).toMatchObject({ day: 1, teeTime: '08:10', games: [{ key: 'skins', amount: 50 }] });
+    expect(draft.days[1]).toMatchObject({ day: 2, date: '', format: 'casual' });
+    expect(draft.days[1].teeTime).toBeUndefined();
+    expect(draft.agenda).toHaveLength(1);
+    expect(draftOutline(draft)[0]).toBe('Scottsdale Cup');
+  });
+
+  it('keeps the planner schema within the API union limit', () => {
+    let unions = 0;
+    const walk = (node: unknown): void => {
+      if (Array.isArray(node)) return node.forEach(walk);
+      if (node && typeof node === 'object') {
+        const record = node as Record<string, unknown>;
+        if (Array.isArray(record.type) || record.anyOf) unions += 1;
+        Object.values(record).forEach(walk);
+      }
+    };
+    walk(PLANNER_REPLY_SCHEMA);
+    expect(unions).toBeLessThanOrEqual(16);
   });
 });

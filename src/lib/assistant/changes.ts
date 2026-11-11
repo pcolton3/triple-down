@@ -11,6 +11,7 @@ import {
   type DayFormat,
   type EditableField,
   type EventDay,
+  type EventDraft,
   type GolfEvent,
   type Signup,
   type TeamKey,
@@ -397,4 +398,128 @@ export function planChanges(event: GolfEvent, signups: Signup[], incoming: Array
   }
 
   return { eventPatch, signupPatches: Array.from(signupPatches.values()), lines, problems: Array.from(new Set(problems)) };
+}
+
+/* ---------- Planning a new event (create page) ---------- */
+
+/** A complete event plan as the planner sends it: flat strings, "" for unknown, 0 max_players for no limit. */
+export type WireDraft = {
+  title: string;
+  description: string;
+  team_one_name: string;
+  team_two_name: string;
+  buy_in: number;
+  team_bet: number;
+  max_players: number;
+  days: Array<{ date: string; format: string; course: string; address: string; teeTime: string; website: string; notes: string; games: Array<{ key: string; amount: number }> }>;
+  agenda: Array<{ date: string; time: string; title: string; location: string; address: string; link: string; notes: string }>;
+};
+
+export type PlannerReply = { reply: string; draft: WireDraft | null };
+
+const str = (description?: string) => (description ? { type: 'string', description } : { type: 'string' });
+const obj = (properties: Record<string, unknown>) => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
+
+const DRAFT_SCHEMA = obj({
+  title: str(),
+  description: str('What players read on the invite: the plan, house rules, money, what to bring. Plain text.'),
+  team_one_name: str(),
+  team_two_name: str(),
+  buy_in: { type: 'number', description: 'Per player. Usually the team bet plus every pot game on every day.' },
+  team_bet: { type: 'number', description: 'Per player, only for team_match / singles_match days; else 0.' },
+  max_players: { type: 'integer', description: '0 for no limit' },
+  days: {
+    type: 'array',
+    description: 'Golf days in date order.',
+    items: obj({
+      date: str('YYYY-MM-DD, or "" if not decided'),
+      format: { type: 'string', enum: FORMATS },
+      course: str(),
+      address: str(),
+      teeTime: str('HH:MM 24-hour, or "" for TBA'),
+      website: str(),
+      notes: str(),
+      games: { type: 'array', items: obj({ key: { type: 'string', enum: EVENT_GAMES.map((game) => game.key) }, amount: { type: 'number' } }) },
+    }),
+  },
+  agenda: {
+    type: 'array',
+    description: 'Non-golf plans: dinners, travel, awards.',
+    items: obj({ date: str('YYYY-MM-DD'), time: str('HH:MM 24-hour or ""'), title: str(), location: str(), address: str(), link: str(), notes: str() }),
+  },
+});
+
+export const PLANNER_REPLY_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['reply', 'draft'],
+  properties: {
+    reply: { type: 'string', description: 'What to tell the organizer.' },
+    draft: { anyOf: [DRAFT_SCHEMA, { type: 'null' }], description: 'The complete plan for the form, building on the current form; null when only talking or asking questions.' },
+  },
+} as const;
+
+const clip = (value: unknown, length = 300) => (typeof value === 'string' ? value.trim().slice(0, length) : '');
+
+/** Turns the planner's plan into a form draft, dropping anything malformed. */
+export function draftFromWire(wire: WireDraft): EventDraft {
+  const days: EventDay[] = (Array.isArray(wire.days) ? wire.days : []).slice(0, 10).map((day, index) => {
+    const date = clip(day.date);
+    const teeTime = clip(day.teeTime);
+    const seen = new Set<string>();
+    return {
+      day: index + 1,
+      date: DATE.test(date) ? date : '',
+      format: FORMATS.includes(day.format as DayFormat) ? (day.format as DayFormat) : 'casual',
+      games: (Array.isArray(day.games) ? day.games : [])
+        .filter((game) => EVENT_GAMES.some((known) => known.key === game.key) && !seen.has(game.key) && seen.add(game.key))
+        .map((game) => ({ key: game.key, amount: Math.max(0, Math.round(Number(game.amount) * 100) / 100 || 0) })),
+      ...(clip(day.course) ? { course: clip(day.course) } : {}),
+      ...(clip(day.address) ? { address: clip(day.address) } : {}),
+      ...(TIME.test(teeTime) ? { teeTime } : {}),
+      ...(clip(day.website) ? { website: clip(day.website) } : {}),
+      ...(clip(day.notes, 1000) ? { notes: clip(day.notes, 1000) } : {}),
+    };
+  });
+  const agenda: AgendaItem[] = (Array.isArray(wire.agenda) ? wire.agenda : []).slice(0, 30).flatMap((item, index) => {
+    const title = clip(item.title);
+    const date = clip(item.date);
+    const time = clip(item.time);
+    if (!title) return [];
+    return [{
+      id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `a-${Date.now()}-${index}`,
+      date: DATE.test(date) ? date : '',
+      title,
+      ...(TIME.test(time) ? { time } : {}),
+      ...(clip(item.location) ? { location: clip(item.location) } : {}),
+      ...(clip(item.address) ? { address: clip(item.address) } : {}),
+      ...(clip(item.link) ? { link: clip(item.link) } : {}),
+      ...(clip(item.notes, 1000) ? { notes: clip(item.notes, 1000) } : {}),
+    }];
+  });
+  const money = (value: unknown) => Math.max(0, Math.round(Number(value) * 100) / 100 || 0);
+  return {
+    title: clip(wire.title, 120),
+    description: clip(wire.description, 5000),
+    team_one_name: clip(wire.team_one_name, 60) || 'Team 1',
+    team_two_name: clip(wire.team_two_name, 60) || 'Team 2',
+    buy_in: money(wire.buy_in),
+    team_bet: money(wire.team_bet),
+    max_players: Number(wire.max_players) >= 2 ? Math.round(Number(wire.max_players)) : null,
+    days: days.length ? days : [{ day: 1, date: '', format: 'casual', games: [] }],
+    agenda,
+  };
+}
+
+/** A short plain-English outline of a plan, for the "Use this plan" card. */
+export function draftOutline(draft: EventDraft): string[] {
+  const lines = [draft.title || 'Untitled event'];
+  for (const day of draft.days) {
+    lines.push(
+      `${dayLabel(day)}: ${day.course || 'course TBD'} · ${FORMAT_LABELS[day.format] ?? day.format}${day.teeTime ? ` · ${formatTime(day.teeTime)}` : ''} · ${gamesText(day.games ?? [])}`
+    );
+  }
+  for (const item of draft.agenda) lines.push(`${item.date ? formatEventDate(item.date, { weekday: 'short', month: 'short', day: 'numeric' }) : 'Date TBD'}${item.time ? ` ${formatTime(item.time)}` : ''}: ${item.title}${item.location ? ` · ${item.location}` : ''}`);
+  lines.push(`Buy-in ${money(draft.buy_in)}${draft.team_bet ? ` (includes ${money(draft.team_bet)} team bet)` : ''}${draft.max_players ? ` · up to ${draft.max_players} players` : ''}`);
+  return lines;
 }

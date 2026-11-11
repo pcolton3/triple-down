@@ -1,12 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
-import { ORGANIZER_REPLY_SCHEMA, type AssistantReply } from '@/lib/assistant/changes';
-import { eventContext, systemPrompt, type AssistantMode } from '@/lib/assistant/prompt';
+import { ORGANIZER_REPLY_SCHEMA, PLANNER_REPLY_SCHEMA, type AssistantReply, type PlannerReply } from '@/lib/assistant/changes';
+import { eventContext, plannerContext, systemPrompt, type AssistantMode } from '@/lib/assistant/prompt';
 import { loadGolfEvent, loadRoster, loadSignups } from '@/lib/events/golf-events';
 import { supabase } from '@/lib/supabase/client';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const MODEL = 'claude-opus-5-5';
 // Claude Opus 5.5 list prices in dollars per million tokens, for the app's own monthly cap.
@@ -43,95 +43,121 @@ function apiKey() {
   return process.env.ANTHROPIC_API_KEY || process.env.TripleTrackClaudeAI || '';
 }
 
-export async function POST(request: NextRequest) {
-  if (!apiKey()) return fail(503, "The assistant isn't set up yet.");
-
-  let body: { code?: unknown; mode?: unknown; key?: unknown; messages?: unknown; today?: unknown };
-  try {
-    body = await request.json();
-  } catch {
-    return fail(400, 'Bad request.');
-  }
-  const code = typeof body.code === 'string' ? body.code.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 16) : '';
-  const mode: AssistantMode = body.mode === 'organizer' ? 'organizer' : 'player';
-  const key = typeof body.key === 'string' ? body.key : '';
-  const today = typeof body.today === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.today) ? body.today : new Date().toISOString().slice(0, 10);
-  const messages = cleanHistory(body.messages);
-  if (!code || !messages) return fail(400, 'Bad request.');
-
-  const event = await loadGolfEvent(code).catch(() => null);
-  if (!event) return fail(404, 'Event not found.');
-
-  let context: string;
-  try {
-    // Organizer data only comes back for a valid organizer key; emails never go to the model.
-    context = mode === 'organizer'
-      ? eventContext(event, today, { signups: await loadSignups(code, key) })
-      : eventContext(event, today, { roster: await loadRoster(code) });
-  } catch {
-    return fail(mode === 'organizer' ? 403 : 500, mode === 'organizer' ? 'Organizer link is not valid.' : "Couldn't load the event.");
-  }
-
-  // Daily per-event limits and the monthly spend cap live in Supabase (supabase-assistant.sql).
-  const { data: turn, error: turnError } = await supabase.rpc('assistant_take_turn', { p_code: code, p_mode: mode });
-  if (turnError) return fail(503, "The assistant isn't set up yet (run supabase-assistant.sql).");
-  if (turn === 'monthly_cap') return fail(429, 'The assistant has hit its monthly limit. It will be back next month.');
-  if (turn !== 'ok') return fail(429, "That's a lot of questions for one day. Try again tomorrow.");
-
-  const client = new Anthropic({ apiKey: apiKey() });
-  let response: Anthropic.Beta.BetaMessage;
-  try {
-    response = await client.beta.messages.create({
-      model: MODEL,
-      max_tokens: 8000,
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
-      system: [
-        { type: 'text', text: systemPrompt(mode), cache_control: { type: 'ephemeral' } },
-        { type: 'text', text: context },
-      ],
-      messages,
-      output_config: {
-        effort: mode === 'organizer' ? 'medium' : 'low',
-        ...(mode === 'organizer' ? { format: { type: 'json_schema' as const, schema: ORGANIZER_REPLY_SCHEMA as unknown as Record<string, unknown> } } : {}),
-      },
-    });
-  } catch (error) {
-    if (error instanceof Anthropic.RateLimitError) return fail(429, 'The assistant is busy. Try again in a minute.');
-    if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) return fail(503, "The assistant's API key isn't working.");
-    if (error instanceof Anthropic.APIError) {
-      console.error('assistant API error', error.status, error.message);
-      const message = error.status === 400 && /credit balance|spend limit|usage limit/i.test(error.message) ? 'The assistant is out of credit for now.' : 'The assistant had a problem. Try again.';
-      // The API's own message (no secrets in it) helps diagnose from the browser's network tab.
-      return NextResponse.json({ error: message, detail: `${error.status}: ${error.message}`.slice(0, 500) }, { status: 502 });
-    }
-    console.error('assistant error', error);
-    return fail(502, "Couldn't reach the assistant. Try again.");
-  }
-
-  const usage = response.usage;
-  const cents =
+function centsFor(usage: Anthropic.Beta.BetaUsage) {
+  const searches = (usage as { server_tool_use?: { web_search_requests?: number } | null }).server_tool_use?.web_search_requests ?? 0;
+  return (
     ((usage.input_tokens * PRICE.input +
       (usage.cache_creation_input_tokens ?? 0) * PRICE.cacheWrite +
       (usage.cache_read_input_tokens ?? 0) * PRICE.cacheRead +
       usage.output_tokens * PRICE.output) /
       1_000_000) *
-    100;
-  await supabase.rpc('assistant_record_cost', { p_code: code, p_mode: mode, p_cents: Math.round(cents * 100) / 100 });
+      100 +
+    searches * 1 // web search is $10 per 1,000 searches
+  );
+}
 
-  if (response.stop_reason === 'refusal') return NextResponse.json({ reply: "Sorry, I can't help with that one.", changes: [] } satisfies AssistantReply);
-  if (response.stop_reason === 'max_tokens') return NextResponse.json({ reply: 'That answer got too long. Try asking for less at once.', changes: [] } satisfies AssistantReply);
+function apiFailure(error: unknown) {
+  if (error instanceof Anthropic.RateLimitError) return fail(429, 'The assistant is busy. Try again in a minute.');
+  if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) return fail(503, "The assistant's API key isn't working.");
+  if (error instanceof Anthropic.APIError) {
+    console.error('assistant API error', error.status, error.message);
+    const message = error.status === 400 && /credit balance|spend limit|usage limit/i.test(error.message) ? 'The assistant is out of credit for now.' : 'The assistant had a problem. Try again.';
+    // The API's own message (no secrets in it) helps diagnose from the browser's network tab.
+    return NextResponse.json({ error: message, detail: `${error.status}: ${error.message}`.slice(0, 500) }, { status: 502 });
+  }
+  console.error('assistant error', error);
+  return fail(502, "Couldn't reach the assistant. Try again.");
+}
+
+export async function POST(request: NextRequest) {
+  if (!apiKey()) return fail(503, "The assistant isn't set up yet.");
+
+  let body: { code?: unknown; mode?: unknown; key?: unknown; messages?: unknown; today?: unknown; draft?: unknown };
+  try {
+    body = await request.json();
+  } catch {
+    return fail(400, 'Bad request.');
+  }
+  const mode: AssistantMode = body.mode === 'organizer' ? 'organizer' : body.mode === 'planner' ? 'planner' : 'player';
+  // Planning happens before an event exists; those turns share one daily bucket.
+  const code = mode === 'planner' ? 'NEWEVENT' : typeof body.code === 'string' ? body.code.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 16) : '';
+  const key = typeof body.key === 'string' ? body.key : '';
+  const today = typeof body.today === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.today) ? body.today : new Date().toISOString().slice(0, 10);
+  const messages = cleanHistory(body.messages);
+  if (!code || !messages) return fail(400, 'Bad request.');
+
+  let context: string;
+  if (mode === 'planner') {
+    context = plannerContext(body.draft, today);
+  } else {
+    const event = await loadGolfEvent(code).catch(() => null);
+    if (!event) return fail(404, 'Event not found.');
+    try {
+      // Organizer data only comes back for a valid organizer key; emails never go to the model.
+      context = mode === 'organizer'
+        ? eventContext(event, today, { signups: await loadSignups(code, key) })
+        : eventContext(event, today, { roster: await loadRoster(code) });
+    } catch {
+      return fail(mode === 'organizer' ? 403 : 500, mode === 'organizer' ? 'Organizer link is not valid.' : "Couldn't load the event.");
+    }
+  }
+
+  // Daily limits and the monthly spend cap live in Supabase (supabase-assistant.sql).
+  const { data: turn, error: turnError } = await supabase.rpc('assistant_take_turn', { p_code: code, p_mode: mode });
+  if (turnError) return fail(503, "The assistant isn't set up yet (run supabase-assistant.sql).");
+  if (turn === 'monthly_cap') return fail(429, 'The assistant has hit its monthly limit. It will be back next month.');
+  if (turn !== 'ok') return fail(429, "That's a lot of questions for one day. Try again tomorrow.");
+
+  const schema = mode === 'organizer' ? ORGANIZER_REPLY_SCHEMA : mode === 'planner' ? PLANNER_REPLY_SCHEMA : null;
+  const client = new Anthropic({ apiKey: apiKey() });
+  const conversation: Anthropic.Beta.BetaMessageParam[] = [...messages];
+  let response: Anthropic.Beta.BetaMessage | null = null;
+  let cents = 0;
+  try {
+    // A web search can pause the turn; continue it a couple of times.
+    for (let round = 0; round < 3; round += 1) {
+      response = await client.beta.messages.create({
+        model: MODEL,
+        max_tokens: mode === 'planner' ? 16000 : 8000,
+        betas: ['server-side-fallback-2026-07-01'],
+        fallbacks: 'default',
+        system: [
+          { type: 'text', text: systemPrompt(mode), cache_control: { type: 'ephemeral' } },
+          { type: 'text', text: context },
+        ],
+        messages: conversation,
+        ...(mode === 'planner' ? { tools: [{ type: 'web_search_20260209' as const, name: 'web_search' as const, max_uses: 4 }] } : {}),
+        output_config: {
+          effort: mode === 'player' ? 'low' : 'medium',
+          ...(schema ? { format: { type: 'json_schema' as const, schema: schema as unknown as Record<string, unknown> } } : {}),
+        },
+      });
+      cents += centsFor(response.usage);
+      if (response.stop_reason !== 'pause_turn') break;
+      conversation.push({ role: 'assistant', content: response.content });
+    }
+  } catch (error) {
+    if (cents) await supabase.rpc('assistant_record_cost', { p_code: code, p_mode: mode, p_cents: Math.round(cents * 100) / 100 });
+    return apiFailure(error);
+  }
+  await supabase.rpc('assistant_record_cost', { p_code: code, p_mode: mode, p_cents: Math.round(cents * 100) / 100 });
+  if (!response) return fail(502, "Couldn't reach the assistant. Try again.");
+
+  const empty = mode === 'planner' ? { draft: null } : { changes: [] };
+  if (response.stop_reason === 'refusal') return NextResponse.json({ reply: "Sorry, I can't help with that one.", ...empty });
+  if (response.stop_reason === 'max_tokens') return NextResponse.json({ reply: 'That answer got too long. Try asking for less at once.', ...empty });
+  if (response.stop_reason === 'pause_turn') return NextResponse.json({ reply: 'That search took too long. Ask again, maybe a bit more specific?', ...empty });
 
   const text = response.content.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('').trim();
-  if (mode === 'player') return NextResponse.json({ reply: text || 'Sorry, I lost my train of thought. Ask again?', changes: [] } satisfies AssistantReply);
+  const lost = 'Sorry, I lost my train of thought. Ask again?';
+  if (mode === 'player') return NextResponse.json({ reply: text || lost, changes: [] } satisfies AssistantReply);
 
   try {
-    const parsed = JSON.parse(text) as AssistantReply;
-    return NextResponse.json({
-      reply: typeof parsed.reply === 'string' ? parsed.reply : '',
-      changes: Array.isArray(parsed.changes) ? parsed.changes : [],
-    } satisfies AssistantReply);
+    const parsed = JSON.parse(text) as Partial<AssistantReply & PlannerReply>;
+    const reply = typeof parsed.reply === 'string' ? parsed.reply : '';
+    if (mode === 'planner') return NextResponse.json({ reply, draft: parsed.draft && typeof parsed.draft === 'object' ? parsed.draft : null } satisfies PlannerReply);
+    return NextResponse.json({ reply, changes: Array.isArray(parsed.changes) ? parsed.changes : [] } satisfies AssistantReply);
   } catch {
-    return NextResponse.json({ reply: text || 'Sorry, I lost my train of thought. Ask again?', changes: [] } satisfies AssistantReply);
+    return NextResponse.json({ reply: text || lost, ...empty });
   }
 }

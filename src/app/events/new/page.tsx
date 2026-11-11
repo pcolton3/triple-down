@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BuyInCard, EventSchedule } from '@/components/events/event-details';
 import { EventEditor, cleanDraft, newDay } from '@/components/events/event-editor';
+import { PlannerAssistant } from '@/components/events/planner-assistant';
 import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
 import { createGolfEvent, normalizeEvent, rememberMyEvent, validateDraft, type EventDraft, type GolfEvent } from '@/lib/events/golf-events';
@@ -22,6 +23,8 @@ function emptyDraft(): EventDraft {
   };
 }
 
+const DRAFT_STORAGE = 'triple-track-new-event-draft';
+
 function previewEvent(draft: EventDraft): GolfEvent {
   return normalizeEvent({ ...draft, id: 'preview', code: 'PREVIEW', ctp_per_day: 0, skins_per_day: 0, signups_open: true });
 }
@@ -33,6 +36,21 @@ export default function NewEventPage() {
   const [saving, setSaving] = useState(false);
   const [created, setCreated] = useState<{ code: string; organizerKey: string; title: string } | null>(null);
   const [copied, setCopied] = useState('');
+  const [editorKey, setEditorKey] = useState(0);
+
+  // Keep the form across a reload (an assistant-built plan shouldn't vanish).
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(DRAFT_STORAGE) ?? 'null') as EventDraft | null;
+      if (saved && Array.isArray(saved.days)) {
+        setDraft(saved);
+        setEditorKey((value) => value + 1);
+      }
+    } catch { /* Start with an empty form. */ }
+  }, []);
+  useEffect(() => {
+    try { sessionStorage.setItem(DRAFT_STORAGE, JSON.stringify(draft)); } catch { /* Not saved; still works. */ }
+  }, [draft]);
 
   async function create() {
     const clean = cleanDraft(draft);
@@ -47,6 +65,10 @@ export default function NewEventPage() {
     try {
       const result = await createGolfEvent(clean);
       rememberMyEvent(result.code, clean.title, result.organizerKey);
+      try {
+        sessionStorage.removeItem(DRAFT_STORAGE);
+        sessionStorage.removeItem('triple-track-assistant:planner');
+      } catch { /* Nothing to clear. */ }
       setCreated({ ...result, title: clean.title });
       window.scrollTo({ top: 0 });
     } catch (createError) {
@@ -106,6 +128,15 @@ export default function NewEventPage() {
         <p className="mt-2 text-sm text-white/80">Set up the days, games, buy-in and agenda. You&apos;ll get a signup link to send your group.</p>
       </section>
 
+      <PlannerAssistant
+        draft={draft}
+        onUseDraft={(next) => {
+          setDraft(next);
+          setProblems([]);
+          setEditorKey((value) => value + 1);
+        }}
+      />
+
       {problems.length ? (
         <div role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-700">
           <p className="font-bold">Fix these before creating the event:</p>
@@ -114,7 +145,7 @@ export default function NewEventPage() {
       ) : null}
 
       <Card>
-        <EventEditor draft={draft} onChange={setDraft} />
+        <EventEditor key={editorKey} draft={draft} onChange={setDraft} />
       </Card>
 
       <h2 className="px-1 pt-2 text-sm font-bold uppercase tracking-wide text-slate-500">What players will see</h2>
