@@ -36,11 +36,12 @@ export function buildEventRoundPrefill(event: GolfEvent, signups: Signup[], dayN
   const ordered = suggestGroupOrder(entries);
   // Everyone plays off the lowest handicap signed up for the event (not just this day), so the low
   // player gets 0 pops and a player 8 shots higher gets 8 pops on the 8 hardest holes, every day.
+  // The difference is rounded to whole strokes (12.4 -> 12, 12.6 -> 13).
   const handicapOf = (signup: Signup) => Math.max(0, Number(signup.handicap) || 0);
   const eventLow = signups.length ? Math.min(...signups.map(handicapOf)) : 0;
   if (eventLow > 0) notes.push(`Handicaps are played off the event's lowest handicap (${eventLow}), so each player gets the difference.`);
   const players: Player[] = ordered.map((entry, index) => {
-    const handicap = Math.round((handicapOf(entry.signup) - eventLow) * 10) / 10;
+    const handicap = Math.round(handicapOf(entry.signup) - eventLow);
     const player: Player = { id: `p${index + 1}`, name: entry.signup.name, handicap };
     Object.entries(FLAG_GAMES).forEach(([key, flag]) => { player[flag] = entry.games.includes(key); });
     return player;

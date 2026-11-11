@@ -1255,8 +1255,10 @@ export const useRoundStore = create<RoundStore>()(
       round: createDefaultRound(),
       ledger: [],
 
-      createRound: (input) =>
+      createRound: (rawInput) =>
         set(() => {
+          // Rounds play whole strokes (12.4 -> 12, 12.6 -> 13); the database stores integers.
+          const input = { ...rawInput, players: rawInput.players.map((player) => ({ ...player, handicap: Math.round(Number(player.handicap) || 0) })) };
           const totalHoles = input.totalHoles ?? 18;
           const groupSize = input.groupSize ?? 4;
           const builtGroups = buildGroupsForPlayers(input.players, groupSize);

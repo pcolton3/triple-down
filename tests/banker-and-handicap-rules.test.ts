@@ -115,7 +115,7 @@ describe('event rounds play off the event low', () => {
       { name: 'High', handicap: 24 },
     ] as unknown as Signup[];
     const prefill = buildEventRoundPrefill(event, signups, 1);
-    expect(Object.fromEntries(prefill.players.map((p) => [p.name, p.handicap]))).toEqual({ Mid: 8.2, High: 20.8 });
+    expect(Object.fromEntries(prefill.players.map((p) => [p.name, p.handicap]))).toEqual({ Mid: 8, High: 21 }); // 8.2 and 20.8, rounded to whole strokes
     expect(prefill.settings.skinsPot).toBe(40);
   });
 });

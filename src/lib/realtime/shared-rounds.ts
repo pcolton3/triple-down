@@ -401,7 +401,7 @@ export async function createSharedRoundFromLocalRound(round: RoundState) {
     round_id: roundId,
     player_key: player.id,
     name: player.name,
-    handicap: player.handicap,
+    handicap: Math.round(Number(player.handicap) || 0), // whole strokes; the column is an integer
     banker_participant: player.bankerParticipant !== false,
     skins_participant: player.skinsParticipant !== false,
     ctp_participant: player.ctpParticipant !== false,
@@ -527,7 +527,7 @@ export async function updateSharedRoundSetup(round: RoundState) {
     round_id: round.id,
     player_key: player.id,
     name: player.name,
-    handicap: player.handicap,
+    handicap: Math.round(Number(player.handicap) || 0), // whole strokes; the column is an integer
     banker_participant: player.bankerParticipant !== false,
     skins_participant: player.skinsParticipant !== false,
     ctp_participant: player.ctpParticipant !== false,

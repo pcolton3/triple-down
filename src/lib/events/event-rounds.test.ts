@@ -47,7 +47,7 @@ describe('buildEventRoundPrefill', () => {
       withHandicap(signup('Di', 'team_two', [], false), 1.5), // event low, not playing Day 1
     ], 1);
     const byName = Object.fromEntries(prefill.players.map((player) => [player.name, player.handicap]));
-    expect(byName).toEqual({ Al: 8.5, Bo: 0.6, Cy: 12.9 });
+    expect(byName).toEqual({ Al: 9, Bo: 1, Cy: 13 }); // differences rounded to whole strokes
     expect(prefill.notes.some((note) => note.includes('lowest handicap (1.5)'))).toBe(true);
   });
 
