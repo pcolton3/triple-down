@@ -55,12 +55,27 @@ export type AssistantChange =
   | { op: 'remove_agenda_item'; id: string }
   | { op: 'update_player'; signup_id: string; paid: boolean | null; team: TeamKey | 'none' | null; handicap: number | null };
 
-export type AssistantReply = { reply: string; changes: AssistantChange[] };
+/**
+ * What the model actually sends: one field per change, with no optional values (structured
+ * outputs limits how many nullable/union fields a schema may have). Normalized into
+ * AssistantChange before planning.
+ */
+export type WireChange =
+  | Extract<AssistantChange, { op: 'set_text' | 'set_money' | 'set_signups_open' | 'set_day_games' | 'add_agenda_item' | 'remove_agenda_item' }>
+  | { op: 'set_max_players'; value: number }
+  | { op: 'set_day_field'; day: number; field: DayField; value: string }
+  | { op: 'set_schedule_field'; id: string; field: AgendaField; value: string }
+  | { op: 'set_player_paid'; signup_id: string; paid: boolean }
+  | { op: 'set_player_team'; signup_id: string; team: TeamKey | 'none' }
+  | { op: 'set_player_handicap'; signup_id: string; handicap: number };
 
+export type AssistantReply = { reply: string; changes: WireChange[] };
+
+const DAY_FIELDS = ['date', 'format', 'course', 'address', 'teeTime', 'website', 'notes'] as const;
+const AGENDA_FIELDS = ['date', 'time', 'title', 'location', 'address', 'link', 'notes'] as const;
+type DayField = (typeof DAY_FIELDS)[number];
+type AgendaField = (typeof AGENDA_FIELDS)[number];
 const FORMATS = Object.keys(FORMAT_LABELS) as DayFormat[];
-/** Optional value: the value's own schema, or null for "leave as is". */
-const orNull = (schema: Record<string, unknown>) => ({ anyOf: [schema, { type: 'null' }] });
-const nullableString = orNull({ type: 'string' });
 
 function op(name: string, properties: Record<string, unknown>) {
   return {
@@ -71,7 +86,7 @@ function op(name: string, properties: Record<string, unknown>) {
   };
 }
 
-/** Structured-output schema for organizer replies. Null on an update means "leave as is"; "" clears. */
+/** Structured-output schema for organizer replies. */
 export const ORGANIZER_REPLY_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -80,22 +95,17 @@ export const ORGANIZER_REPLY_SCHEMA = {
     reply: { type: 'string', description: 'What to tell the organizer. If changes are proposed, say what they do; they are not applied until the organizer taps Apply.' },
     changes: {
       type: 'array',
-      description: 'Proposed edits. Empty unless the organizer asked for a change.',
+      description: 'Proposed edits, one field per item. Empty unless the organizer asked for a change.',
       items: {
         anyOf: [
           op('set_text', { field: { type: 'string', enum: ['title', 'description', 'team_one_name', 'team_two_name'] }, value: { type: 'string' } }),
           op('set_money', { field: { type: 'string', enum: ['buy_in', 'team_bet'] }, amount: { type: 'number' } }),
-          op('set_max_players', { value: orNull({ type: 'integer' }) }),
+          op('set_max_players', { value: { type: 'integer', description: '0 removes the limit' } }),
           op('set_signups_open', { open: { type: 'boolean' } }),
-          op('update_day', {
+          op('set_day_field', {
             day: { type: 'integer' },
-            date: orNull({ type: 'string', description: 'YYYY-MM-DD' }),
-            format: orNull({ type: 'string', enum: FORMATS }),
-            course: nullableString,
-            address: nullableString,
-            teeTime: orNull({ type: 'string', description: 'HH:MM 24-hour, or "" for TBA' }),
-            website: nullableString,
-            notes: nullableString,
+            field: { type: 'string', enum: DAY_FIELDS },
+            value: { type: 'string', description: `date: YYYY-MM-DD; teeTime: HH:MM 24-hour or "" for TBA; format: one of ${FORMATS.join(', ')}; "" clears other fields` },
           }),
           op('set_day_games', {
             day: { type: 'integer' },
@@ -119,28 +129,47 @@ export const ORGANIZER_REPLY_SCHEMA = {
             link: { type: 'string' },
             notes: { type: 'string' },
           }),
-          op('update_agenda_item', {
+          op('set_schedule_field', {
             id: { type: 'string' },
-            date: nullableString,
-            time: nullableString,
-            title: nullableString,
-            location: nullableString,
-            address: nullableString,
-            link: nullableString,
-            notes: nullableString,
+            field: { type: 'string', enum: AGENDA_FIELDS },
+            value: { type: 'string', description: 'date: YYYY-MM-DD; time: HH:MM 24-hour; "" clears' },
           }),
           op('remove_agenda_item', { id: { type: 'string' } }),
-          op('update_player', {
-            signup_id: { type: 'string' },
-            paid: orNull({ type: 'boolean' }),
-            team: orNull({ type: 'string', enum: ['team_one', 'team_two', 'none'] }),
-            handicap: orNull({ type: 'number' }),
-          }),
+          op('set_player_paid', { signup_id: { type: 'string' }, paid: { type: 'boolean' } }),
+          op('set_player_team', { signup_id: { type: 'string' }, team: { type: 'string', enum: ['team_one', 'team_two', 'none'] } }),
+          op('set_player_handicap', { signup_id: { type: 'string' }, handicap: { type: 'number' } }),
         ],
       },
     },
   },
 } as const;
+
+const NO_DAY_CHANGE = { date: null, format: null, course: null, address: null, teeTime: null, website: null, notes: null };
+const NO_AGENDA_CHANGE = { date: null, time: null, title: null, location: null, address: null, link: null, notes: null };
+const NO_PLAYER_CHANGE = { paid: null, team: null, handicap: null };
+
+/** Turns the model's one-field changes into the planner's shape. Unknown shapes are dropped. */
+export function normalizeChange(change: WireChange | AssistantChange): AssistantChange | null {
+  switch (change.op) {
+    case 'set_max_players':
+      return { op: 'set_max_players', value: change.value ? change.value : null };
+    case 'set_day_field':
+      return DAY_FIELDS.includes(change.field) ? { op: 'update_day', day: change.day, ...NO_DAY_CHANGE, [change.field]: change.value } as AssistantChange : null;
+    case 'set_schedule_field':
+      return AGENDA_FIELDS.includes(change.field) ? { op: 'update_agenda_item', id: change.id, ...NO_AGENDA_CHANGE, [change.field]: change.value } as AssistantChange : null;
+    case 'set_player_paid':
+      return { op: 'update_player', signup_id: change.signup_id, ...NO_PLAYER_CHANGE, paid: change.paid };
+    case 'set_player_team':
+      return { op: 'update_player', signup_id: change.signup_id, ...NO_PLAYER_CHANGE, team: change.team };
+    case 'set_player_handicap':
+      return { op: 'update_player', signup_id: change.signup_id, ...NO_PLAYER_CHANGE, handicap: change.handicap };
+    case 'set_text': case 'set_money': case 'set_signups_open': case 'update_day': case 'set_day_games':
+    case 'add_agenda_item': case 'update_agenda_item': case 'remove_agenda_item': case 'update_player':
+      return change;
+    default:
+      return null;
+  }
+}
 
 export type SignupPatch = { id: string; name: string; patch: { paid?: boolean; team?: TeamKey | null; handicap?: number } };
 
@@ -180,7 +209,8 @@ function shown(value: string, field: string) {
  * and anything that blocks it. Pure, so it runs on proposal arrival and again on Apply
  * against freshly loaded data.
  */
-export function planChanges(event: GolfEvent, signups: Signup[], changes: AssistantChange[]): PlannedChanges {
+export function planChanges(event: GolfEvent, signups: Signup[], incoming: Array<WireChange | AssistantChange>): PlannedChanges {
+  const changes = incoming.map(normalizeChange).filter((change): change is AssistantChange => change !== null);
   const lines: string[] = [];
   const problems: string[] = [];
   const eventPatch: PlannedChanges['eventPatch'] = {};
@@ -235,8 +265,7 @@ export function planChanges(event: GolfEvent, signups: Signup[], changes: Assist
       case 'update_day': {
         const day = findDay(change.day);
         if (!day) break;
-        const fields = ['date', 'format', 'course', 'address', 'teeTime', 'website', 'notes'] as const;
-        for (const field of fields) {
+        for (const field of DAY_FIELDS) {
           const raw = change[field];
           if (raw == null) continue;
           const value = raw.trim();
@@ -288,8 +317,7 @@ export function planChanges(event: GolfEvent, signups: Signup[], changes: Assist
       case 'update_agenda_item': {
         const item = agenda.find((entry) => entry.id === change.id);
         if (!item) { problems.push('That schedule item no longer exists.'); break; }
-        const fields = ['date', 'time', 'title', 'location', 'address', 'link', 'notes'] as const;
-        for (const field of fields) {
+        for (const field of AGENDA_FIELDS) {
           const raw = change[field];
           if (raw == null) continue;
           const value = raw.trim();

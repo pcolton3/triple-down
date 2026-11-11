@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) return fail(503, "The assistant's API key isn't working.");
     if (error instanceof Anthropic.APIError) {
       console.error('assistant API error', error.status, error.message);
-      const message = error.status === 400 && /credit|spend|limit/i.test(error.message) ? 'The assistant is out of credit for now.' : 'The assistant had a problem. Try again.';
+      const message = error.status === 400 && /credit balance|spend limit|usage limit/i.test(error.message) ? 'The assistant is out of credit for now.' : 'The assistant had a problem. Try again.';
       // The API's own message (no secrets in it) helps diagnose from the browser's network tab.
       return NextResponse.json({ error: message, detail: `${error.status}: ${error.message}`.slice(0, 500) }, { status: 502 });
     }

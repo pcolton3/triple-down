@@ -66,6 +66,19 @@ describe('planChanges', () => {
     expect(plan.problems).toHaveLength(2);
   });
 
+  it('accepts the one-field-per-change format the model sends', () => {
+    const plan = planChanges(event, signups, [
+      { op: 'set_day_field', day: 1, field: 'teeTime', value: '07:40' },
+      { op: 'set_player_paid', signup_id: 's1', paid: true },
+      { op: 'set_player_team', signup_id: 's1', team: 'team_two' },
+      { op: 'set_max_players', value: 0 },
+    ]);
+    expect(plan.problems).toEqual([]);
+    expect(plan.eventPatch.days?.[0].teeTime).toBe('07:40');
+    expect(plan.signupPatches[0].patch).toEqual({ paid: true, team: 'team_two' });
+    expect(plan.eventPatch.max_players).toBeUndefined();
+  });
+
   it('drops no-op changes', () => {
     const plan = planChanges(event, signups, [{ op: 'set_signups_open', open: true }, updateDay({ course: 'Wigwam Gold' })]);
     expect(plan.lines).toEqual([]);

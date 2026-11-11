@@ -3,10 +3,10 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
-import { planChanges, type AssistantChange, type AssistantReply } from '@/lib/assistant/changes';
+import { planChanges, type AssistantReply, type WireChange } from '@/lib/assistant/changes';
 import { localToday, updateEvent, updateSignup, type GolfEvent, type Signup } from '@/lib/events/golf-events';
 
-type Proposal = { changes: AssistantChange[]; lines: string[]; status: 'pending' | 'applied' | 'dismissed' };
+type Proposal = { changes: WireChange[]; lines: string[]; status: 'pending' | 'applied' | 'dismissed' };
 type Turn = { role: 'user' | 'assistant'; content: string; proposal?: Proposal };
 
 type Props =
@@ -148,7 +148,7 @@ export function EventAssistant(props: Props) {
     );
   }
 
-  const description = (changes: AssistantChange[]) => changes.find((change) => change.op === 'set_text' && change.field === 'description') as Extract<AssistantChange, { op: 'set_text' }> | undefined;
+  const description = (changes: WireChange[]) => changes.find((change) => change.op === 'set_text' && change.field === 'description') as Extract<WireChange, { op: 'set_text' }> | undefined;
 
   return (
     <Card className="space-y-3">
