@@ -771,7 +771,7 @@ function getPlayerNetForHole(round: RoundState, hole: HoleState, playerId: strin
   return gross - strokesOnHole;
 }
 
-function buildGrossTotals(round: RoundState): GrossTotalItem[] {
+export function buildGrossTotals(round: RoundState): GrossTotalItem[] {
   return round.players.map((player) => {
     let grossTotal = 0;
     let netTotal = 0;
@@ -803,7 +803,7 @@ function buildGrossTotals(round: RoundState): GrossTotalItem[] {
   });
 }
 
-function buildSkinsSummary(round: RoundState): SkinsSummary {
+export function buildSkinsSummary(round: RoundState): SkinsSummary {
   const pot = round.gameSettings?.skinsPot ?? 0;
   if (!skinsEnabled(round)) return { pot, skinsWon: 0, valuePerSkin: 0, holes: [], payouts: [] };
   const holeNumbers = Array.from(new Set(round.holes.filter((hole) => hole.isSaved).map((hole) => hole.holeNumber))).sort(
@@ -858,7 +858,7 @@ function buildSkinsSummary(round: RoundState): SkinsSummary {
   return { pot, skinsWon: wonHoles.length, valuePerSkin, holes, payouts };
 }
 
-function buildLowNetSummary(round: RoundState): LowNetSummary {
+export function buildLowNetSummary(round: RoundState): LowNetSummary {
   const pot = round.gameSettings?.lowNetPot ?? 0;
   if (!lowNetEnabled(round)) return { pot, totals: [], payouts: [] };
   const lowNetPlayerIds = new Set(round.players.filter(playerParticipatesInLowNet).map((player) => player.id));
@@ -897,7 +897,7 @@ function buildLowNetSummary(round: RoundState): LowNetSummary {
   return { pot, totals, payouts };
 }
 
-function buildCtpSummary(round: RoundState): CtpSummary {
+export function buildCtpSummary(round: RoundState): CtpSummary {
   const pot = round.gameSettings?.ctpPot ?? 0;
   if (!ctpEnabled(round)) return { pot, par3Holes: [], payouts: [] };
   const par3HoleNumbers = Array.from(new Set(round.holes.filter((hole) => hole.par === 3).map((hole) => hole.holeNumber))).sort(
@@ -938,7 +938,7 @@ function buildCtpSummary(round: RoundState): CtpSummary {
   return { pot, par3Holes, payouts };
 }
 
-function buildNassauSummary(round: RoundState): NassauSummary {
+export function buildNassauSummary(round: RoundState): NassauSummary {
   const pot = round.gameSettings?.nassauPot ?? 0;
   if (!nassauEnabled(round)) return { pot, segments: [], payouts: [] };
 
@@ -1005,7 +1005,7 @@ function stablefordPoints(netScore: number, par: number) {
   return 0;
 }
 
-function buildStablefordSummary(round: RoundState): StablefordSummary {
+export function buildStablefordSummary(round: RoundState): StablefordSummary {
   const pot = round.gameSettings?.stablefordPot ?? 0;
   if (!stablefordEnabled(round)) return { pot, standings: [], payouts: [] };
 
@@ -1035,7 +1035,7 @@ function buildStablefordSummary(round: RoundState): StablefordSummary {
   };
 }
 
-function buildBirdiePotSummary(round: RoundState): BirdiePotSummary {
+export function buildBirdiePotSummary(round: RoundState): BirdiePotSummary {
   const pot = round.gameSettings?.birdiePot ?? 0;
   if (!birdiePotEnabled(round)) return { pot, valuePerBirdie: 0, payouts: [] };
 
@@ -1065,7 +1065,7 @@ function buildBirdiePotSummary(round: RoundState): BirdiePotSummary {
   return { pot, valuePerBirdie, payouts };
 }
 
-function buildEaglePotSummary(round: RoundState): EaglePotSummary {
+export function buildEaglePotSummary(round: RoundState): EaglePotSummary {
   const pot = round.gameSettings?.eaglePot ?? 0;
   if (!eaglePotEnabled(round)) return { pot, valuePerEagle: 0, payouts: [] };
 

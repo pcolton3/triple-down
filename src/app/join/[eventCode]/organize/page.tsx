@@ -8,6 +8,7 @@ import { EventAssistant } from '@/components/events/event-assistant';
 import { AnnouncementComposer } from '@/components/events/announcements';
 import { EmailPlayers } from '@/components/events/email-players';
 import { FoursomePlanner } from '@/components/events/foursome-planner';
+import { EventMoneyCard } from '@/components/events/event-money-card';
 import { EventEditor, cleanDraft } from '@/components/events/event-editor';
 import { ChoicesEditor, choicesSummary } from '@/components/events/signup-choices';
 import { Button } from '@/components/shared/button';
@@ -399,6 +400,8 @@ export default function OrganizeEventPage() {
           <p className="text-sm text-slate-500">No signups yet. Share the signup link to get started.</p>
         )}
       </Card>
+
+      <EventMoneyCard event={event} signups={signups} />
 
       <Card>
         <EventEditor

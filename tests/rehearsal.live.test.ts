@@ -5,14 +5,16 @@
 //   RUN_LIVE_TESTS=1 npx vitest run tests/rehearsal.live.test.ts
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildEventRoundPrefill } from '@/lib/events/event-rounds';
+import { eventMoney } from '@/lib/events/event-money';
+import { checkFoursomes, suggestFoursomes } from '@/lib/events/foursomes';
 import {
-  createGolfEvent, deleteGolfEvent, loadGolfEvent, loadSignups, playerBuyIn, signUp, updateEvent, updateSignup,
+  createGolfEvent, dayChoice, deleteGolfEvent, loadGolfEvent, loadSignups, playerBuyIn, signUp, updateEvent, updateSignup,
   type EventDraft, type GolfEvent, type Signup, type SignupChoices,
 } from '@/lib/events/golf-events';
 import { buildAutoSinglesPairings, buildRyderRoundSummary } from '@/lib/events/ryder';
 import {
   createSharedRoundFromLocalRound, loadSharedRoundByCode, replaceSharedHoleMatchups, sharedRoundBundleToRoundState,
-  updateSharedCtpResult, updateSharedHole,
+  updateSharedCtpResult, updateSharedHole, updateSharedHoleGameData,
 } from '@/lib/realtime/shared-rounds';
 import { supabase } from '@/lib/supabase/client';
 import { useRoundStore } from '@/stores/round-store';
@@ -109,9 +111,6 @@ function expectedLowNet(round: RoundState) {
 /* ---------- Driving the app like the organizer and the scorekeepers ---------- */
 function roundFromPrefill(event: GolfEvent, signups: Signup[], day: number) {
   const prefill = buildEventRoundPrefill(event, signups, day);
-  // WORKAROUND (rehearsal only): round_players.handicap is an integer column in the live database,
-  // so decimal playing handicaps can't be saved. Round to whole strokes so the rehearsal can go on.
-  if (process.env.REHEARSAL_ROUND_HANDICAPS) prefill.players = prefill.players.map((p) => ({ ...p, handicap: Math.round(p.handicap) }));
   const roundCode = `RH${Date.now().toString(36).slice(-5).toUpperCase()}${day}`;
   useRoundStore.getState().createRound({
     roundCode,
@@ -123,6 +122,10 @@ function roundFromPrefill(event: GolfEvent, signups: Signup[], day: number) {
     players: prefill.players,
     firstBankerPlayerId: prefill.players[0].id,
     groupSize: 4,
+    // As the round setup page does: the organizer's planned foursomes.
+    groupPlayers: prefill.groupOf
+      ? prefill.players.map((p) => ({ playerId: p.id, groupNumber: prefill.groupOf![p.id], sortOrder: prefill.players.filter((o) => prefill.groupOf![o.id] === prefill.groupOf![p.id]).indexOf(p) }))
+      : undefined,
     totalHoles: 18,
     holesConfig: HOLES,
     gameSettings: {
@@ -156,6 +159,7 @@ async function saveLikeAPhone(roundId: string, hole: HoleState) {
   await updateSharedHole({ ...common, bankerPlayerKey: hole.bankerPlayerId, bankerGrossScore: hole.bankerGrossScore, bankerPressed: hole.bankerPressed, isSaved: false });
   await replaceSharedHoleMatchups({ ...common, matchups: hole.matchups });
   if (hole.par === 3) await updateSharedCtpResult({ ...common, winnerPlayerKey: hole.ctpWinnerPlayerId ?? null });
+  if (hole.gameData) await updateSharedHoleGameData({ ...common, gameData: hole.gameData });
   await updateSharedHole({ ...common, isSaved: true });
 }
 
@@ -167,12 +171,22 @@ async function playDay(event: GolfEvent, signups: Signup[], day: number) {
   const latest = (await loadGolfEvent(event.code))!;
   await updateEvent(event.code, created.key!, { days: latest.days.map((d) => (d.day === day ? { ...d, roundCode: local.roundCode } : d)) });
 
-  // Each group: realistic scores; on par 3s each group marks its own closest player.
-  const played = local.holes.map((hole) => {
-    const next = playHole(local, hole);
-    if (next.par === 3) next.ctpWinnerPlayerId = next.bankerPlayerId;
-    return next;
-  });
+  // Realistic scores. CTP the way the group runs it on the course: groups play each par 3 in tee
+  // order; the first group marks its closest player, a later group marks only if it beats the mark.
+  const played = local.holes.map((hole) => playHole(local, hole));
+  const ctpExpected = new Map<number, string>();
+  for (const holeNumber of [...new Set(played.filter((h) => h.par === 3).map((h) => h.holeNumber))]) {
+    played.filter((h) => h.holeNumber === holeNumber).sort((a, b) => (a.groupNumber ?? 1) - (b.groupNumber ?? 1)).forEach((h, order) => {
+      if (order === 0 || rand() < 0.4) {
+        const members = [h.bankerPlayerId, ...h.matchups.map((m) => m.playerId)].filter((id) => local.players.find((p) => p.id === id)?.ctpParticipant !== false);
+        const closest = members[Math.floor(rand() * members.length)];
+        if (!closest) return;
+        h.ctpWinnerPlayerId = closest;
+        h.gameData = { ...h.gameData, ctpMarkedAt: Date.parse('2027-04-24T15:00:00Z') + (h.groupNumber ?? 1) * 600_000 + holeNumber * 60_000 };
+        ctpExpected.set(holeNumber, closest);
+      }
+    });
+  }
   const byGroup = new Map<number, HoleState[]>();
   played.forEach((h) => byGroup.set(h.groupNumber ?? 1, [...(byGroup.get(h.groupNumber ?? 1) ?? []), h]));
   const groups = [...byGroup.keys()].sort((a, b) => a - b);
@@ -187,7 +201,7 @@ async function playDay(event: GolfEvent, signups: Signup[], day: number) {
   await run(lateGroup); // lost signal all round, syncs at the end
 
   const loaded = sharedRoundBundleToRoundState((await loadSharedRoundByCode(local.roundCode))!);
-  return { local, loaded, played, prefill, errors, groups, lateGroup };
+  return { local, loaded, played, prefill, errors, groups, lateGroup, ctpExpected };
 }
 
 describe.skipIf(!process.env.RUN_LIVE_TESTS)('Birthday Cup rehearsal', () => {
@@ -225,9 +239,24 @@ describe.skipIf(!process.env.RUN_LIVE_TESTS)('Birthday Cup rehearsal', () => {
     expect(buyIns.Jeff).toBe(150); // Saturday only: $50 team bet + $100 pots
     expect(buyIns.Andy).toBe(200); // no skins either day: 300 - 2 x $50
     const eventLow = Math.min(...signups.map((s) => s.handicap));
+    const buyInsTotal = Object.values(buyIns).reduce((a, b) => a + b, 0);
+
+    // Organizer marks 12 of 16 buy-ins paid.
+    for (const s of signups.slice(0, 12)) await updateSignup(code, organizerKey, s.id, { paid: true });
+    signups = await loadSignups(code, organizerKey);
 
     for (const day of [1, 2]) {
-      const fresh = (await loadGolfEvent(code))!;
+      // Organizer plans the day's foursomes ahead (Suggest), checks them and saves.
+      let fresh = (await loadGolfEvent(code))!;
+      const dayInfo = fresh.days.find((x) => x.day === day)!;
+      const playing = signups.filter((x) => dayChoice(fresh, x.choices, day).playing).map((x) => ({ id: x.id, name: x.name, handicap: x.handicap, team: x.team }));
+      const plan = suggestFoursomes(dayInfo.format, playing);
+      const planCheck = checkFoursomes(dayInfo.format, playing, plan);
+      report[`day${day}Plan`] = { groups: plan.groups.map((g) => g.length), problems: planCheck.problems, warnings: planCheck.warnings };
+      if (dayInfo.format === 'singles_match') expect(planCheck.problems, 'singles plan problems').toEqual([]);
+      else if (planCheck.problems.length) findings.push(`Day ${day} plan: ${planCheck.problems.join(' ')}`);
+      await updateEvent(code, organizerKey, { days: fresh.days.map((x) => (x.day === day ? { ...x, foursomes: plan } : x)) });
+      fresh = (await loadGolfEvent(code))!;
       const d = await playDay(fresh, signups, day);
       const label = `day${day}`;
       expect(d.errors, `${label} save errors`).toEqual([]);
@@ -247,7 +276,7 @@ describe.skipIf(!process.env.RUN_LIVE_TESTS)('Birthday Cup rehearsal', () => {
       const lowPlayer = d.loaded.players.find((p) => p.handicap === 0);
       expect(lowPlayer, 'event-low player plays off 0').toBeTruthy();
       const paul = d.loaded.players.find((p) => p.name === 'Rehearsal Paul')!;
-      expect(paul.handicap).toBeCloseTo(process.env.REHEARSAL_ROUND_HANDICAPS ? Math.round(10.4 - eventLow) : 10.4 - eventLow, 5);
+      expect(paul.handicap).toBe(Math.round(10.4 - eventLow)); // whole strokes off the event low
 
       // Money, recomputed independently.
       const s = settlePage(d.loaded);
@@ -269,8 +298,8 @@ describe.skipIf(!process.env.RUN_LIVE_TESTS)('Birthday Cup rehearsal', () => {
       const ctp = s.store.getCtpSummary();
       const ctpPaid = ctp.payouts.reduce((sum, p) => sum + p.amount, 0);
       expect(Math.round(ctpPaid * 100), `${label} CTP pot fully paid`).toBe(Math.round(ctp.pot * 100));
-      const par3Picks = d.loaded.holes.filter((h) => h.par === 3 && h.ctpWinnerPlayerId).length;
-      if (par3Picks > ctp.par3Holes.length) findings.push(`${label}: ${par3Picks} CTP picks were entered across ${d.groups.length} groups for ${ctp.par3Holes.length} par 3s; the app pays whichever group saved last, not the closest in the whole field.`);
+      // The latest mark on each par 3 wins, even though the last group synced late.
+      for (const item of ctp.par3Holes) expect(item.winnerPlayerId, `${label} CTP hole ${item.holeNumber}`).toBe(d.ctpExpected.get(item.holeNumber) ?? null);
 
       // Pots match what the buy-ins collected for the day.
       const dayPots = (fresh.days[day - 1].games ?? []).filter((g) => g.amount > 0);
@@ -289,11 +318,12 @@ describe.skipIf(!process.env.RUN_LIVE_TESTS)('Birthday Cup rehearsal', () => {
           const ids = d.loaded.multiFoursome!.groupPlayers.filter((x) => x.groupNumber === g).map((x) => x.playerId);
           return ids.filter((id) => team(id) === 'team_one').length !== ids.length / 2;
         });
-        if (unbalanced.length) findings.push(`Day 1 (team match): the suggested foursomes ${unbalanced.map((g) => `#${g}`).join(', ')} don't have 2 players from each team, so those team matches are lopsided. The organizer has to rearrange groups before starting.`);
+        if (unbalanced.length) findings.push(`Day 1 (team match): groups ${unbalanced.map((g) => `#${g}`).join(', ')} aren't 2 v 2 (uneven team sizes).`);
       } else {
         const pairings = buildAutoSinglesPairings(d.loaded, d.loaded.players);
         const apart = Object.entries(pairings).filter(([a, b]) => a < b && groupOf(a) !== groupOf(b));
-        if (apart.length) findings.push(`Day 2 (singles): ${apart.length} of the automatic singles pairings put opponents in different foursomes, so they never play each other. The organizer has to set pairings/groups before starting.`);
+        expect(apart, 'singles opponents in the same group').toEqual([]);
+        expect(ryder.rows.filter((r) => r.status === 'Not started'), 'every singles match scored').toEqual([]);
         const unpaired = d.loaded.players.filter((p) => !pairings[p.id]).map((p) => p.name.replace('Rehearsal ', ''));
         if (unpaired.length) findings.push(`Day 2 (singles): ${unpaired.join(', ')} had no opponent (odd number per team).`);
       }
@@ -318,8 +348,25 @@ describe.skipIf(!process.env.RUN_LIVE_TESTS)('Birthday Cup rehearsal', () => {
       }
     }
 
-    // The two days' Ryder points add up on the event scoreboard.
-    report.teamBetPot = signups.reduce((sum, s) => sum + playerBuyIn({ ...event, days: event.days.map((d) => ({ ...d, games: [] })) }, s.choices), 0);
-    findings.push(`Team bet: players pay it in their buy-in ($${report.teamBetPot} total), but nothing in the app works out which team won the Cup or pays the winning team; the organizer settles it by hand.`);
+    // End of the event: the organizer's money summary must balance.
+    const final = (await loadGolfEvent(code))!;
+    const dayRounds = await Promise.all(final.days.map(async (x) => ({ day: x.day, round: x.roundCode ? sharedRoundBundleToRoundState((await loadSharedRoundByCode(x.roundCode))!) : null })));
+    const m = eventMoney(final, signups, dayRounds);
+    const allPots = dayRounds.reduce((sum, x) => {
+      const st = settlePage(x.round!).store;
+      return sum + st.getSkinsSummary().payouts.reduce((a, p) => a + p.amount, 0) + st.getCtpSummary().payouts.reduce((a, p) => a + p.amount, 0) + st.getLowNetSummary().payouts.reduce((a, p) => a + p.amount, 0);
+    }, 0);
+    expect(m.cup.final).toBe(true);
+    expect(m.unmatched).toEqual([]);
+    expect(m.teamBetPot).toBe(1550);
+    expect(m.totals.teamBetPaid).toBeCloseTo(1550, 2);
+    expect(m.totals.potsPaid).toBeCloseTo(allPots, 2);
+    expect(m.totals.buyInsDue).toBeCloseTo(buyInsTotal, 2);
+    expect(m.totals.left).toBeCloseTo(m.totals.buyInsDue - m.totals.potsPaid - m.totals.teamBetPaid, 2);
+    if (m.cup.leader !== 'tie') for (const row of m.rows) expect(row.teamBetWon > 0, `${row.name} team bet`).toBe(row.team === m.cup.leader);
+    report.eventMoney = {
+      cup: m.cup, teamBetPot: m.teamBetPot, totals: m.totals,
+      payouts: [...m.rows].sort((a, b) => b.net - a.net).map((r) => `${r.name.replace('Rehearsal ', '')}: pots ${r.potTotal}, team bet ${r.teamBetWon}${r.paid ? '' : `, owes ${r.buyIn}`} -> ${r.net}`),
+    };
   }, 900_000);
 });
