@@ -7,6 +7,7 @@ import { BuyInCard, EventSchedule } from '@/components/events/event-details';
 import { EventAssistant } from '@/components/events/event-assistant';
 import { AnnouncementComposer } from '@/components/events/announcements';
 import { EmailPlayers } from '@/components/events/email-players';
+import { FoursomePlanner } from '@/components/events/foursome-planner';
 import { EventEditor, cleanDraft } from '@/components/events/event-editor';
 import { ChoicesEditor, choicesSummary } from '@/components/events/signup-choices';
 import { Button } from '@/components/shared/button';
@@ -179,6 +180,18 @@ export default function OrganizeEventPage() {
     }
   }
 
+  /** After the assistant or the foursome planner saves, reload and reset the editor to match. */
+  function reloadAfterOutsideSave() {
+    void Promise.all([loadGolfEvent(code), loadSignups(code, key)])
+      .then(([freshEvent, freshSignups]) => {
+        if (!freshEvent) return;
+        setEvent(freshEvent);
+        setDraft(pickDraft(freshEvent));
+        setSignups(freshSignups);
+      })
+      .catch((refreshError: Error) => setNotice(refreshError.message));
+  }
+
   async function copy(text: string, success: string) {
     try {
       await navigator.clipboard.writeText(text);
@@ -240,21 +253,20 @@ export default function OrganizeEventPage() {
           if (!freshEvent) throw new Error('This event no longer exists.');
           return { event: freshEvent, signups: freshSignups };
         }}
-        onApplied={() => {
-          void Promise.all([loadGolfEvent(code), loadSignups(code, key)])
-            .then(([freshEvent, freshSignups]) => {
-              if (!freshEvent) return;
-              setEvent(freshEvent);
-              setDraft(pickDraft(freshEvent));
-              setSignups(freshSignups);
-            })
-            .catch((refreshError: Error) => setNotice(refreshError.message));
-        }}
+        onApplied={reloadAfterOutsideSave}
       />
 
       <AnnouncementComposer scope="event" code={event.code} organizerKey={key} />
 
       <EmailPlayers event={event} signups={signups} organizerKey={key} />
+
+      <FoursomePlanner
+        event={event}
+        signups={signups}
+        organizerKey={key}
+        blocked={dirty ? 'You have unsaved edits in the editor below. Save or undo them first.' : undefined}
+        onSaved={reloadAfterOutsideSave}
+      />
 
       {event.days.length ? (
         <Card className="space-y-3">

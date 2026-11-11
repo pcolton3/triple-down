@@ -169,12 +169,19 @@ function NewRoundPageContent() {
   const draftJson = JSON.stringify(Object.fromEntries(Object.entries(draftFields).map(([key, [value]]) => [key, value])));
   const effectiveGroupSize: 4 | 5 = players.length <= 4 ? 4 : players.length === 5 ? 5 : 4;
 
+  // Foursomes planned on the organizer page (player id -> group). Used while it still covers everyone.
+  const [plannedGroupOf, setPlannedGroupOf] = useState<Record<string, number> | null>(null);
+  const usingPlan = Boolean(plannedGroupOf && players.length > 0 && players.every((player) => plannedGroupOf[player.id]));
   const groups = useMemo(() => {
+    if (usingPlan && plannedGroupOf) {
+      const numbers = [...new Set(players.map((player) => plannedGroupOf[player.id]))].sort((a, b) => a - b);
+      return numbers.map((groupNumber, index) => ({ groupNumber: index + 1, players: players.filter((player) => plannedGroupOf[player.id] === groupNumber) }));
+    }
     return Array.from({ length: Math.ceil(players.length / effectiveGroupSize) }, (_, groupIndex) => ({
       groupNumber: groupIndex + 1,
       players: players.slice(groupIndex * effectiveGroupSize, groupIndex * effectiveGroupSize + effectiveGroupSize),
     }));
-  }, [effectiveGroupSize, players]);
+  }, [effectiveGroupSize, players, plannedGroupOf, usingPlan]);
   const bankerEligiblePlayers = useMemo(
     () => players.filter((player) => player.bankerParticipant !== false),
     [players]
@@ -359,6 +366,8 @@ function NewRoundPageContent() {
           lowNetParticipant: player.lowNetParticipant !== false,
         })));
         setPlayerCount(prefill.players.length);
+        setPlannedGroupOf(prefill.groupOf);
+        if (g.singlesPairings && Object.keys(g.singlesPairings).length) setSinglesPairings(g.singlesPairings);
         setFirstBankerPlayerId(prefill.players.find((player) => player.bankerParticipant !== false)?.id ?? prefill.players[0].id);
         setDefaultBet(prefill.defaultBet);
         setBankerEnabled(g.bankerEnabled === true);
@@ -1144,7 +1153,9 @@ function NewRoundPageContent() {
             <p className="text-sm text-slate-500">
               {players.length <= 5
                 ? 'Everyone plays in one group.'
-                : `Groups of 4 are made in the order listed (${groups.length} groups).`}{' '}
+                : usingPlan
+                  ? `Using the foursomes planned on the organizer page (${groups.length} groups).`
+                  : `Groups of 4 are made in the order listed (${groups.length} groups).`}{' '}
               Handicap is each golfer&apos;s handicap index; use 0 if unsure.
             </p>
             {savedGolfersStatus ? <p className="mt-2 text-xs text-slate-500">{savedGolfersStatus}</p> : null}

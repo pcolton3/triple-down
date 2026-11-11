@@ -56,3 +56,24 @@ describe('buildEventRoundPrefill', () => {
     expect(prefill.players.map((player) => player.handicap).sort()).toEqual([0, 10]);
   });
 });
+
+describe('planned foursomes', () => {
+  const singlesDay = { ...event, days: [{ ...event.days[0], format: 'singles_match', foursomes: {
+    groups: [['Bo', 'Al'], ['Cy', 'Di']],
+    pairings: [['Al', 'Bo'], ['Cy', 'Di']],
+  } }] } as unknown as GolfEvent;
+  const people = [signup('Al', 'team_one'), signup('Bo', 'team_two'), signup('Cy', 'team_one'), signup('Di', 'team_two'), signup('Ed', 'team_one')];
+
+  it('orders players by the plan, puts late signups in an extra group, and carries singles opponents', () => {
+    const prefill = buildEventRoundPrefill(singlesDay, people, 1);
+    const id = (name: string) => prefill.players.find((player) => player.name === name)!.id;
+    expect(prefill.groupOf).toEqual({ [id('Al')]: 1, [id('Bo')]: 1, [id('Cy')]: 2, [id('Di')]: 2, [id('Ed')]: 3 });
+    expect(prefill.settings.singlesPairings).toEqual({ [id('Al')]: id('Bo'), [id('Bo')]: id('Al'), [id('Cy')]: id('Di'), [id('Di')]: id('Cy') });
+    expect(prefill.notes.some((note) => note.includes('Not in the plan (signed up later): Ed'))).toBe(true);
+  });
+
+  it('skips planned groups whose players all dropped out', () => {
+    const prefill = buildEventRoundPrefill(singlesDay, people.filter((p) => !['Al', 'Bo'].includes(p.name)), 1);
+    expect(new Set(Object.values(prefill.groupOf!))).toEqual(new Set([1, 2]));
+  });
+});

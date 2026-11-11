@@ -53,6 +53,8 @@ export type EventDay = {
   website?: string;
   notes?: string;
   roundCode?: string;
+  /** Foursomes (and singles opponents) the organizer planned ahead; used when the round starts. */
+  foursomes?: { groups: string[][]; pairings: Array<[string, string]> };
 };
 
 export type AgendaItem = {

@@ -17,6 +17,8 @@ export type EventRoundPrefill = {
   defaultBet: number;
   players: Player[];
   settings: Partial<RoundGameSettings> & { excludedPlayers: Record<string, string[]> };
+  /** Planned group for each player (player id -> group number), when the organizer planned foursomes. */
+  groupOf: Record<string, number> | null;
   teamMatch: { format: 'team_match' | 'singles_match'; eventCode: string; day: number; teamOneName: string; teamTwoName: string } | null;
   notes: string[];
 };
@@ -33,7 +35,14 @@ export function buildEventRoundPrefill(event: GolfEvent, signups: Signup[], dayN
     .map((signup) => ({ signup, games: dayChoice(event, signup.choices, dayNumber) }))
     .filter((entry) => entry.games.playing)
     .map((entry) => ({ signup: entry.signup, games: entry.games.games }));
-  const ordered = suggestGroupOrder(entries);
+  // Use the organizer's planned foursomes when there are any; anyone who signed up after the plan
+  // was made goes into an extra group at the end.
+  const plan = day.foursomes?.groups?.length ? day.foursomes : null;
+  const plannedGroup = new Map<string, number>();
+  plan?.groups.forEach((group, index) => group.forEach((signupId) => plannedGroup.set(signupId, index + 1)));
+  const ordered = plan
+    ? [...entries].sort((a, b) => (plannedGroup.get(a.signup.id) ?? 999) - (plannedGroup.get(b.signup.id) ?? 999))
+    : suggestGroupOrder(entries);
   // Everyone plays off the lowest handicap signed up for the event (not just this day), so the low
   // player gets 0 pops and a player 8 shots higher gets 8 pops on the 8 hardest holes, every day.
   // The difference is rounded to whole strokes (12.4 -> 12, 12.6 -> 13).
@@ -46,6 +55,22 @@ export function buildEventRoundPrefill(event: GolfEvent, signups: Signup[], dayN
     Object.entries(FLAG_GAMES).forEach(([key, flag]) => { player[flag] = entry.games.includes(key); });
     return player;
   });
+
+  let groupOf: Record<string, number> | null = null;
+  if (plan) {
+    const lastPlanned = plan.groups.length;
+    const late = ordered.filter((entry) => !plannedGroup.has(entry.signup.id));
+    groupOf = Object.fromEntries(ordered.map((entry, index) => [
+      players[index].id,
+      plannedGroup.get(entry.signup.id) ?? lastPlanned + 1 + Math.floor(late.indexOf(entry) / 4),
+    ]));
+    // Planned groups that ended up empty (everyone dropped out) are skipped; renumber 1..n.
+    const numbers = [...new Set(Object.values(groupOf))].sort((a, b) => a - b);
+    groupOf = Object.fromEntries(Object.entries(groupOf).map(([id, group]) => [id, numbers.indexOf(group) + 1]));
+    notes.push(late.length
+      ? `Using your planned foursomes. Not in the plan (signed up later): ${late.map((entry) => entry.signup.name).join(', ')}.`
+      : 'Using your planned foursomes.');
+  }
 
   const settings: EventRoundPrefill['settings'] = { excludedPlayers: {}, extraGames: {}, extraGameUnits: {} };
   let defaultBet = 0;
@@ -91,6 +116,12 @@ export function buildEventRoundPrefill(event: GolfEvent, signups: Signup[], dayN
       ordered.map((entry, index) => [players[index].id, entry.signup.team ?? (index % 2 === 0 ? 'team_one' : 'team_two')])
     );
   }
+  if (teamMatch && plan?.pairings?.length) {
+    const playerOf = new Map(ordered.map((entry, index) => [entry.signup.id, players[index].id]));
+    settings.singlesPairings = Object.fromEntries(
+      plan.pairings.flatMap(([a, b]) => (playerOf.has(a) && playerOf.has(b) ? [[playerOf.get(a)!, playerOf.get(b)!], [playerOf.get(b)!, playerOf.get(a)!]] : []))
+    );
+  }
   if (players.length < signups.length) notes.push(`${signups.length - players.length} signed-up player${signups.length - players.length === 1 ? ' is' : 's are'} not playing this day.`);
 
   return {
@@ -99,6 +130,7 @@ export function buildEventRoundPrefill(event: GolfEvent, signups: Signup[], dayN
     defaultBet,
     players,
     settings,
+    groupOf,
     teamMatch,
     notes,
   };
