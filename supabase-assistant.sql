@@ -19,7 +19,7 @@ begin
   if (select coalesce(sum(cost_cents), 0) from assistant_usage where day >= date_trunc('month', current_date)) >= 2000 then return 'monthly_cap'; end if;
   if (select coalesce(sum(turns), 0) from assistant_usage where day = current_date) >= 400 then return 'daily_limit'; end if;
   if (select coalesce(sum(turns), 0) from assistant_usage where day = current_date and event_code = v_code and mode = v_mode)
-     >= case when v_mode = 'organizer' then 80 else 60 end then return 'daily_limit'; end if;
+     >= (case when v_mode = 'organizer' then 80 else 60 end) then return 'daily_limit'; end if;
   insert into assistant_usage (day, event_code, mode, turns) values (current_date, v_code, v_mode, 1)
   on conflict (day, event_code, mode) do update set turns = assistant_usage.turns + 1;
   return 'ok';
