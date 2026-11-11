@@ -22,7 +22,17 @@ export function Hero() {
   // One box for both kinds of code: events (trip invites) and rounds (live scoring).
   async function handleJoin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const code = roundCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const raw = roundCode.trim();
+    // A pasted organizer link. On iPhone, links open in Safari, not the home-screen app, so pasting
+    // here is how the installed app becomes an organizer. The key is case-sensitive, so read it raw.
+    const organizer = raw.match(/join\/([A-Za-z0-9]+)\/organize#key=([0-9a-fA-F]+)/);
+    if (organizer) {
+      window.location.assign(`/join/${organizer[1].toUpperCase()}/organize#key=${organizer[2]}`);
+      return;
+    }
+    // Any other pasted app link (/join/CODE or /r/CODE): use just its code.
+    const linked = raw.match(/\/(?:join|r)\/([A-Za-z0-9]+)/);
+    const code = (linked ? linked[1] : raw).toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (!code || joining) return;
     setJoining(true);
     let isEvent = false;
@@ -53,14 +63,14 @@ export function Hero() {
           className="min-w-0 flex-1 rounded-xl border border-[#c9d8c7] px-3 py-3 text-center font-mono text-lg font-black uppercase text-[#071b12]"
           value={roundCode}
           placeholder="ENTER CODE"
-          aria-label="Round or event code"
+          aria-label="Round or event code, or a pasted link"
           autoCapitalize="characters"
           autoCorrect="off"
-          onChange={(event) => setRoundCode(event.target.value.toUpperCase())}
+          onChange={(event) => setRoundCode(event.target.value)}
         />
         <Button type="submit" disabled={joining}>{joining ? 'Opening…' : 'Join'}</Button>
       </form>
-      <p className="mx-auto mt-2 max-w-md text-center text-xs text-slate-500">Got a code from a friend? Round codes open live scoring; event codes open the trip invite.</p>
+      <p className="mx-auto mt-2 max-w-md text-center text-xs text-slate-500">Got a code from a friend? Round codes open live scoring; event codes open the trip invite. Organizers can paste their organizer link here.</p>
 
       <div className="mx-auto mt-4 flex max-w-md items-center justify-center">
         <Link href="/rounds/new" className="w-full">
