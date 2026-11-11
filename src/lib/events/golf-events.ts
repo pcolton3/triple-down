@@ -449,7 +449,10 @@ export function buildSchedule(event: Pick<GolfEvent, 'days' | 'agenda'>) {
     ...event.days.map((day) => ({ key: `day-${day.day}`, date: day.date, time: day.teeTime, kind: 'golf' as const, day })),
     ...event.agenda.map((item) => ({ key: item.id, date: item.date, time: item.time, kind: 'agenda' as const, item })),
   ];
-  entries.sort((a, b) => `${a.date} ${a.time || '99:99'}`.localeCompare(`${b.date} ${b.time || '99:99'}`));
+  // Golf without a tee time yet sorts as midday, so morning plans come before it and dinner after it.
+  // Other untimed items go last in their day.
+  const sortTime = (entry: Entry) => entry.time || (entry.kind === 'golf' ? '12:00' : '99:99');
+  entries.sort((a, b) => `${a.date} ${sortTime(a)}`.localeCompare(`${b.date} ${sortTime(b)}`));
   const byDate = new Map<string, Entry[]>();
   entries.forEach((entry) => byDate.set(entry.date, [...(byDate.get(entry.date) ?? []), entry]));
   return Array.from(byDate.entries()).map(([date, items]) => ({ date, items }));

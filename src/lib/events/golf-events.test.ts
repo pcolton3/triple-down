@@ -70,6 +70,20 @@ describe('buildSchedule', () => {
     expect(schedule.map((group) => group.date)).toEqual(['2027-04-26', '2027-04-27', '2027-04-28']);
     expect(schedule[1].items.map((item) => item.key)).toEqual(['breakfast', 'day-1', 'dinner']);
   });
+
+  it('puts golf with no tee time yet between morning plans and dinner', () => {
+    const untimed = days.map((day) => ({ ...day, teeTime: undefined }));
+    const schedule = buildSchedule({
+      days: untimed,
+      agenda: [
+        { id: 'dinner', date: '2027-04-27', time: '18:30', title: 'Birthday dinner' },
+        { id: 'breakfast', date: '2027-04-27', time: '07:00', title: 'Breakfast' },
+        { id: 'awards', date: '2027-04-28', title: 'Awards + payouts' },
+      ],
+    });
+    expect(schedule[0].items.map((item) => item.key)).toEqual(['breakfast', 'day-1', 'dinner']);
+    expect(schedule[1].items.map((item) => item.key)).toEqual(['day-2', 'awards']);
+  });
 });
 
 describe('safeLink', () => {
