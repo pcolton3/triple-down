@@ -58,7 +58,9 @@ export type AssistantChange =
 export type AssistantReply = { reply: string; changes: AssistantChange[] };
 
 const FORMATS = Object.keys(FORMAT_LABELS) as DayFormat[];
-const nullableString = { type: ['string', 'null'] };
+/** Optional value: the value's own schema, or null for "leave as is". */
+const orNull = (schema: Record<string, unknown>) => ({ anyOf: [schema, { type: 'null' }] });
+const nullableString = orNull({ type: 'string' });
 
 function op(name: string, properties: Record<string, unknown>) {
   return {
@@ -83,15 +85,15 @@ export const ORGANIZER_REPLY_SCHEMA = {
         anyOf: [
           op('set_text', { field: { type: 'string', enum: ['title', 'description', 'team_one_name', 'team_two_name'] }, value: { type: 'string' } }),
           op('set_money', { field: { type: 'string', enum: ['buy_in', 'team_bet'] }, amount: { type: 'number' } }),
-          op('set_max_players', { value: { type: ['integer', 'null'] } }),
+          op('set_max_players', { value: orNull({ type: 'integer' }) }),
           op('set_signups_open', { open: { type: 'boolean' } }),
           op('update_day', {
             day: { type: 'integer' },
-            date: { ...nullableString, description: 'YYYY-MM-DD' },
-            format: { type: ['string', 'null'], enum: [...FORMATS, null] },
+            date: orNull({ type: 'string', description: 'YYYY-MM-DD' }),
+            format: orNull({ type: 'string', enum: FORMATS }),
             course: nullableString,
             address: nullableString,
-            teeTime: { ...nullableString, description: 'HH:MM 24-hour, or "" for TBA' },
+            teeTime: orNull({ type: 'string', description: 'HH:MM 24-hour, or "" for TBA' }),
             website: nullableString,
             notes: nullableString,
           }),
@@ -130,9 +132,9 @@ export const ORGANIZER_REPLY_SCHEMA = {
           op('remove_agenda_item', { id: { type: 'string' } }),
           op('update_player', {
             signup_id: { type: 'string' },
-            paid: { type: ['boolean', 'null'] },
-            team: { type: ['string', 'null'], enum: ['team_one', 'team_two', 'none', null] },
-            handicap: { type: ['number', 'null'] },
+            paid: orNull({ type: 'boolean' }),
+            team: orNull({ type: 'string', enum: ['team_one', 'team_two', 'none'] }),
+            handicap: orNull({ type: 'number' }),
           }),
         ],
       },
