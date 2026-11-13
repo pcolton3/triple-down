@@ -18,6 +18,7 @@ const SUGGESTIONS = [
   'One-day member-guest scramble with skins and CTP',
   'What games work well for a group of 8?',
   'Find tee times for 8 players Saturday morning',
+  'Find me two back to back tee times before 9 am this Saturday in the North Phoenix, Peoria, Sun City, or Surprise area',
 ];
 
 function BookingLinks({ links, date }: { links: TeeTimeOption[]; date?: string }) {
@@ -168,7 +169,7 @@ export function PlannerAssistant({ draft, onUseDraft, children }: { draft: Event
       ) : (
         <div className="flex flex-wrap gap-2">
           {SUGGESTIONS.map((suggestion) => (
-            <button key={suggestion} type="button" className="min-h-[44px] rounded-full border border-[#c9d8c7] px-3 text-left text-sm" onClick={() => void send(suggestion)}>
+            <button key={suggestion} type="button" className="min-h-[44px] rounded-2xl border border-[#c9d8c7] px-3 py-2 text-left text-sm" onClick={() => void send(suggestion)}>
               {suggestion}
             </button>
           ))}
