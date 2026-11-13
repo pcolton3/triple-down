@@ -48,13 +48,13 @@ export function Hero() {
     <section className="mx-auto max-w-5xl px-4 py-10 md:py-16">
       <div className="mx-auto max-w-3xl text-center">
       <p className="mb-4 text-sm font-black uppercase tracking-[0.22em] text-[#0f5132]">
-        Live golf scoring and games
+        Golf trips, events and live scoring
       </p>
       <h1 className="text-5xl font-black tracking-tight text-[#071b12] md:text-7xl">
-        Golf without the scorecard chaos.
+        Golf planning made easy.
       </h1>
       <p className="mx-auto mt-5 max-w-2xl text-base font-medium text-[#52635a] md:text-lg">
-        Live group scoring, leaderboards, side games, match play, and settle-up without passing scorecards around.
+        Plan the trip, invite your group and line up tee times. Then score live on the course, with leaderboards, side games, match play and settle-up all in one place.
       </p>
       </div>
 
