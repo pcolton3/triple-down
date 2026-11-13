@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { BuyInCard, EventSchedule } from '@/components/events/event-details';
+import { BuyInCard, EventSchedule, InviteDescription } from '@/components/events/event-details';
 import { EventEditor, cleanDraft, newDay } from '@/components/events/event-editor';
 import { PlannerAssistant } from '@/components/events/planner-assistant';
 import { Button } from '@/components/shared/button';
@@ -149,6 +149,7 @@ export default function NewEventPage() {
       </Card>
 
       <h2 className="px-1 pt-2 text-sm font-bold uppercase tracking-wide text-slate-500">What players will see</h2>
+      <InviteDescription description={preview.description} />
       <EventSchedule event={preview} />
       <BuyInCard event={preview} players={0} />
 

@@ -422,7 +422,7 @@ const obj = (properties: Record<string, unknown>) => ({ type: 'object', properti
 
 const DRAFT_SCHEMA = obj({
   title: str(),
-  description: str('What players read on the invite: the plan, house rules, money, what to bring. Plain text.'),
+  description: str('What players read on the invite. Plain text: a short opening message, then sections each starting with its own heading line, exactly FORMAT, SIDE GAMES, RULES or OTHER ACTIVITIES (skip any that are empty).'),
   team_one_name: str(),
   team_two_name: str(),
   buy_in: { type: 'number', description: 'Per player. Usually the team bet plus every pot game on every day.' },

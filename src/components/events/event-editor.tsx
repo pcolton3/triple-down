@@ -16,6 +16,7 @@ import {
   type EventDraft,
   type GameDefinition,
 } from '@/lib/events/golf-events';
+import { INVITE_SECTIONS, composeDescription, formatFromDays, parseDescription, sideGamesFromDays, tidyDescription, type InviteParts } from '@/lib/events/invite-sections';
 
 const input = 'min-h-[44px] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm';
 const labelClass = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500';
@@ -128,6 +129,11 @@ export function EventEditor({ draft, onChange, autoBuyInDefault = true }: { draf
     onChange(auto ? { ...next, buy_in: suggestedBuyIn(next) } : next);
   }
 
+  const parts = parseDescription(draft.description);
+  function setPart(key: keyof InviteParts, value: string) {
+    update({ description: composeDescription({ ...parts, [key]: value }) });
+  }
+
   function setDay(index: number, patch: Partial<EventDay>) {
     update({ days: draft.days.map((day, i) => (i === index ? { ...day, ...patch } : day)) });
   }
@@ -146,9 +152,9 @@ export function EventEditor({ draft, onChange, autoBuyInDefault = true }: { draf
         <Field title="Message to players">
           <textarea
             className={`${input} min-h-[96px]`}
-            placeholder="What it's for, where you're staying, anything people should know."
-            value={draft.description}
-            onChange={(e) => update({ description: e.target.value })}
+            placeholder="What it's for, who's invited, anything people should know first."
+            value={parts.message}
+            onChange={(e) => setPart('message', e.target.value)}
           />
         </Field>
         <Field title="Player limit (optional)" hint="Signups stop when the event is full.">
@@ -161,6 +167,33 @@ export function EventEditor({ draft, onChange, autoBuyInDefault = true }: { draf
             onChange={(e) => update({ max_players: e.target.value ? Math.max(0, Math.round(Number(e.target.value))) : null })}
           />
         </Field>
+      </section>
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-xl font-bold">Invite details</h2>
+          <p className="text-sm text-slate-500">Each box shows as its own section on the invite. Leave any blank to skip it.</p>
+        </div>
+        {INVITE_SECTIONS.map((section) => {
+          const starter = section.key === 'format' ? formatFromDays(draft.days) : section.key === 'side_games' ? sideGamesFromDays(draft.days) : '';
+          return (
+            <div key={section.key}>
+              <Field title={section.title}>
+                <textarea
+                  className={`${input} min-h-[96px]`}
+                  placeholder={section.placeholder}
+                  value={parts[section.key]}
+                  onChange={(e) => setPart(section.key, e.target.value)}
+                />
+              </Field>
+              {starter && !parts[section.key].trim() ? (
+                <button type="button" className="min-h-[44px] text-sm font-semibold text-[#0f5132] underline" onClick={() => setPart(section.key, starter)}>
+                  Fill in from the golf days
+                </button>
+              ) : null}
+            </div>
+          );
+        })}
       </section>
 
       <section className="space-y-3">
@@ -286,6 +319,7 @@ export function cleanDraft(draft: EventDraft): EventDraft {
   return {
     ...draft,
     title: draft.title.trim(),
+    description: tidyDescription(draft.description),
     team_one_name: draft.team_one_name.trim() || 'Team 1',
     team_two_name: draft.team_two_name.trim() || 'Team 2',
     team_bet: isTeamEvent(draft) ? draft.team_bet : 0,

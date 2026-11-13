@@ -14,6 +14,7 @@ import {
   safeLink,
   type GolfEvent,
 } from '@/lib/events/golf-events';
+import { INVITE_SECTIONS, parseDescription } from '@/lib/events/invite-sections';
 
 function LinkOut({ href, children }: { href: string; children: React.ReactNode }) {
   if (!href) return null;
@@ -21,6 +22,28 @@ function LinkOut({ href, children }: { href: string; children: React.ReactNode }
     <a href={href} target="_blank" rel="noopener noreferrer" className="font-semibold text-[#0f5132] underline">
       {children}
     </a>
+  );
+}
+
+/** The event description: the organizer's message, then Format, Side games, Rules and Other activities. */
+export function InviteDescription({ description }: { description: string }) {
+  const parts = parseDescription(description);
+  const sections = INVITE_SECTIONS.filter((section) => parts[section.key].trim());
+  if (!parts.message.trim() && !sections.length) return null;
+  return (
+    <>
+      {parts.message.trim() ? (
+        <Card>
+          <p className="whitespace-pre-line text-slate-700">{parts.message.trim()}</p>
+        </Card>
+      ) : null}
+      {sections.map((section) => (
+        <Card key={section.key}>
+          <h2 className="mb-2 text-xl font-bold">{section.title}</h2>
+          <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700">{parts[section.key].trim()}</p>
+        </Card>
+      ))}
+    </>
   );
 }
 

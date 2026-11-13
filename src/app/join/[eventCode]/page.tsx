@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
-import { BuyInCard, EventSchedule, eventDateRange } from '@/components/events/event-details';
+import { BuyInCard, EventSchedule, InviteDescription, eventDateRange } from '@/components/events/event-details';
 import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
 import { completeChoices, isTeamEvent, loadGolfEvent, loadRoster, rememberJoinedEvent, signUp, type GolfEvent, type RosterEntry, type SignupChoices } from '@/lib/events/golf-events';
@@ -113,11 +113,7 @@ export default function JoinEventPage() {
 
       <AnnouncementsBanner scope="event" code={event.code} />
 
-      {event.description ? (
-        <Card>
-          <p className="whitespace-pre-line text-slate-700">{event.description}</p>
-        </Card>
-      ) : null}
+      <InviteDescription description={event.description} />
 
       <Card>
         <h2 className="text-xl font-bold">{signedUp ? 'Your signup' : 'Sign up'}</h2>

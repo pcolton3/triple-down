@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BuyInCard, EventSchedule } from '@/components/events/event-details';
+import { BuyInCard, EventSchedule, InviteDescription } from '@/components/events/event-details';
 import { EventAssistant } from '@/components/events/event-assistant';
 import { AnnouncementComposer } from '@/components/events/announcements';
 import { EmailPlayers } from '@/components/events/email-players';
@@ -412,6 +412,7 @@ export default function OrganizeEventPage() {
       </Card>
 
       <h2 className="px-1 pt-2 text-sm font-bold uppercase tracking-wide text-slate-500">What players see</h2>
+      <InviteDescription description={preview.description} />
       <EventSchedule event={preview} />
       <BuyInCard event={preview} players={signups.length} />
 
