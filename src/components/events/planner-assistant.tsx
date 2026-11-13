@@ -19,6 +19,7 @@ const SUGGESTIONS = [
   'What games work well for a group of 8?',
   'Find tee times for 8 players Saturday morning',
   'Find me two back to back tee times before 9 am this Saturday in the North Phoenix, Peoria, Sun City, or Surprise area',
+  'Plan a 4-day trip to Bandon Dunes for 8 next fall: how and when to book, packages, lodging, caddies and getting there',
 ];
 
 function BookingLinks({ links, date }: { links: TeeTimeOption[]; date?: string }) {
