@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
-import { TEE_TIME_SCHEMA, cleanBookingOptions, cleanTeeTimeResult } from '@/lib/assistant/tee-times';
+import { TEE_TIME_SCHEMA, cleanBookingOptions, cleanTeeTimeResult, keepCheckedCourses } from '@/lib/assistant/tee-times';
 import { sheetSummary } from '@/lib/tee-sheets/engines';
 import { SheetError, fetchTeeSheets } from '@/lib/tee-sheets/fetch-sheet';
 import { EMAIL_REPLY_SCHEMA, ORGANIZER_REPLY_SCHEMA, PLANNER_REPLY_SCHEMA, type AssistantReply, type PlannerReply } from '@/lib/assistant/changes';
@@ -39,12 +39,16 @@ const SHEET_TOOL: Anthropic.Beta.BetaTool = {
 };
 const MAX_SHEET_CALLS = 8;
 
-async function runSheetTool(input: unknown): Promise<{ content: string; isError: boolean }> {
+/** Reads a tee sheet for the model; `open` lists the links behind every sheet that showed open times. */
+async function runSheetTool(input: unknown): Promise<{ content: string; isError: boolean; open?: string[] }> {
   const { url, date, players } = (input ?? {}) as { url?: unknown; date?: unknown; players?: unknown };
   if (typeof url !== 'string' || typeof date !== 'string') return { content: 'Need a url and a YYYY-MM-DD date.', isError: true };
   try {
     const sheets = await fetchTeeSheets(url, date, Number(players) || 4);
-    return { content: sheets.map((sheet) => sheetSummary(sheet)).join('\n\n'), isError: false };
+    const open = sheets
+      .filter((sheet) => sheet.times.length)
+      .flatMap((sheet) => [url, sheet.bookingUrl, ...sheet.times.map((time) => time.bookUrl)]);
+    return { content: sheets.map((sheet) => sheetSummary(sheet)).join('\n\n'), isError: false, open };
   } catch (error) {
     return { content: error instanceof SheetError ? error.message : "Couldn't reach that tee sheet.", isError: true };
   }
@@ -168,6 +172,7 @@ export async function POST(request: NextRequest) {
   let searchCount = 0;
   let fetchCount = 0;
   let sheetCalls = 0;
+  const openSheetLinks: string[] = [];
   try {
     // A web search can pause the turn; continue it a couple of times.
     for (let round = 0; round < (mode === 'teetimes' || mode === 'planner' ? 8 : 3); round += 1) {
@@ -202,6 +207,7 @@ export async function POST(request: NextRequest) {
               : sheetCalls > MAX_SHEET_CALLS
                 ? { content: 'Tee-sheet lookups are used up for this turn; give the booking links instead.', isError: true }
                 : await runSheetTool(call.input);
+            if ('open' in result && result.open) openSheetLinks.push(...result.open);
             return { type: 'tool_result', tool_use_id: call.id, content: result.content, is_error: result.isError };
           }),
         );
@@ -251,7 +257,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         reply,
         draft: parsed.draft && typeof parsed.draft === 'object' ? parsed.draft : null,
-        booking_links: cleanBookingOptions(parsed.booking_links),
+        booking_links: keepCheckedCourses(cleanBookingOptions(parsed.booking_links), openSheetLinks),
         searches: searchCount,
         fetches: fetchCount,
         sheets: sheetCalls,

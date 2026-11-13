@@ -121,6 +121,20 @@ export function cleanBookingOptions(raw: unknown): TeeTimeOption[] {
     .slice(0, 8);
 }
 
+function sameSite(a: string, b: string) {
+  const one = host(a);
+  return Boolean(one) && one === host(b);
+}
+
+/**
+ * Planner rule: once a tee sheet showed open times this turn, only courses whose open times were seen get links.
+ * `seen` holds the links behind those sheets (what was checked, its booking page and each time's link).
+ */
+export function keepCheckedCourses(options: TeeTimeOption[], seen: string[]): TeeTimeOption[] {
+  if (!seen.length) return options;
+  return options.filter((option) => seen.some((url) => sameSite(option.url, url)));
+}
+
 /** Cleans what the model returned: known marketplaces are always third-party, and the course's own options come first. */
 export function cleanTeeTimeResult(raw: unknown): TeeTimeResult {
   const value = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;

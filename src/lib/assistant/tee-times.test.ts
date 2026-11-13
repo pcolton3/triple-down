@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanTeeTimeResult, parseTeeTimes, teeTimeRequestText } from './tee-times';
+import { cleanTeeTimeResult, keepCheckedCourses, parseTeeTimes, teeTimeRequestText, type TeeTimeOption } from './tee-times';
 
 describe('tee-time finder', () => {
   it('puts the course first and never trusts a marketplace labeled as the course', () => {
@@ -48,5 +48,27 @@ describe('tee-time finder', () => {
   it('writes the request with the group size and tee-time count', () => {
     const text = teeTimeRequestText({ day: 1, date: '2027-04-24', course: 'Wigwam Gold', players: 12, teeTimes: 3, earliest: '07:30' });
     expect(text).toContain('12 players, so 3 tee times back to back, first one around 07:30');
+  });
+});
+
+describe('planner: only courses with open times seen', () => {
+  const option = (url: string): TeeTimeOption => ({ title: url, url, source: 'course', price: '', notes: '' });
+  const links = [
+    option('https://www.cavecreekgolf.com/tee-times'),
+    option('https://city-of-phoenix-golf-courses.book.teeitup.com/?course=288'),
+    option('https://www.chronogolf.com/club/wigwam-resort'),
+    option('https://www.dovevalleyranch.com/'),
+  ];
+
+  it('drops courses whose tee sheet showed no open times', () => {
+    const seen = ['https://cavecreekgolf.com/', 'https://city-of-phoenix-golf-courses.book.teeitup.com/?course=288&date=2026-11-14'];
+    expect(keepCheckedCourses(links, seen).map((link) => link.url)).toEqual([
+      'https://www.cavecreekgolf.com/tee-times',
+      'https://city-of-phoenix-golf-courses.book.teeitup.com/?course=288',
+    ]);
+  });
+
+  it('leaves links alone when no tee sheet showed times (e.g. planning a trip a year out)', () => {
+    expect(keepCheckedCourses(links, [])).toEqual(links);
   });
 });
