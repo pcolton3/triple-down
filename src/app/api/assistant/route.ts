@@ -81,16 +81,18 @@ export async function POST(request: NextRequest) {
     return fail(400, 'Bad request.');
   }
   const mode: AssistantMode = body.mode === 'organizer' || body.mode === 'planner' || body.mode === 'email' || body.mode === 'teetimes' ? body.mode : 'player';
-  const needsKey = mode === 'organizer' || mode === 'email' || mode === 'teetimes';
+  // Tee times can be looked up for an unsaved plan (no code, the form as draft) or for a saved event.
+  const draftTeeTimes = mode === 'teetimes' && !body.code && body.draft != null;
+  const needsKey = mode === 'organizer' || mode === 'email' || (mode === 'teetimes' && !draftTeeTimes);
   // Planning happens before an event exists; those turns share one daily bucket.
-  const code = mode === 'planner' ? 'NEWEVENT' : typeof body.code === 'string' ? body.code.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 16) : '';
+  const code = mode === 'planner' || draftTeeTimes ? 'NEWEVENT' : typeof body.code === 'string' ? body.code.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 16) : '';
   const key = typeof body.key === 'string' ? body.key : '';
   const today = typeof body.today === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.today) ? body.today : new Date().toISOString().slice(0, 10);
   const messages = cleanHistory(body.messages);
   if (!code || !messages) return fail(400, 'Bad request.');
 
   let context: string;
-  if (mode === 'planner') {
+  if (mode === 'planner' || draftTeeTimes) {
     context = plannerContext(body.draft, today);
   } else {
     const event = await loadGolfEvent(code).catch(() => null);

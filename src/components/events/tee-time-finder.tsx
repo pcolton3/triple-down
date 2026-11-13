@@ -14,7 +14,12 @@ function storageName(code: string, day: number) {
 }
 
 /** Finds booking options for a golf day (course site first), drafts the golf-shop request, and records booked times. */
-export function TeeTimeFinder({ event, signups, organizerKey, blocked, onSaved }: { event: GolfEvent; signups: Signup[]; organizerKey: string; blocked?: string; onSaved: () => void }) {
+type Props =
+  | { event: GolfEvent; signups: Signup[]; organizerKey: string; blocked?: string; onSaved: () => void; onDraftTimes?: never }
+  /** On the plan page, before the event exists: the form is sent as the draft and times go back into the form. */
+  | { event: GolfEvent; onDraftTimes: (dayNumber: number, times: string[]) => void; signups?: never; organizerKey?: never; blocked?: never; onSaved?: never };
+
+export function TeeTimeFinder({ event, signups = [], organizerKey, blocked, onSaved, onDraftTimes }: Props) {
   const days = event.days.filter((day) => !isDayLocked(day));
   const [dayNumber, setDayNumber] = useState(days[0]?.day ?? 0);
   const day = days.find((item) => item.day === dayNumber) ?? days[0];
@@ -32,7 +37,7 @@ export function TeeTimeFinder({ event, signups, organizerKey, blocked, onSaved }
   // Reset the form (and bring back the last search for this day) when the day changes.
   useEffect(() => {
     if (!day) return;
-    setPlayers(playing || 8);
+    setPlayers(playing || players || 8);
     setEarliest(day.teeTime || '08:00');
     setBooked((day.teeTimes?.length ? day.teeTimes : day.teeTime ? [day.teeTime] : []).map(formatTime).join(', '));
     setNotice('');
@@ -54,7 +59,7 @@ export function TeeTimeFinder({ event, signups, organizerKey, blocked, onSaved }
   async function find() {
     if (!day) return;
     if (!day.course?.trim()) {
-      setNotice(`Add a course for day ${day.day} in the editor below first.`);
+      setNotice(`Add a course for day ${day.day} ${onDraftTimes ? 'in the form' : 'in the editor below'} first.`);
       return;
     }
     setBusy(true);
@@ -64,9 +69,8 @@ export function TeeTimeFinder({ event, signups, organizerKey, blocked, onSaved }
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          code: event.code,
+          ...(onDraftTimes ? { draft: event } : { code: event.code, key: organizerKey }),
           mode: 'teetimes',
-          key: organizerKey,
           today: localToday(),
           messages: [{ role: 'user', content: teeTimeRequestText({ day: day.day, date: day.date, course: day.course, address: day.address, website: day.website, players, teeTimes, earliest, notes }) }],
         }),
@@ -107,6 +111,11 @@ export function TeeTimeFinder({ event, signups, organizerKey, blocked, onSaved }
       setNotice('Enter tee times like 7:30, 7:39, 7:48.');
       return;
     }
+    if (onDraftTimes) {
+      onDraftTimes(day.day, times);
+      setNotice(times.length ? `Added to the plan: ${times.map(formatTime).join(', ')}.` : 'Tee times cleared (shows as TBA).');
+      return;
+    }
     setBusy(true);
     setNotice('');
     try {
@@ -118,7 +127,7 @@ export function TeeTimeFinder({ event, signups, organizerKey, blocked, onSaved }
         days: latest.days.map((item) => (item.day === day.day ? { ...item, teeTime: times[0] ?? '', teeTimes: times.length > 1 ? times : undefined } : item)),
       });
       setNotice(times.length ? `Saved. Players will see ${times.map(formatTime).join(', ')}.` : 'Tee times cleared (shows as TBA).');
-      onSaved();
+      onSaved?.();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not save.');
     } finally {
@@ -230,8 +239,8 @@ export function TeeTimeFinder({ event, signups, organizerKey, blocked, onSaved }
       <div className="space-y-2 border-t border-slate-100 pt-4">
         <h3 className="font-bold">Booked? Save the times</h3>
         <input className={input} placeholder="7:30, 7:39, 7:48" value={booked} onChange={(e) => setBooked(e.target.value)} />
-        <Button variant="secondary" disabled={busy || Boolean(blocked)} onClick={() => void saveBooked()}>Save tee times for day {day.day}</Button>
-        {blocked ? <p className="text-xs text-amber-800">{blocked}</p> : <p className="text-xs text-slate-500">Shows on the invite and schedule. Clear the box and save to go back to TBA.</p>}
+        <Button variant="secondary" disabled={busy || Boolean(blocked)} onClick={() => void saveBooked()}>{onDraftTimes ? `Put these in the plan for day ${day.day}` : `Save tee times for day ${day.day}`}</Button>
+        {blocked ? <p className="text-xs text-amber-800">{blocked}</p> : <p className="text-xs text-slate-500">{onDraftTimes ? 'Only add times you actually booked; players read them as real.' : 'Shows on the invite and schedule.'} Clear the box and save to go back to TBA.</p>}
       </div>
 
       {notice ? <p role="status" className="text-sm font-semibold text-slate-700">{notice}</p> : null}

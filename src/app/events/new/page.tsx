@@ -5,9 +5,10 @@ import { useEffect, useState } from 'react';
 import { BuyInCard, EventSchedule, InviteDescription } from '@/components/events/event-details';
 import { EventEditor, cleanDraft, newDay } from '@/components/events/event-editor';
 import { PlannerAssistant } from '@/components/events/planner-assistant';
+import { TeeTimeFinder } from '@/components/events/tee-time-finder';
 import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
-import { createGolfEvent, normalizeEvent, rememberMyEvent, validateDraft, type EventDraft, type GolfEvent } from '@/lib/events/golf-events';
+import { createGolfEvent, normalizeEvent, renumberDays, rememberMyEvent, validateDraft, type EventDraft, type GolfEvent } from '@/lib/events/golf-events';
 
 function emptyDraft(): EventDraft {
   return {
@@ -147,6 +148,17 @@ export default function NewEventPage() {
       <Card>
         <EventEditor key={editorKey} draft={draft} onChange={setDraft} />
       </Card>
+
+      <TeeTimeFinder
+        event={preview}
+        onDraftTimes={(dayNumber, times) => {
+          setDraft((current) => ({
+            ...current,
+            days: renumberDays(current.days).map((day) => (day.day === dayNumber ? { ...day, teeTime: times[0] ?? '', teeTimes: times.length > 1 ? times : undefined } : day)),
+          }));
+          setEditorKey((value) => value + 1);
+        }}
+      />
 
       <h2 className="px-1 pt-2 text-sm font-bold uppercase tracking-wide text-slate-500">What players will see</h2>
       <InviteDescription description={preview.description} />
