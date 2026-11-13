@@ -136,18 +136,19 @@ export default function NewEventPage() {
           setProblems([]);
           setEditorKey((value) => value + 1);
         }}
-      />
-
-      <TeeTimeFinder
-        event={preview}
-        onDraftTimes={(dayNumber, times) => {
-          setDraft((current) => ({
-            ...current,
-            days: renumberDays(current.days).map((day) => (day.day === dayNumber ? { ...day, teeTime: times[0] ?? '', teeTimes: times.length > 1 ? times : undefined } : day)),
-          }));
-          setEditorKey((value) => value + 1);
-        }}
-      />
+      >
+        <TeeTimeFinder
+          embedded
+          event={preview}
+          onDraftTimes={(dayNumber, times) => {
+            setDraft((current) => ({
+              ...current,
+              days: renumberDays(current.days).map((day) => (day.day === dayNumber ? { ...day, teeTime: times[0] ?? '', teeTimes: times.length > 1 ? times : undefined } : day)),
+            }));
+            setEditorKey((value) => value + 1);
+          }}
+        />
+      </PlannerAssistant>
 
       {problems.length ? (
         <div role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-700">

@@ -1,3 +1,4 @@
+import { BOOKING_OPTION_SCHEMA, type TeeTimeOption } from '@/lib/assistant/tee-times';
 import {
   EVENT_GAMES,
   FORMAT_LABELS,
@@ -417,7 +418,7 @@ export type WireDraft = {
   agenda: Array<{ date: string; time: string; title: string; location: string; address: string; link: string; notes: string }>;
 };
 
-export type PlannerReply = { reply: string; draft: WireDraft | null };
+export type PlannerReply = { reply: string; draft: WireDraft | null; booking_links: TeeTimeOption[] };
 
 const str = (description?: string) => (description ? { type: 'string', description } : { type: 'string' });
 const obj = (properties: Record<string, unknown>) => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
@@ -454,9 +455,10 @@ const DRAFT_SCHEMA = obj({
 export const PLANNER_REPLY_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['reply', 'draft'],
+  required: ['reply', 'draft', 'booking_links'],
   properties: {
     reply: { type: 'string', description: 'What to tell the organizer.' },
+    booking_links: { type: 'array', items: BOOKING_OPTION_SCHEMA, description: "Tee-time booking links you found this turn, the course's own booking first. Empty unless tee times came up." },
     draft: { anyOf: [DRAFT_SCHEMA, { type: 'null' }], description: 'The complete plan for the form, building on the current form; null when only talking or asking questions.' },
   },
 } as const;

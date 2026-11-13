@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
-import { TEE_TIME_SCHEMA, cleanTeeTimeResult } from '@/lib/assistant/tee-times';
+import { TEE_TIME_SCHEMA, cleanBookingOptions, cleanTeeTimeResult } from '@/lib/assistant/tee-times';
 import { EMAIL_REPLY_SCHEMA, ORGANIZER_REPLY_SCHEMA, PLANNER_REPLY_SCHEMA, type AssistantReply, type PlannerReply } from '@/lib/assistant/changes';
 import { eventContext, plannerContext, systemPrompt, type AssistantMode } from '@/lib/assistant/prompt';
 import { loadGolfEvent, loadRoster, loadSignups } from '@/lib/events/golf-events';
@@ -116,7 +116,10 @@ export async function POST(request: NextRequest) {
   const schema = { organizer: ORGANIZER_REPLY_SCHEMA, planner: PLANNER_REPLY_SCHEMA, email: EMAIL_REPLY_SCHEMA, teetimes: TEE_TIME_SCHEMA, player: null }[mode];
   const tools: Anthropic.Beta.BetaToolUnion[] =
     mode === 'planner'
-      ? [{ type: 'web_search_20260209', name: 'web_search', max_uses: 4 }]
+      ? [
+          { type: 'web_search_20260209', name: 'web_search', max_uses: 6 },
+          { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 4, max_content_tokens: 15000 },
+        ]
       : mode === 'teetimes'
         ? [
             { type: 'web_search_20260209', name: 'web_search', max_uses: 8 },
@@ -129,7 +132,7 @@ export async function POST(request: NextRequest) {
   let cents = 0;
   try {
     // A web search can pause the turn; continue it a couple of times.
-    for (let round = 0; round < (mode === 'teetimes' ? 5 : 3); round += 1) {
+    for (let round = 0; round < (mode === 'teetimes' || mode === 'planner' ? 5 : 3); round += 1) {
       response = await client.beta.messages.create({
         model: MODEL,
         max_tokens: mode === 'planner' || mode === 'teetimes' ? 16000 : 8000,
@@ -186,7 +189,9 @@ export async function POST(request: NextRequest) {
   try {
     const parsed = JSON.parse(text) as Partial<AssistantReply & PlannerReply>;
     const reply = typeof parsed.reply === 'string' ? parsed.reply : '';
-    if (mode === 'planner') return NextResponse.json({ reply, draft: parsed.draft && typeof parsed.draft === 'object' ? parsed.draft : null } satisfies PlannerReply);
+    if (mode === 'planner') {
+      return NextResponse.json({ reply, draft: parsed.draft && typeof parsed.draft === 'object' ? parsed.draft : null, booking_links: cleanBookingOptions(parsed.booking_links) } satisfies PlannerReply);
+    }
     return NextResponse.json({ reply, changes: Array.isArray(parsed.changes) ? parsed.changes : [] } satisfies AssistantReply);
   } catch {
     return NextResponse.json({ reply: text || lost, ...empty });

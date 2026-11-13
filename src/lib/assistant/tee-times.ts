@@ -19,6 +19,20 @@ export type TeeTimeResult = {
 
 const str = (description: string) => ({ type: 'string', description });
 
+/** One way to book: a link the model actually saw. */
+export const BOOKING_OPTION_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['title', 'url', 'source', 'price', 'notes'],
+  properties: {
+    title: str('Short label, e.g. "Book on the course website" or "GolfNow".'),
+    url: str('A URL you actually saw in search results or a fetched page.'),
+    source: { type: 'string', enum: ['course', 'third_party'], description: "course = the course's own site or the booking engine it links to; third_party = a marketplace." },
+    price: str('Price or range only if a page showed it (say which season), else "".'),
+    notes: str('One line: player cap, prepay, cancellation, etc. "" if nothing.'),
+  },
+} as const;
+
 /** Structured output for the finder. No nullable fields: "" means not found. */
 export const TEE_TIME_SCHEMA = {
   type: 'object',
@@ -44,18 +58,7 @@ export const TEE_TIME_SCHEMA = {
     options: {
       type: 'array',
       description: "Ways to book, the course's own booking first. At most 6.",
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['title', 'url', 'source', 'price', 'notes'],
-        properties: {
-          title: str('Short label, e.g. "Book on the course website" or "GolfNow".'),
-          url: str('A URL you actually saw in search results or a fetched page.'),
-          source: { type: 'string', enum: ['course', 'third_party'], description: "course = the course's own site or the booking engine it links to; third_party = a marketplace." },
-          price: str('Price or range only if a page showed it (say which season), else "".'),
-          notes: str('One line: player cap, prepay, cancellation, etc. "" if nothing.'),
-        },
-      },
+      items: BOOKING_OPTION_SCHEMA,
     },
     email: {
       type: 'object',
@@ -102,13 +105,9 @@ const link = (value: unknown) => {
   return /^https?:\/\//i.test(url) && host(url) ? url : '';
 };
 
-/** Cleans what the model returned: known marketplaces are always third-party, and the course's own options come first. */
-export function cleanTeeTimeResult(raw: unknown): TeeTimeResult {
-  const value = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
-  const course = (value.course && typeof value.course === 'object' ? value.course : {}) as Record<string, unknown>;
-  const email = (value.email && typeof value.email === 'object' ? value.email : {}) as Record<string, unknown>;
-  const website = link(course.website);
-  const options: TeeTimeOption[] = (Array.isArray(value.options) ? (value.options as Array<Record<string, unknown> | null>) : [])
+/** Booking links from the model: valid URLs only, marketplaces always third-party, course-direct first. */
+export function cleanBookingOptions(raw: unknown): TeeTimeOption[] {
+  return (Array.isArray(raw) ? (raw as Array<Record<string, unknown> | null>) : [])
     .map((option) => {
       const url = link(option?.url);
       const source: TeeTimeSource = isMarketplace(url) ? 'third_party' : option?.source === 'third_party' ? 'third_party' : 'course';
@@ -117,7 +116,16 @@ export function cleanTeeTimeResult(raw: unknown): TeeTimeResult {
     .filter((option: TeeTimeOption) => option.url)
     .filter((option: TeeTimeOption, index: number, list: TeeTimeOption[]) => list.findIndex((other) => other.url === option.url) === index)
     .sort((a: TeeTimeOption, b: TeeTimeOption) => (a.source === b.source ? 0 : a.source === 'course' ? -1 : 1))
-    .slice(0, 6);
+    .slice(0, 8);
+}
+
+/** Cleans what the model returned: known marketplaces are always third-party, and the course's own options come first. */
+export function cleanTeeTimeResult(raw: unknown): TeeTimeResult {
+  const value = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const course = (value.course && typeof value.course === 'object' ? value.course : {}) as Record<string, unknown>;
+  const email = (value.email && typeof value.email === 'object' ? value.email : {}) as Record<string, unknown>;
+  const website = link(course.website);
+  const options = cleanBookingOptions(value.options);
   // If the model found the course site but listed no direct option, still lead with it.
   if (website && !options.some((option) => option.source === 'course')) {
     options.unshift({ title: 'Course website', url: website, source: 'course', price: '', notes: 'Check here first; booking direct is usually cheapest.' });

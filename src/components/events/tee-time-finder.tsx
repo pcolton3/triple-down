@@ -15,11 +15,11 @@ function storageName(code: string, day: number) {
 
 /** Finds booking options for a golf day (course site first), drafts the golf-shop request, and records booked times. */
 type Props =
-  | { event: GolfEvent; signups: Signup[]; organizerKey: string; blocked?: string; onSaved: () => void; onDraftTimes?: never }
+  | { event: GolfEvent; signups: Signup[]; organizerKey: string; blocked?: string; onSaved: () => void; onDraftTimes?: never; embedded?: boolean }
   /** On the plan page, before the event exists: the form is sent as the draft and times go back into the form. */
-  | { event: GolfEvent; onDraftTimes: (dayNumber: number, times: string[]) => void; signups?: never; organizerKey?: never; blocked?: never; onSaved?: never };
+  | { event: GolfEvent; onDraftTimes: (dayNumber: number, times: string[]) => void; signups?: never; organizerKey?: never; blocked?: never; onSaved?: never; embedded?: boolean };
 
-export function TeeTimeFinder({ event, signups = [], organizerKey, blocked, onSaved, onDraftTimes }: Props) {
+export function TeeTimeFinder({ event, signups = [], organizerKey, blocked, onSaved, onDraftTimes, embedded = false }: Props) {
   const days = event.days.filter((day) => !isDayLocked(day));
   const [dayNumber, setDayNumber] = useState(days[0]?.day ?? 0);
   const day = days.find((item) => item.day === dayNumber) ?? days[0];
@@ -32,6 +32,8 @@ export function TeeTimeFinder({ event, signups = [], organizerKey, blocked, onSa
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  // Search problems show right under the button, where the organizer is looking.
+  const [findNotice, setFindNotice] = useState('');
   const [booked, setBooked] = useState('');
 
   // Reset the form (and bring back the last search for this day) when the day changes.
@@ -41,6 +43,7 @@ export function TeeTimeFinder({ event, signups = [], organizerKey, blocked, onSa
     setEarliest(day.teeTime || '08:00');
     setBooked((day.teeTimes?.length ? day.teeTimes : day.teeTime ? [day.teeTime] : []).map(formatTime).join(', '));
     setNotice('');
+    setFindNotice('');
     try {
       const saved = JSON.parse(sessionStorage.getItem(storageName(event.code, day.day)) ?? 'null') as TeeTimeResult | null;
       setResult(saved);
@@ -55,15 +58,17 @@ export function TeeTimeFinder({ event, signups = [], organizerKey, blocked, onSa
   if (!days.length) return null;
   if (!day) return null;
   const teeTimes = Math.max(1, Math.ceil(players / 4));
+  const noCourse = !day.course?.trim();
 
   async function find() {
     if (!day) return;
     if (!day.course?.trim()) {
-      setNotice(`Add a course for day ${day.day} ${onDraftTimes ? 'in the form' : 'in the editor below'} first.`);
+      setFindNotice(`Add a course for day ${day.day} ${onDraftTimes ? 'in the form' : 'in the editor below'} first.`);
       return;
     }
     setBusy(true);
     setNotice('');
+    setFindNotice('');
     try {
       const response = await fetch('/api/assistant', {
         method: 'POST',
@@ -82,7 +87,7 @@ export function TeeTimeFinder({ event, signups = [], organizerKey, blocked, onSa
       setBody(data.email.body);
       try { sessionStorage.setItem(storageName(event.code, day.day), JSON.stringify(data)); } catch { /* Only lost on reload. */ }
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Could not search.');
+      setFindNotice(error instanceof Error ? error.message : 'Could not search.');
     } finally {
       setBusy(false);
     }
@@ -135,15 +140,16 @@ export function TeeTimeFinder({ event, signups = [], organizerKey, blocked, onSa
     }
   }
 
+  const Wrapper = embedded ? 'section' : Card;
   const sourceBadge = (source: 'course' | 'third_party') =>
     source === 'course'
       ? <span className="rounded-full bg-[#e7f3e5] px-2 py-0.5 text-xs font-bold text-[#0f5132]">Course direct · usually cheapest</span>
       : <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-800">Third-party · may cost more</span>;
 
   return (
-    <Card className="space-y-4">
+    <Wrapper className={embedded ? 'space-y-4 border-t border-slate-200 pt-4' : 'space-y-4'}>
       <div>
-        <h2 className="text-xl font-bold">Tee times</h2>
+        {embedded ? <h3 className="text-lg font-bold">Find tee times</h3> : <h2 className="text-xl font-bold">Tee times</h2>}
         <p className="text-sm text-slate-600">Searches the course&apos;s own site first, then booking sites. Drafts the request to the golf shop. You book, email or call; nothing is sent for you.</p>
       </div>
 
@@ -176,9 +182,13 @@ export function TeeTimeFinder({ event, signups = [], organizerKey, blocked, onSa
           <input className={input} maxLength={300} placeholder="Walking, budget, shotgun start, need a range…" value={notes} onChange={(e) => setNotes(e.target.value)} />
         </label>
       </div>
-      <Button className="w-full" disabled={busy} onClick={() => void find()}>
-        {busy && !result ? 'Searching the course site… (up to a minute or two)' : result ? 'Search again' : 'Find tee times'}
+      <Button className="w-full" disabled={busy || noCourse} onClick={() => void find()}>
+        {busy ? 'Searching the course site… (up to a minute or two)' : result ? 'Search again' : 'Find tee times'}
       </Button>
+      {noCourse ? (
+        <p className="text-sm text-amber-800">Day {day.day} has no course yet. {onDraftTimes ? 'Pick one in the form, or tap Use this plan on a plan above.' : 'Add one in the editor below.'}</p>
+      ) : null}
+      {findNotice ? <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{findNotice}</p> : null}
 
       {result ? (
         <div className="space-y-4">
@@ -244,6 +254,6 @@ export function TeeTimeFinder({ event, signups = [], organizerKey, blocked, onSa
       </div>
 
       {notice ? <p role="status" className="text-sm font-semibold text-slate-700">{notice}</p> : null}
-    </Card>
+    </Wrapper>
   );
 }
