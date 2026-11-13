@@ -117,8 +117,8 @@ export async function POST(request: NextRequest) {
   const tools: Anthropic.Beta.BetaToolUnion[] =
     mode === 'planner'
       ? [
-          { type: 'web_search_20260209', name: 'web_search', max_uses: 6 },
-          { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 4, max_content_tokens: 15000 },
+          { type: 'web_search_20260209', name: 'web_search', max_uses: 10 },
+          { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 6, max_content_tokens: 15000 },
         ]
       : mode === 'teetimes'
         ? [
@@ -130,6 +130,9 @@ export async function POST(request: NextRequest) {
   const conversation: Anthropic.Beta.BetaMessageParam[] = [...messages];
   let response: Anthropic.Beta.BetaMessage | null = null;
   let cents = 0;
+  // Reported back so a thin answer can be told apart from an exhausted search budget.
+  let searchCount = 0;
+  let fetchCount = 0;
   try {
     // A web search can pause the turn; continue it a couple of times.
     for (let round = 0; round < (mode === 'teetimes' || mode === 'planner' ? 5 : 3); round += 1) {
@@ -150,6 +153,9 @@ export async function POST(request: NextRequest) {
         },
       });
       cents += centsFor(response.usage);
+      const used = (response.usage as { server_tool_use?: { web_search_requests?: number; web_fetch_requests?: number } | null }).server_tool_use;
+      searchCount += used?.web_search_requests ?? 0;
+      fetchCount += used?.web_fetch_requests ?? 0;
       if (response.stop_reason !== 'pause_turn') break;
       conversation.push({ role: 'assistant', content: response.content });
     }
@@ -190,7 +196,13 @@ export async function POST(request: NextRequest) {
     const parsed = JSON.parse(text) as Partial<AssistantReply & PlannerReply>;
     const reply = typeof parsed.reply === 'string' ? parsed.reply : '';
     if (mode === 'planner') {
-      return NextResponse.json({ reply, draft: parsed.draft && typeof parsed.draft === 'object' ? parsed.draft : null, booking_links: cleanBookingOptions(parsed.booking_links) } satisfies PlannerReply);
+      return NextResponse.json({
+        reply,
+        draft: parsed.draft && typeof parsed.draft === 'object' ? parsed.draft : null,
+        booking_links: cleanBookingOptions(parsed.booking_links),
+        searches: searchCount,
+        fetches: fetchCount,
+      } satisfies PlannerReply & { searches: number; fetches: number });
     }
     return NextResponse.json({ reply, changes: Array.isArray(parsed.changes) ? parsed.changes : [] } satisfies AssistantReply);
   } catch {
