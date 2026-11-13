@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
+import { OpenTimes } from '@/components/events/open-times';
 import { parseTeeTimes, teeTimeRequestText, type TeeTimeResult } from '@/lib/assistant/tee-times';
 import { dayChoice, formatEventDate, formatTime, isDayLocked, loadGolfEvent, localToday, updateEvent, type GolfEvent, type Signup } from '@/lib/events/golf-events';
 
@@ -220,6 +221,7 @@ export function TeeTimeFinder({ event, signups = [], organizerKey, blocked, onSa
                   </div>
                   {option.price ? <p className="mt-1 text-sm">{option.price}</p> : null}
                   {option.notes ? <p className="mt-1 text-xs text-slate-500">{option.notes}</p> : null}
+                  {option.source === 'course' ? <OpenTimes url={option.url} date={day.date} players={players} /> : null}
                 </li>
               ))}
             </ul>

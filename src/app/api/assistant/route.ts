@@ -1,6 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
 import { TEE_TIME_SCHEMA, cleanBookingOptions, cleanTeeTimeResult } from '@/lib/assistant/tee-times';
+import { sheetSummary } from '@/lib/tee-sheets/engines';
+import { SheetError, fetchTeeSheets } from '@/lib/tee-sheets/fetch-sheet';
 import { EMAIL_REPLY_SCHEMA, ORGANIZER_REPLY_SCHEMA, PLANNER_REPLY_SCHEMA, type AssistantReply, type PlannerReply } from '@/lib/assistant/changes';
 import { eventContext, plannerContext, systemPrompt, type AssistantMode } from '@/lib/assistant/prompt';
 import { loadGolfEvent, loadRoster, loadSignups } from '@/lib/events/golf-events';
@@ -17,6 +19,36 @@ const MAX_TURNS = 16;
 const MAX_CHARS = 2000;
 
 type ChatTurn = { role: 'user' | 'assistant'; content: string };
+
+/** Lets the model read live open times from a course's booking system (TeeItUp, Quick18, foreUP). */
+const SHEET_TOOL: Anthropic.Beta.BetaTool = {
+  name: 'check_tee_sheet',
+  description:
+    "Reads the open tee times for one date from a course's online booking system: TeeItUp, Quick18 or foreUP links, or the course's own tee-times page that links to one. Returns each open time with spots and price, and the earliest back-to-back times that fit the whole group. Says so if the site can't be read.",
+  input_schema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['url', 'date', 'players'],
+    properties: {
+      url: { type: 'string', description: 'Booking link or course tee-times page you saw.' },
+      date: { type: 'string', description: 'YYYY-MM-DD' },
+      players: { type: 'integer', description: 'Group size' },
+    },
+  },
+  strict: true,
+};
+const MAX_SHEET_CALLS = 8;
+
+async function runSheetTool(input: unknown): Promise<{ content: string; isError: boolean }> {
+  const { url, date, players } = (input ?? {}) as { url?: unknown; date?: unknown; players?: unknown };
+  if (typeof url !== 'string' || typeof date !== 'string') return { content: 'Need a url and a YYYY-MM-DD date.', isError: true };
+  try {
+    const sheets = await fetchTeeSheets(url, date, Number(players) || 4);
+    return { content: sheets.map((sheet) => sheetSummary(sheet)).join('\n\n'), isError: false };
+  } catch (error) {
+    return { content: error instanceof SheetError ? error.message : "Couldn't reach that tee sheet.", isError: true };
+  }
+}
 
 function fail(status: number, error: string) {
   return NextResponse.json({ error }, { status });
@@ -119,11 +151,13 @@ export async function POST(request: NextRequest) {
       ? [
           { type: 'web_search_20260209', name: 'web_search', max_uses: 10 },
           { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 6, max_content_tokens: 15000 },
+          SHEET_TOOL,
         ]
       : mode === 'teetimes'
         ? [
             { type: 'web_search_20260209', name: 'web_search', max_uses: 8 },
             { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 6, max_content_tokens: 15000 },
+            SHEET_TOOL,
           ]
         : [];
   const client = new Anthropic({ apiKey: apiKey() });
@@ -133,9 +167,10 @@ export async function POST(request: NextRequest) {
   // Reported back so a thin answer can be told apart from an exhausted search budget.
   let searchCount = 0;
   let fetchCount = 0;
+  let sheetCalls = 0;
   try {
     // A web search can pause the turn; continue it a couple of times.
-    for (let round = 0; round < (mode === 'teetimes' || mode === 'planner' ? 5 : 3); round += 1) {
+    for (let round = 0; round < (mode === 'teetimes' || mode === 'planner' ? 8 : 3); round += 1) {
       response = await client.beta.messages.create({
         model: MODEL,
         max_tokens: mode === 'planner' || mode === 'teetimes' ? 16000 : 8000,
@@ -156,6 +191,23 @@ export async function POST(request: NextRequest) {
       const used = (response.usage as { server_tool_use?: { web_search_requests?: number; web_fetch_requests?: number } | null }).server_tool_use;
       searchCount += used?.web_search_requests ?? 0;
       fetchCount += used?.web_fetch_requests ?? 0;
+      if (response.stop_reason === 'tool_use') {
+        const calls = response.content.filter((block): block is Anthropic.Beta.BetaToolUseBlock => block.type === 'tool_use');
+        conversation.push({ role: 'assistant', content: response.content });
+        const results = await Promise.all(
+          calls.map(async (call): Promise<Anthropic.Beta.BetaToolResultBlockParam> => {
+            sheetCalls += 1;
+            const result = call.name !== 'check_tee_sheet'
+              ? { content: 'Unknown tool.', isError: true }
+              : sheetCalls > MAX_SHEET_CALLS
+                ? { content: 'Tee-sheet lookups are used up for this turn; give the booking links instead.', isError: true }
+                : await runSheetTool(call.input);
+            return { type: 'tool_result', tool_use_id: call.id, content: result.content, is_error: result.isError };
+          }),
+        );
+        conversation.push({ role: 'user', content: results });
+        continue;
+      }
       if (response.stop_reason !== 'pause_turn') break;
       conversation.push({ role: 'assistant', content: response.content });
     }
@@ -169,7 +221,7 @@ export async function POST(request: NextRequest) {
   const empty = mode === 'planner' ? { draft: null } : { changes: [] };
   if (response.stop_reason === 'refusal') return NextResponse.json({ reply: "Sorry, I can't help with that one.", ...empty });
   if (response.stop_reason === 'max_tokens') return NextResponse.json({ reply: 'That answer got too long. Try asking for less at once.', ...empty });
-  if (response.stop_reason === 'pause_turn') return NextResponse.json({ reply: 'That search took too long. Ask again, maybe a bit more specific?', ...empty });
+  if (response.stop_reason === 'pause_turn' || response.stop_reason === 'tool_use') return NextResponse.json({ reply: 'That search took too long. Ask again, maybe a bit more specific?', ...empty });
 
   const text = response.content.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('').trim();
   const lost = 'Sorry, I lost my train of thought. Ask again?';
@@ -202,7 +254,8 @@ export async function POST(request: NextRequest) {
         booking_links: cleanBookingOptions(parsed.booking_links),
         searches: searchCount,
         fetches: fetchCount,
-      } satisfies PlannerReply & { searches: number; fetches: number });
+        sheets: sheetCalls,
+      } satisfies PlannerReply & { searches: number; fetches: number; sheets: number });
     }
     return NextResponse.json({ reply, changes: Array.isArray(parsed.changes) ? parsed.changes : [] } satisfies AssistantReply);
   } catch {
