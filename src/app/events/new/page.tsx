@@ -138,17 +138,6 @@ export default function NewEventPage() {
         }}
       />
 
-      {problems.length ? (
-        <div role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-700">
-          <p className="font-bold">Fix these before creating the event:</p>
-          <ul className="mt-1 list-disc pl-5">{problems.map((problem) => <li key={problem}>{problem}</li>)}</ul>
-        </div>
-      ) : null}
-
-      <Card>
-        <EventEditor key={editorKey} draft={draft} onChange={setDraft} />
-      </Card>
-
       <TeeTimeFinder
         event={preview}
         onDraftTimes={(dayNumber, times) => {
@@ -159,6 +148,17 @@ export default function NewEventPage() {
           setEditorKey((value) => value + 1);
         }}
       />
+
+      {problems.length ? (
+        <div role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-700">
+          <p className="font-bold">Fix these before creating the event:</p>
+          <ul className="mt-1 list-disc pl-5">{problems.map((problem) => <li key={problem}>{problem}</li>)}</ul>
+        </div>
+      ) : null}
+
+      <Card>
+        <EventEditor key={editorKey} draft={draft} onChange={setDraft} />
+      </Card>
 
       <h2 className="px-1 pt-2 text-sm font-bold uppercase tracking-wide text-slate-500">What players will see</h2>
       <InviteDescription description={preview.description} />
