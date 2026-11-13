@@ -24,7 +24,7 @@ type ChatTurn = { role: 'user' | 'assistant'; content: string };
 const SHEET_TOOL: Anthropic.Beta.BetaTool = {
   name: 'check_tee_sheet',
   description:
-    "Reads the open tee times for one date from a course's online booking system: TeeItUp, Quick18 or foreUP links, or the course's own tee-times page that links to one. Returns each open time with spots and price, and the earliest back-to-back times that fit the whole group. Says so if the site can't be read.",
+    "Reads the open tee times for one date from a course's online booking system: TeeItUp, Quick18 or foreUP links, or the course's own tee-times page that links to one. Returns each open time with spots and price, and the earliest back-to-back times that fit the whole group. For Chronogolf links it can't see open times, but returns the course names, how far ahead the public can book (and whether that date is open yet) and the golf shop phone. Says so if the site can't be read.",
   input_schema: {
     type: 'object',
     additionalProperties: false,

@@ -18,7 +18,7 @@ function priceText(rates: TeeSheet['times'][number]['rates']) {
   return prices.length === 1 ? `$${prices[0]}` : `$${Math.min(...prices)}–$${Math.max(...prices)}`;
 }
 
-/** "See open times" for a booking link: reads that day's tee sheet (TeeItUp, Quick18, foreUP) through /api/tee-sheet. */
+/** "See open times" for a booking link: reads that day's tee sheet (TeeItUp, Quick18, foreUP; Chronogolf course info only) through /api/tee-sheet. */
 export function OpenTimes({ url, date: initialDate, players: initialPlayers }: { url: string; date?: string; players?: number }) {
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState(initialDate && initialDate >= localToday() ? initialDate : tomorrow());
@@ -91,7 +91,7 @@ export function OpenTimes({ url, date: initialDate, players: initialPlayers }: {
             return (
               <div key={`${sheet.course}-${sheet.bookingUrl}`} className="space-y-1">
                 <p className="text-sm font-bold">
-                  {sheet.course || 'Tee sheet'} <span className="font-normal text-slate-500">· {sheet.times.length} open · via {ENGINE_LABELS[sheet.engine]}</span>
+                  {sheet.course || 'Tee sheet'} <span className="font-normal text-slate-500">· {sheet.liveTimes === false ? '' : `${sheet.times.length} open · `}via {ENGINE_LABELS[sheet.engine]}</span>
                 </p>
                 {sheet.groupPicks.length ? (
                   <p className="rounded-lg bg-[#e7f3e5] px-2 py-1 text-sm font-semibold text-[#0f5132]">

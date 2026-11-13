@@ -1,8 +1,10 @@
 /** Server only: fetches from booking systems and course sites. */
 import {
+  chronogolfNote,
   detectEngine,
   findEngineLinks,
   groupPicks,
+  parseChronogolfClub,
   parseForeUpPage,
   parseForeUpTimes,
   parseQuick18,
@@ -119,6 +121,28 @@ async function foreUp(ref: Extract<EngineRef, { engine: 'foreup' }>, date: strin
   }];
 }
 
+function todayIn(timeZone: string) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+}
+
+/** Chronogolf: only the public club page (its tee-time feed is closed to outside apps). */
+async function chronogolf(ref: Extract<EngineRef, { engine: 'chronogolf' }>, date: string): Promise<TeeSheet[]> {
+  const page = await get(ref.url);
+  const club = page.status === 200 ? parseChronogolfClub(page.text) : null;
+  if (!club) throw new SheetError("Couldn't read this course's Chronogolf page. Use the link to check times.");
+  const bookingUrl = `https://www.chronogolf.com/club/${club.slug || ref.club}`;
+  return [{
+    engine: 'chronogolf',
+    course: club.name,
+    date,
+    times: [],
+    groupPicks: [],
+    bookingUrl,
+    note: chronogolfNote(club, date, todayIn(club.timeZone)),
+    liveTimes: false,
+  }];
+}
+
 /** Resolves a link (a booking-system link or a course's own page that links to one) and reads that day's open tee times. */
 export async function fetchTeeSheets(link: string, date: string, players: number): Promise<TeeSheet[]> {
   needDate(date);
@@ -129,7 +153,7 @@ export async function fetchTeeSheets(link: string, date: string, players: number
   const page = await get(url.toString());
   const redirected = detectEngine(page.finalUrl);
   const candidates = redirected ? [redirected] : findEngineLinks(page.text);
-  if (!candidates.length) throw new SheetError("This course's booking page isn't one I can read yet (I can read TeeItUp, Quick18 and foreUP). Use the link to check times.");
+  if (!candidates.length) throw new SheetError("This course's booking page isn't one I can read yet (I can read TeeItUp, Quick18 and foreUP, and Chronogolf's course info). Use the link to check times.");
   let lastError: unknown = null;
   for (const ref of candidates) {
     try {
@@ -144,5 +168,6 @@ export async function fetchTeeSheets(link: string, date: string, players: number
 function readSheet(ref: EngineRef, date: string, players: number) {
   if (ref.engine === 'teeitup') return teeItUp(ref, date, players);
   if (ref.engine === 'quick18') return quick18(ref, date, players);
+  if (ref.engine === 'chronogolf') return chronogolf(ref, date);
   return foreUp(ref, date, players);
 }

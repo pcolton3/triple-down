@@ -1,15 +1,18 @@
 /**
  * Reading public tee sheets from the booking systems courses use (TeeItUp, Quick18, foreUP).
+ * Chronogolf blocks outside apps from its tee-time feed, so for it we read only the public club page
+ * (courses, how far ahead it books, phone) and send the organizer to its booking page.
  * These are the same public data feeds the courses' own booking pages read; they are not
  * official APIs and can change. Pure parsing lives here so it can be tested with saved responses.
  */
 
-export type TeeSheetEngine = 'teeitup' | 'quick18' | 'foreup';
+export type TeeSheetEngine = 'teeitup' | 'quick18' | 'foreup' | 'chronogolf';
 
 export type EngineRef =
   | { engine: 'teeitup'; alias: string; facilityIds: string[]; url: string }
   | { engine: 'quick18'; host: string; url: string }
-  | { engine: 'foreup'; courseId: string; scheduleId: string; url: string };
+  | { engine: 'foreup'; courseId: string; scheduleId: string; url: string }
+  | { engine: 'chronogolf'; club: string; url: string };
 
 export type SheetRate = { label: string; price: number };
 export type SheetTime = { time: string; spots: number; rates: SheetRate[]; holes: string; bookUrl: string };
@@ -22,9 +25,11 @@ export type TeeSheet = {
   groupPicks: string[];
   bookingUrl: string;
   note: string;
+  /** False when the booking system doesn't let us see its open times (Chronogolf). */
+  liveTimes?: boolean;
 };
 
-export const ENGINE_LABELS: Record<TeeSheetEngine, string> = { teeitup: 'TeeItUp', quick18: 'Quick18', foreup: 'foreUP' };
+export const ENGINE_LABELS: Record<TeeSheetEngine, string> = { teeitup: 'TeeItUp', quick18: 'Quick18', foreup: 'foreUP', chronogolf: 'Chronogolf' };
 
 function parseUrl(raw: string) {
   try {
@@ -51,19 +56,25 @@ export function detectEngine(raw: string): EngineRef | null {
     const match = url.pathname.match(/\/index\.php\/booking\/(?:index\/)?(\d+)(?:\/(\d+))?/);
     if (match) return { engine: 'foreup', courseId: match[1], scheduleId: match[2] ?? '', url: `https://foreupsoftware.com/index.php/booking/${match[1]}${match[2] ? `/${match[2]}` : ''}` };
   }
+  if (/^(?:www\.)?chronogolf\.(?:com|ca)$/.test(host)) {
+    // /club/<slug-or-id>, /fr/club/..., /club/<id>/widget
+    const club = url.pathname.match(/^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?club\/([a-z0-9-]+)/i)?.[1]?.toLowerCase();
+    if (club) return { engine: 'chronogolf', club, url: `https://www.chronogolf.com/club/${club}` };
+  }
   return null;
 }
 
 /** Booking-system links on a course's own web page (its "Book a tee time" buttons), best first. */
 export function findEngineLinks(html: string): EngineRef[] {
-  const pattern = /https?:\/\/[^"'\s<>\\]*(?:book\.teeitup\.(?:com|golf)|quick18\.com|foreupsoftware\.com\/index\.php\/booking)[^"'\s<>\\]*/gi;
+  const pattern = /https?:\/\/[^"'\s<>\\]*(?:book\.teeitup\.(?:com|golf)|quick18\.com|foreupsoftware\.com\/index\.php\/booking|chronogolf\.(?:com|ca)\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?club\/)[^"'\s<>\\]*/gi;
   const found: EngineRef[] = [];
   for (const match of html.matchAll(pattern)) {
     const ref = detectEngine(match[0].replace(/&amp;/g, '&'));
     if (ref && !found.some((other) => other.url === ref.url)) found.push(ref);
   }
   // Gift-card stores and members-only sheets are rarely what a visiting group wants.
-  const rank = (ref: EngineRef) => (/store|member|gift/i.test(ref.url) ? 1 : 0);
+  // Chronogolf goes last: its open times can't be read, so a readable engine on the same page wins.
+  const rank = (ref: EngineRef) => (/store|member|gift/i.test(ref.url) ? 1 : 0) + (ref.engine === 'chronogolf' ? 2 : 0);
   return found.sort((a, b) => rank(a) - rank(b)).slice(0, 4);
 }
 
@@ -202,11 +213,82 @@ export function parseForeUpTimes(rows: unknown, bookUrl: string): { course: stri
   return { course: list[0]?.course_name ?? '', times: sortTimes(times) };
 }
 
+export type ChronogolfClub = {
+  name: string;
+  slug: string;
+  courses: string[];
+  phone: string;
+  timeZone: string;
+  onlineBooking: boolean;
+  /** Days ahead the public can book, if the club says. */
+  bookingRange: number | null;
+  singlePlayerRule: boolean;
+};
+
+/** Chronogolf club page: the club record in its Next.js page data. */
+export function parseChronogolfClub(html: string): ChronogolfClub | null {
+  const data = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)?.[1];
+  if (!data) return null;
+  type Club = {
+    name?: string; slug?: string; phone?: string; timezone?: string;
+    courses?: Array<{ name?: string }>;
+    features?: { onlineBookingEnabled?: boolean; defaultPublicBookingRange?: number; singlePlayerRestrictionActivated?: boolean };
+  };
+  let club: Club | undefined;
+  try {
+    club = (JSON.parse(data) as { props?: { pageProps?: { club?: Club } } }).props?.pageProps?.club;
+  } catch {
+    return null;
+  }
+  if (!club?.name) return null;
+  const range = Number(club.features?.defaultPublicBookingRange);
+  return {
+    name: club.name.trim(),
+    slug: club.slug ?? '',
+    courses: (club.courses ?? []).map((course) => (course.name ?? '').trim()).filter(Boolean),
+    phone: club.phone ?? '',
+    timeZone: club.timezone || 'America/Phoenix',
+    onlineBooking: club.features?.onlineBookingEnabled !== false,
+    bookingRange: Number.isFinite(range) && range > 0 ? range : null,
+    singlePlayerRule: Boolean(club.features?.singlePlayerRestrictionActivated),
+  };
+}
+
+function addDays(date: string, days: number) {
+  const value = new Date(`${date}T12:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+function longDate(date: string) {
+  return new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+/** What we can tell the organizer about a Chronogolf course for that date, without its tee sheet. */
+export function chronogolfNote(club: ChronogolfClub, date: string, today: string) {
+  const parts = ["Chronogolf doesn't let outside apps see its open times, so check them on its booking page."];
+  if (club.courses.length > 1) parts.push(`Courses: ${club.courses.join(', ')}.`);
+  if (!club.onlineBooking) parts.push('This club has online booking turned off; call to book.');
+  else if (club.bookingRange) {
+    const opens = addDays(date, -club.bookingRange);
+    parts.push(
+      opens > today
+        ? `The public can book ${club.bookingRange} days ahead, so ${longDate(date)} opens for booking on ${longDate(opens)}.`
+        : `The public can book ${club.bookingRange} days ahead, so this date is open for booking now.`,
+    );
+  }
+  if (club.singlePlayerRule) parts.push('It needs at least 2 players to book an empty tee time.');
+  if (club.phone) parts.push(`Golf shop: ${club.phone}.`);
+  return parts.join(' ');
+}
+
 /** A short text version for the assistant to read. */
 export function sheetSummary(sheet: TeeSheet, limit = 40) {
   const shown = sheet.times.slice(0, limit).map((time) => `${time.time} ${time.spots} spot${time.spots === 1 ? '' : 's'}${time.rates.length ? ` ${time.rates.map((rate) => `$${rate.price}${rate.label ? ` ${rate.label}` : ''}`).join(' / ')}` : ''}`);
   return [
-    `${sheet.course || 'Course'} (${ENGINE_LABELS[sheet.engine]}), ${sheet.date}: ${sheet.times.length} open tee times${sheet.times.length > limit ? ` (first ${limit} shown)` : ''}.`,
+    sheet.liveTimes === false
+      ? `${sheet.course || 'Course'} (${ENGINE_LABELS[sheet.engine]}), ${sheet.date}: open times can't be read.`
+      : `${sheet.course || 'Course'} (${ENGINE_LABELS[sheet.engine]}), ${sheet.date}: ${sheet.times.length} open tee times${sheet.times.length > limit ? ` (first ${limit} shown)` : ''}.`,
     shown.join('; '),
     sheet.groupPicks.length ? `Back-to-back for the group: ${sheet.groupPicks.join(', ')}.` : sheet.times.length ? 'No back-to-back run fits the whole group.' : '',
     sheet.note,
