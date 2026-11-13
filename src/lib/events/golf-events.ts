@@ -49,7 +49,9 @@ export type EventDay = {
   games?: EventGame[];
   course?: string;
   address?: string;
-  teeTime?: string; // HH:MM
+  teeTime?: string; // HH:MM, the first tee time
+  /** Every booked tee time for the group, in order, when there's more than one. */
+  teeTimes?: string[];
   website?: string;
   notes?: string;
   roundCode?: string;

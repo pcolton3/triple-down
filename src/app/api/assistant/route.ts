@@ -1,12 +1,14 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
+import { TEE_TIME_SCHEMA, cleanTeeTimeResult } from '@/lib/assistant/tee-times';
 import { EMAIL_REPLY_SCHEMA, ORGANIZER_REPLY_SCHEMA, PLANNER_REPLY_SCHEMA, type AssistantReply, type PlannerReply } from '@/lib/assistant/changes';
 import { eventContext, plannerContext, systemPrompt, type AssistantMode } from '@/lib/assistant/prompt';
 import { loadGolfEvent, loadRoster, loadSignups } from '@/lib/events/golf-events';
 import { supabase } from '@/lib/supabase/client';
 
 export const runtime = 'nodejs';
-export const maxDuration = 120;
+// Tee-time searches read several course pages; give them room.
+export const maxDuration = 300;
 
 const MODEL = 'claude-opus-5-5';
 // Claude Opus 5.5 list prices in dollars per million tokens, for the app's own monthly cap.
@@ -78,8 +80,8 @@ export async function POST(request: NextRequest) {
   } catch {
     return fail(400, 'Bad request.');
   }
-  const mode: AssistantMode = body.mode === 'organizer' || body.mode === 'planner' || body.mode === 'email' ? body.mode : 'player';
-  const needsKey = mode === 'organizer' || mode === 'email';
+  const mode: AssistantMode = body.mode === 'organizer' || body.mode === 'planner' || body.mode === 'email' || body.mode === 'teetimes' ? body.mode : 'player';
+  const needsKey = mode === 'organizer' || mode === 'email' || mode === 'teetimes';
   // Planning happens before an event exists; those turns share one daily bucket.
   const code = mode === 'planner' ? 'NEWEVENT' : typeof body.code === 'string' ? body.code.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 16) : '';
   const key = typeof body.key === 'string' ? body.key : '';
@@ -109,17 +111,26 @@ export async function POST(request: NextRequest) {
   if (turn === 'monthly_cap') return fail(429, 'The assistant has hit its monthly limit. It will be back next month.');
   if (turn !== 'ok') return fail(429, "That's a lot of questions for one day. Try again tomorrow.");
 
-  const schema = { organizer: ORGANIZER_REPLY_SCHEMA, planner: PLANNER_REPLY_SCHEMA, email: EMAIL_REPLY_SCHEMA, player: null }[mode];
+  const schema = { organizer: ORGANIZER_REPLY_SCHEMA, planner: PLANNER_REPLY_SCHEMA, email: EMAIL_REPLY_SCHEMA, teetimes: TEE_TIME_SCHEMA, player: null }[mode];
+  const tools: Anthropic.Beta.BetaToolUnion[] =
+    mode === 'planner'
+      ? [{ type: 'web_search_20260209', name: 'web_search', max_uses: 4 }]
+      : mode === 'teetimes'
+        ? [
+            { type: 'web_search_20260209', name: 'web_search', max_uses: 5 },
+            { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 5, max_content_tokens: 15000 },
+          ]
+        : [];
   const client = new Anthropic({ apiKey: apiKey() });
   const conversation: Anthropic.Beta.BetaMessageParam[] = [...messages];
   let response: Anthropic.Beta.BetaMessage | null = null;
   let cents = 0;
   try {
     // A web search can pause the turn; continue it a couple of times.
-    for (let round = 0; round < 3; round += 1) {
+    for (let round = 0; round < (mode === 'teetimes' ? 5 : 3); round += 1) {
       response = await client.beta.messages.create({
         model: MODEL,
-        max_tokens: mode === 'planner' ? 16000 : 8000,
+        max_tokens: mode === 'planner' || mode === 'teetimes' ? 16000 : 8000,
         betas: ['server-side-fallback-2026-07-01'],
         fallbacks: 'default',
         system: [
@@ -127,7 +138,7 @@ export async function POST(request: NextRequest) {
           { type: 'text', text: context },
         ],
         messages: conversation,
-        ...(mode === 'planner' ? { tools: [{ type: 'web_search_20260209' as const, name: 'web_search' as const, max_uses: 4 }] } : {}),
+        ...(tools.length ? { tools } : {}),
         output_config: {
           effort: mode === 'player' || mode === 'email' ? 'low' : 'medium',
           ...(schema ? { format: { type: 'json_schema' as const, schema: schema as unknown as Record<string, unknown> } } : {}),
@@ -152,6 +163,14 @@ export async function POST(request: NextRequest) {
   const text = response.content.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('').trim();
   const lost = 'Sorry, I lost my train of thought. Ask again?';
   if (mode === 'player') return NextResponse.json({ reply: text || lost, changes: [] } satisfies AssistantReply);
+
+  if (mode === 'teetimes') {
+    try {
+      return NextResponse.json(cleanTeeTimeResult(JSON.parse(text)));
+    } catch {
+      return fail(502, 'The search came back garbled. Try again.');
+    }
+  }
 
   if (mode === 'email') {
     try {

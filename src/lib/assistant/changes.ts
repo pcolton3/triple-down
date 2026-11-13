@@ -277,6 +277,8 @@ export function planChanges(event: GolfEvent, signups: Signup[], incoming: Array
           const label = { date: 'date', format: 'format', course: 'course', address: 'address', teeTime: 'tee time', website: 'website', notes: 'notes' }[field];
           lines.push(`${dayLabel(day)} ${label} → ${shown(value, field)}`);
           (day as Record<string, unknown>)[field] = field === 'format' ? (value as DayFormat) : value || undefined;
+          // A new first tee time makes the saved list of booked times stale.
+          if (field === 'teeTime') delete day.teeTimes;
           daysTouched = true;
         }
         break;

@@ -216,7 +216,7 @@ export function EventEditor({ draft, onChange, autoBuyInDefault = true }: { draf
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field title="Date"><input type="date" className={input} value={day.date} onChange={(e) => setDay(index, { date: e.target.value })} /></Field>
-              <Field title="First tee time"><input type="time" className={input} value={day.teeTime ?? ''} onChange={(e) => setDay(index, { teeTime: e.target.value })} /></Field>
+              <Field title="First tee time"><input type="time" className={input} value={day.teeTime ?? ''} onChange={(e) => setDay(index, { teeTime: e.target.value, teeTimes: undefined })} /></Field>
             </div>
             <Field title="Main format" hint={TEAM_FORMATS.includes(day.format) ? 'Counts toward the two-team, Ryder Cup style score.' : undefined}>
               <select className={input} value={day.format} onChange={(e) => setDay(index, { format: e.target.value as DayFormat })}>

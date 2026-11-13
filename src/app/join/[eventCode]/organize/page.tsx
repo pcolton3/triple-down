@@ -8,6 +8,7 @@ import { EventAssistant } from '@/components/events/event-assistant';
 import { AnnouncementComposer } from '@/components/events/announcements';
 import { EmailPlayers } from '@/components/events/email-players';
 import { FoursomePlanner } from '@/components/events/foursome-planner';
+import { TeeTimeFinder } from '@/components/events/tee-time-finder';
 import { EventMoneyCard } from '@/components/events/event-money-card';
 import { EventEditor, cleanDraft } from '@/components/events/event-editor';
 import { ChoicesEditor, choicesSummary } from '@/components/events/signup-choices';
@@ -260,6 +261,14 @@ export default function OrganizeEventPage() {
       <AnnouncementComposer scope="event" code={event.code} organizerKey={key} />
 
       <EmailPlayers event={event} signups={signups} organizerKey={key} />
+
+      <TeeTimeFinder
+        event={event}
+        signups={signups}
+        organizerKey={key}
+        blocked={dirty ? 'You have unsaved edits in the editor below. Save or undo them first.' : undefined}
+        onSaved={reloadAfterOutsideSave}
+      />
 
       <FoursomePlanner
         event={event}

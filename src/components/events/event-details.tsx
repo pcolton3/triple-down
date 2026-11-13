@@ -76,6 +76,7 @@ export function EventSchedule({ event }: { event: GolfEvent }) {
                         {day.teeTime ? `${formatTime(day.teeTime)} · ` : ''}Golf · Day {day.day}
                       </p>
                       <p className="mt-1 text-lg font-bold">{day.course || 'Course to be announced'}</p>
+                      {day.teeTimes && day.teeTimes.length > 1 ? <p className="text-sm text-slate-700"><span className="font-semibold">Tee times: </span>{day.teeTimes.map(formatTime).join(', ')}</p> : null}
                       <p className="text-sm text-slate-600">{FORMAT_LABELS[day.format] ?? day.format}</p>
                       {day.games?.length ? (
                         <p className="mt-1 text-sm text-slate-700">
