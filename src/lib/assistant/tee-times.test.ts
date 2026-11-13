@@ -51,24 +51,25 @@ describe('tee-time finder', () => {
   });
 });
 
-describe('planner: only courses with open times seen', () => {
+describe('planner: only courses whose tee sheet fit the request', () => {
   const option = (url: string): TeeTimeOption => ({ title: url, url, source: 'course', price: '', notes: '' });
   const links = [
-    option('https://www.cavecreekgolf.com/tee-times'),
-    option('https://city-of-phoenix-golf-courses.book.teeitup.com/?course=288'),
-    option('https://www.chronogolf.com/club/wigwam-resort'),
-    option('https://www.dovevalleyranch.com/'),
+    option('https://coyotelakes.quick18.com/teetimes/searchmatrix?teedate=20261114'),
+    option('https://city-of-phoenix-golf-courses.book.teeitup.com/?course=288&date=2026-11-14'),
+    option('https://www.chronogolf.com/club/westbrook-village-golf-club'),
+    option('https://suncitywest.com/golfops/'),
   ];
 
-  it('drops courses whose tee sheet showed no open times', () => {
-    const seen = ['https://cavecreekgolf.com/', 'https://city-of-phoenix-golf-courses.book.teeitup.com/?course=288&date=2026-11-14'];
-    expect(keepCheckedCourses(links, seen).map((link) => link.url)).toEqual([
-      'https://www.cavecreekgolf.com/tee-times',
-      'https://city-of-phoenix-golf-courses.book.teeitup.com/?course=288',
-    ]);
+  it('keeps only fitting courses, telling apart courses that share a TeeItUp site', () => {
+    const fits = ['https://coyotelakes.quick18.com/teetimes/course/1/teetime/202611140800', 'https://city-of-phoenix-golf-courses.book.teeitup.com/?course=301&date=2026-11-14'];
+    expect(keepCheckedCourses(links, fits, true).map((link) => link.url)).toEqual(['https://coyotelakes.quick18.com/teetimes/searchmatrix?teedate=20261114']);
   });
 
-  it('leaves links alone when no tee sheet showed times (e.g. planning a trip a year out)', () => {
-    expect(keepCheckedCourses(links, [])).toEqual(links);
+  it('returns no links when sheets were checked and none fit', () => {
+    expect(keepCheckedCourses(links, [], true)).toEqual([]);
+  });
+
+  it('leaves links alone when no live tee sheet was checked (e.g. a trip a year out)', () => {
+    expect(keepCheckedCourses(links, [], false)).toEqual(links);
   });
 });

@@ -121,18 +121,27 @@ export function cleanBookingOptions(raw: unknown): TeeTimeOption[] {
     .slice(0, 8);
 }
 
-function sameSite(a: string, b: string) {
-  const one = host(a);
-  return Boolean(one) && one === host(b);
+/** Same course: same site, and the same course id when both links name one (TeeItUp groups several courses per site). */
+function sameCourse(a: string, b: string) {
+  try {
+    const one = new URL(a);
+    const two = new URL(b);
+    if (host(a) !== host(b) || !host(a)) return false;
+    const idOne = one.searchParams.get('course');
+    const idTwo = two.searchParams.get('course');
+    return !idOne || !idTwo || idOne === idTwo;
+  } catch {
+    return false;
+  }
 }
 
 /**
- * Planner rule: once a tee sheet showed open times this turn, only courses whose open times were seen get links.
- * `seen` holds the links behind those sheets (what was checked, its booking page and each time's link).
+ * Planner rule: once a readable tee sheet was checked this turn, only courses whose sheet had times
+ * fitting the request (window, whole group, back to back) keep their links. `fits` holds the links behind those sheets.
  */
-export function keepCheckedCourses(options: TeeTimeOption[], seen: string[]): TeeTimeOption[] {
-  if (!seen.length) return options;
-  return options.filter((option) => seen.some((url) => sameSite(option.url, url)));
+export function keepCheckedCourses(options: TeeTimeOption[], fits: string[], checked: boolean): TeeTimeOption[] {
+  if (!checked) return options;
+  return options.filter((option) => fits.some((url) => sameCourse(option.url, url)));
 }
 
 /** Cleans what the model returned: known marketplaces are always third-party, and the course's own options come first. */

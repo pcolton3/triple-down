@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { chronogolfNote, detectEngine, findEngineLink, findEngineLinks, groupPicks, parseChronogolfClub, parseForeUpPage, parseForeUpTimes, parseQuick18, parseTeeItUp, type SheetTime } from './engines';
+import { chronogolfNote, detectEngine, fitToWindow, findEngineLink, findEngineLinks, groupPicks, parseChronogolfClub, parseForeUpPage, parseForeUpTimes, parseQuick18, parseTeeItUp, type SheetTime } from './engines';
 
 const fixture = (name: string) => readFileSync(path.join(__dirname, 'fixtures', name), 'utf8');
 const t = (time: string, spots: number): SheetTime => ({ time, spots, rates: [], holes: '', bookUrl: '' });
@@ -94,5 +94,16 @@ describe('Chronogolf (course info only)', () => {
     expect(chronogolfNote(club, '2026-11-21', '2026-11-13')).toContain('this date is open for booking now');
     expect(chronogolfNote(club, '2026-11-21', '2026-11-13')).toContain('Golf shop: 623-856-1041.');
     expect(chronogolfNote({ ...club, onlineBooking: false }, '2026-11-21', '2026-11-13')).toContain('online booking turned off');
+  });
+});
+
+describe('requested start window', () => {
+  const sheet = { engine: 'quick18' as const, course: 'Coyote Lakes', date: '2026-11-14', times: [t('07:00', 2), t('08:00', 4), t('08:50', 4), t('08:58', 4), t('09:06', 4)], groupPicks: [], bookingUrl: '', note: '' };
+
+  it('only counts times inside the window', () => {
+    expect(fitToWindow(sheet, 8, '', '09:00').groupPicks).toEqual(['08:50', '08:58']);
+    expect(fitToWindow(sheet, 8, '', '08:55').groupPicks).toEqual([]);
+    expect(fitToWindow(sheet, 4, '08:30', '').times.map((time) => time.time)).toEqual(['08:50', '08:58', '09:06']);
+    expect(fitToWindow(sheet, 8, '', '')).toBe(sheet);
   });
 });

@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
 import { TEE_TIME_SCHEMA, cleanBookingOptions, cleanTeeTimeResult, keepCheckedCourses } from '@/lib/assistant/tee-times';
-import { sheetSummary } from '@/lib/tee-sheets/engines';
+import { fitToWindow, sheetSummary } from '@/lib/tee-sheets/engines';
 import { SheetError, fetchTeeSheets } from '@/lib/tee-sheets/fetch-sheet';
 import { EMAIL_REPLY_SCHEMA, ORGANIZER_REPLY_SCHEMA, PLANNER_REPLY_SCHEMA, type AssistantReply, type PlannerReply } from '@/lib/assistant/changes';
 import { eventContext, plannerContext, systemPrompt, type AssistantMode } from '@/lib/assistant/prompt';
@@ -28,27 +28,37 @@ const SHEET_TOOL: Anthropic.Beta.BetaTool = {
   input_schema: {
     type: 'object',
     additionalProperties: false,
-    required: ['url', 'date', 'players'],
+    required: ['url', 'date', 'players', 'start_after', 'start_before'],
     properties: {
       url: { type: 'string', description: 'Booking link or course tee-times page you saw.' },
       date: { type: 'string', description: 'YYYY-MM-DD' },
       players: { type: 'integer', description: 'Group size' },
+      start_after: { type: 'string', description: 'Earliest start the organizer wants, "HH:MM" 24-hour, or "" for any.' },
+      start_before: { type: 'string', description: 'Tee times must start before this, "HH:MM" 24-hour (e.g. "09:00" for before 9 am), or "" for any.' },
     },
   },
   strict: true,
 };
 const MAX_SHEET_CALLS = 8;
 
-/** Reads a tee sheet for the model; `open` lists the links behind every sheet that showed open times. */
-async function runSheetTool(input: unknown): Promise<{ content: string; isError: boolean; open?: string[] }> {
-  const { url, date, players } = (input ?? {}) as { url?: unknown; date?: unknown; players?: unknown };
+type SheetToolResult = { content: string; isError: boolean; fits?: string[]; readable?: boolean };
+
+/**
+ * Reads a tee sheet for the model, narrowed to the requested start window. `fits` lists the links behind every
+ * sheet with back-to-back times for the whole group in that window; `readable` says a live tee sheet was seen.
+ */
+async function runSheetTool(input: unknown): Promise<SheetToolResult> {
+  const { url, date, players, start_after: after, start_before: before } = (input ?? {}) as Record<string, unknown>;
   if (typeof url !== 'string' || typeof date !== 'string') return { content: 'Need a url and a YYYY-MM-DD date.', isError: true };
   try {
-    const sheets = await fetchTeeSheets(url, date, Number(players) || 4);
-    const open = sheets
-      .filter((sheet) => sheet.times.length)
-      .flatMap((sheet) => [url, sheet.bookingUrl, ...sheet.times.map((time) => time.bookUrl)]);
-    return { content: sheets.map((sheet) => sheetSummary(sheet)).join('\n\n'), isError: false, open };
+    const group = Number(players) || 4;
+    const sheets = (await fetchTeeSheets(url, date, group)).map((sheet) => fitToWindow(sheet, group, typeof after === 'string' ? after : '', typeof before === 'string' ? before : ''));
+    const fitting = sheets.filter((sheet) => sheet.groupPicks.length);
+    // The link that was checked stands for the course only when it led to one course.
+    const fits = fitting.flatMap((sheet) => [...(sheets.length === 1 ? [url] : []), sheet.bookingUrl, ...sheet.times.map((time) => time.bookUrl)]);
+    const readable = sheets.some((sheet) => sheet.liveTimes !== false);
+    const verdict = sheets.map((sheet) => `${sheet.course || 'This course'}: ${sheet.groupPicks.length ? 'FITS the request' : 'does NOT fit the request; leave it out'}.`).join(' ');
+    return { content: `${sheets.map((sheet) => sheetSummary(sheet)).join('\n\n')}\n\n${verdict}`, isError: false, fits, readable };
   } catch (error) {
     return { content: error instanceof SheetError ? error.message : "Couldn't reach that tee sheet.", isError: true };
   }
@@ -172,7 +182,8 @@ export async function POST(request: NextRequest) {
   let searchCount = 0;
   let fetchCount = 0;
   let sheetCalls = 0;
-  const openSheetLinks: string[] = [];
+  const fittingLinks: string[] = [];
+  let sheetsChecked = false;
   try {
     // A web search can pause the turn; continue it a couple of times.
     for (let round = 0; round < (mode === 'teetimes' || mode === 'planner' ? 8 : 3); round += 1) {
@@ -202,12 +213,13 @@ export async function POST(request: NextRequest) {
         const results = await Promise.all(
           calls.map(async (call): Promise<Anthropic.Beta.BetaToolResultBlockParam> => {
             sheetCalls += 1;
-            const result = call.name !== 'check_tee_sheet'
+            const result: SheetToolResult = call.name !== 'check_tee_sheet'
               ? { content: 'Unknown tool.', isError: true }
               : sheetCalls > MAX_SHEET_CALLS
                 ? { content: 'Tee-sheet lookups are used up for this turn; give the booking links instead.', isError: true }
                 : await runSheetTool(call.input);
-            if ('open' in result && result.open) openSheetLinks.push(...result.open);
+            if (result.fits) fittingLinks.push(...result.fits);
+            if (result.readable) sheetsChecked = true;
             return { type: 'tool_result', tool_use_id: call.id, content: result.content, is_error: result.isError };
           }),
         );
@@ -257,11 +269,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         reply,
         draft: parsed.draft && typeof parsed.draft === 'object' ? parsed.draft : null,
-        booking_links: keepCheckedCourses(cleanBookingOptions(parsed.booking_links), openSheetLinks),
+        booking_links: keepCheckedCourses(cleanBookingOptions(parsed.booking_links), fittingLinks, sheetsChecked),
         searches: searchCount,
         fetches: fetchCount,
         sheets: sheetCalls,
-      } satisfies PlannerReply & { searches: number; fetches: number; sheets: number });
+        sheets_checked: sheetsChecked,
+      } satisfies PlannerReply & { searches: number; fetches: number; sheets: number; sheets_checked: boolean });
     }
     return NextResponse.json({ reply, changes: Array.isArray(parsed.changes) ? parsed.changes : [] } satisfies AssistantReply);
   } catch {

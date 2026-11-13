@@ -113,6 +113,16 @@ export function groupPicks(times: SheetTime[], players: number): string[] {
   return [];
 }
 
+/** Narrows a sheet to the requested start window ("HH:MM", either may be "") and re-picks back-to-back times there. */
+export function fitToWindow(sheet: TeeSheet, players: number, startAfter: string, startBefore: string): TeeSheet {
+  const valid = (value: string) => (/^\d{2}:\d{2}$/.test(value) ? value : '');
+  const after = valid(startAfter);
+  const before = valid(startBefore);
+  if (!after && !before) return sheet;
+  const times = sheet.times.filter((time) => (!after || time.time >= after) && (!before || time.time < before));
+  return { ...sheet, times, groupPicks: groupPicks(times, players) };
+}
+
 function sortTimes(times: SheetTime[]) {
   return times.filter((time) => time.time).sort((a, b) => a.time.localeCompare(b.time));
 }
