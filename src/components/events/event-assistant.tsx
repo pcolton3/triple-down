@@ -5,6 +5,7 @@ import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
 import { planChanges, type AssistantReply, type WireChange } from '@/lib/assistant/changes';
 import { localToday, updateEvent, updateSignup, type GolfEvent, type Signup } from '@/lib/events/golf-events';
+import { LinkedText } from '@/components/shared/linked-text';
 
 type Proposal = { changes: WireChange[]; lines: string[]; status: 'pending' | 'applied' | 'dismissed' };
 type Turn = { role: 'user' | 'assistant'; content: string; proposal?: Proposal };
@@ -171,7 +172,7 @@ export function EventAssistant(props: Props) {
           {turns.map((turn, index) => (
             <li key={index} className={turn.role === 'user' ? 'flex justify-end' : ''}>
               <div className={`max-w-[90%] whitespace-pre-line rounded-2xl px-3 py-2 text-sm ${turn.role === 'user' ? 'bg-[#0f5132] text-white' : 'bg-slate-50 text-slate-800'}`}>
-                {turn.content}
+                <LinkedText text={turn.content} />
               </div>
               {turn.proposal ? (
                 <div className="mt-2 rounded-2xl border border-[#c9d8c7] bg-white p-3 text-sm">
@@ -180,7 +181,7 @@ export function EventAssistant(props: Props) {
                     {turn.proposal.lines.map((line) => <li key={line}>{line}</li>)}
                   </ul>
                   {description(turn.proposal.changes) ? (
-                    <p className="mt-2 whitespace-pre-line rounded-xl bg-slate-50 p-2 text-slate-700">{description(turn.proposal.changes)?.value}</p>
+                    <p className="mt-2 whitespace-pre-line rounded-xl bg-slate-50 p-2 text-slate-700"><LinkedText text={description(turn.proposal.changes)?.value ?? ''} /></p>
                   ) : null}
                   {turn.proposal.status === 'pending' ? (
                     props.mode === 'organizer' && props.applyBlocked ? (

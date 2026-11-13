@@ -6,6 +6,7 @@ import { Card } from '@/components/shared/card';
 import { OpenTimes } from '@/components/events/open-times';
 import { parseTeeTimes, teeTimeRequestText, type TeeTimeResult } from '@/lib/assistant/tee-times';
 import { dayChoice, formatEventDate, formatTime, isDayLocked, loadGolfEvent, localToday, updateEvent, type GolfEvent, type Signup } from '@/lib/events/golf-events';
+import { LinkedText } from '@/components/shared/linked-text';
 
 const input = 'min-h-[44px] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-base';
 const label = 'mb-1 block text-sm font-semibold';
@@ -193,7 +194,7 @@ export function TeeTimeFinder({ event, signups = [], organizerKey, blocked, onSa
 
       {result ? (
         <div className="space-y-4">
-          {result.reply ? <p className="whitespace-pre-line rounded-xl bg-slate-50 p-3 text-sm text-slate-700">{result.reply}</p> : null}
+          {result.reply ? <p className="whitespace-pre-line rounded-xl bg-slate-50 p-3 text-sm text-slate-700"><LinkedText text={result.reply} /></p> : null}
 
           <div className="space-y-1 text-sm">
             <p className="font-bold">{result.course.name || day.course}</p>
@@ -242,7 +243,7 @@ export function TeeTimeFinder({ event, signups = [], organizerKey, blocked, onSa
           {result.call_notes ? (
             <div>
               <h3 className="font-bold">If you call</h3>
-              <p className="whitespace-pre-line text-sm text-slate-700">{result.call_notes}</p>
+              <p className="whitespace-pre-line text-sm text-slate-700"><LinkedText text={result.call_notes} /></p>
             </div>
           ) : null}
         </div>

@@ -16,6 +16,7 @@ import {
 } from '@/lib/events/announcements';
 import { currentDeviceId } from '@/lib/realtime/group-rounds';
 import { supabase } from '@/lib/supabase/client';
+import { LinkedText } from '@/components/shared/linked-text';
 
 function when(iso: string) {
   const date = new Date(iso);
@@ -109,7 +110,7 @@ export function AnnouncementsBanner({ scope, code, showNotify = true }: { scope:
       <ul className="space-y-2">
         {shown.map((item) => (
           <li key={item.id}>
-            <p className="whitespace-pre-line text-slate-800">{item.body}</p>
+            <p className="whitespace-pre-line text-slate-800"><LinkedText text={item.body} /></p>
             <p className="text-xs text-slate-500">{when(item.created_at)}</p>
           </li>
         ))}
@@ -193,7 +194,7 @@ export function AnnouncementComposer({ scope, code, organizerKey, deviceId, titl
           {mine.map((item) => (
             <li key={item.id} className="flex items-start justify-between gap-3 py-2">
               <div className="min-w-0">
-                <p className="whitespace-pre-line text-slate-800">{item.body}</p>
+                <p className="whitespace-pre-line text-slate-800"><LinkedText text={item.body} /></p>
                 <p className="text-xs text-slate-500">{when(item.created_at)}</p>
               </div>
               <button type="button" className="min-h-[44px] shrink-0 px-2 text-red-700 underline" disabled={busy} onClick={() => void remove(item.id)}>

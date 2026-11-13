@@ -15,6 +15,7 @@ import {
   type GolfEvent,
 } from '@/lib/events/golf-events';
 import { INVITE_SECTIONS, parseDescription } from '@/lib/events/invite-sections';
+import { LinkedText } from '@/components/shared/linked-text';
 
 function LinkOut({ href, children }: { href: string; children: React.ReactNode }) {
   if (!href) return null;
@@ -34,13 +35,13 @@ export function InviteDescription({ description }: { description: string }) {
     <>
       {parts.message.trim() ? (
         <Card>
-          <p className="whitespace-pre-line text-slate-700">{parts.message.trim()}</p>
+          <p className="whitespace-pre-line text-slate-700"><LinkedText text={parts.message.trim()} /></p>
         </Card>
       ) : null}
       {sections.map((section) => (
         <Card key={section.key}>
           <h2 className="mb-2 text-xl font-bold">{section.title}</h2>
-          <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700">{parts[section.key].trim()}</p>
+          <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700"><LinkedText text={parts[section.key].trim()} /></p>
         </Card>
       ))}
     </>
@@ -89,7 +90,7 @@ export function EventSchedule({ event }: { event: GolfEvent }) {
                       ) : null}
                       {day.address ? <p className="mt-1 text-sm"><LinkOut href={mapsLink(day.address)}>{day.address}</LinkOut></p> : null}
                       {day.website ? <p className="mt-1 text-sm"><LinkOut href={safeLink(day.website)}>Course website</LinkOut></p> : null}
-                      {day.notes ? <p className="mt-2 whitespace-pre-line text-sm text-slate-700">{day.notes}</p> : null}
+                      {day.notes ? <p className="mt-2 whitespace-pre-line text-sm text-slate-700"><LinkedText text={day.notes} /></p> : null}
                     </li>
                   );
                 }
@@ -101,7 +102,7 @@ export function EventSchedule({ event }: { event: GolfEvent }) {
                     {item.location ? <p className="text-sm text-slate-700">{item.location}</p> : null}
                     {item.address ? <p className="text-sm"><LinkOut href={mapsLink(item.address)}>{item.address}</LinkOut></p> : null}
                     {item.link ? <p className="text-sm"><LinkOut href={safeLink(item.link)}>Details</LinkOut></p> : null}
-                    {item.notes ? <p className="mt-1 whitespace-pre-line text-sm text-slate-600">{item.notes}</p> : null}
+                    {item.notes ? <p className="mt-1 whitespace-pre-line text-sm text-slate-600"><LinkedText text={item.notes} /></p> : null}
                   </li>
                 );
               })}

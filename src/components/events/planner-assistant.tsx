@@ -7,6 +7,7 @@ import { draftFromWire, draftOutline, type PlannerReply } from '@/lib/assistant/
 import { OpenTimes } from '@/components/events/open-times';
 import { cleanBookingOptions, type TeeTimeOption } from '@/lib/assistant/tee-times';
 import { localToday, type EventDraft } from '@/lib/events/golf-events';
+import { LinkedText } from '@/components/shared/linked-text';
 
 type Plan = { draft: EventDraft; lines: string[]; status: 'offered' | 'used' };
 type Turn = { role: 'user' | 'assistant'; content: string; plan?: Plan; links?: TeeTimeOption[] };
@@ -18,24 +19,6 @@ const SUGGESTIONS = [
   'What games work well for a group of 8?',
   'Find tee times for 8 players Saturday morning',
 ];
-
-/** Plain text with any http(s) URLs turned into links. */
-function Linked({ text }: { text: string }) {
-  const parts = text.split(/(https?:\/\/[^\s)]+)/g);
-  return (
-    <>
-      {parts.map((part, index) =>
-        /^https?:\/\//.test(part) ? (
-          <a key={index} href={part.replace(/[.,;:!?]+$/, '')} target="_blank" rel="noopener noreferrer" className="break-all font-semibold underline">
-            {part}
-          </a>
-        ) : (
-          <span key={index}>{part}</span>
-        ),
-      )}
-    </>
-  );
-}
 
 function BookingLinks({ links, date }: { links: TeeTimeOption[]; date?: string }) {
   return (
@@ -159,7 +142,7 @@ export function PlannerAssistant({ draft, onUseDraft, children }: { draft: Event
           {turns.map((turn, index) => (
             <li key={index} className={turn.role === 'user' ? 'flex justify-end' : ''}>
               <div className={`max-w-[90%] whitespace-pre-line break-words rounded-2xl px-3 py-2 text-sm ${turn.role === 'user' ? 'bg-[#0f5132] text-white' : 'bg-slate-50 text-slate-800'}`}>
-                <Linked text={turn.content} />
+                <LinkedText text={turn.content} />
               </div>
               {turn.links?.length ? <BookingLinks links={turn.links} date={draft.days.find((day) => day.date)?.date} /> : null}
               {turn.plan ? (
